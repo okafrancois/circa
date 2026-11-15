@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import BrowserEngine
 
 /// Each private window owns a fresh memory-only environment and Chromium request context.
 /// Its tabs, popups, history, permissions and downloads never borrow the normal services.
@@ -8,11 +9,17 @@ struct OrbitPrivateWindow {
     let scope: BrowserPrivateDomainScope<ActiveEngine>
     let lease: BrowserPrivateDomainLease
     let environment: OrbitEnvironment
+    /// The normal profile whose ad and tracker blocking switch and exceptions the window follows.
+    let parent: ProfileID?
 }
 
 extension OrbitApplication {
     func createPrivateCommandWindow() {
         guard !isPreparingToQuit, environment != nil else { return }
+        // The parent profile: the selected normal window's profile, or a private window's parent.
+        let source = windows.selectedWindow
+        let sourceParent = source.flatMap { privateWindows[$0.id]?.parent }
+            ?? (source?.isPrivateWindow == false ? source?.session.activeProfileID : nil)
         let previous = privateWindowCommands
         privateWindowCommands = Task { [weak self] in
             await previous?.value
@@ -21,6 +28,8 @@ extension OrbitApplication {
                 privateWindowFactory = BrowserPrivateDomainFactory(normalEnvironment: normal, build: { makePrivateEngine() })
             }
             guard let scope = privateWindowFactory?.makeScope() else { return }
+            // Before the private context exists: the engine starts the blocker with it.
+            let blocking = await normal.contentBlocking?.preparePrivateWindow() == true ? normal.contentBlocking : nil
             var lease: BrowserPrivateDomainLease?
             do {
                 let acquired = try await scope.acquire()
@@ -28,7 +37,21 @@ extension OrbitApplication {
                 let memory = try scope.environment(for: acquired)
                 guard !isPreparingToQuit else { try await scope.release(acquired); return }
                 let id = UUID()
-                privateWindows[id] = OrbitPrivateWindow(scope: scope, lease: acquired, environment: memory)
+                var parent = sourceParent
+                if parent == nil { parent = try? await normal.initialContext.value.1 }
+                privateWindows[id] = OrbitPrivateWindow(scope: scope, lease: acquired, environment: memory, parent: parent)
+                // Blocking is in place before the window's first page. The engine starts the
+                // blocker's worker for this context with its first renderer, so a hidden blank
+                // document starts it first; it never shows and goes away once blocking applies.
+                if let blocking, let parent {
+                    memory.privateContentBlocking = blocking
+                    let warmUpDelegate = PrivateWarmUpDelegate<ActiveEngine.Surface>()
+                    let warmUp = try? scope.makeSurface(for: acquired, delegate: warmUpDelegate)
+                    warmUp?.navigate(to: URL(string: "about:blank")!)
+                    await blocking.openPrivateWindow(id, parent: parent)
+                    warmUp?.dispose()
+                    withExtendedLifetime(warmUpDelegate) {}
+                }
                 guard windows.newWindow(id: id) != nil else { releasePrivateWindow(id); return }
                 await windows.waitForPendingCommands()
                 guard let controller = windows.windows[id] else { releasePrivateWindow(id); return }
@@ -46,6 +69,11 @@ extension OrbitApplication {
 
     func releasePrivateWindow(_ id: UUID) {
         guard let owned = privateWindows.removeValue(forKey: id) else { return }
+        if let blocking = owned.environment.privateContentBlocking {
+            // At once: a window opened right after the last one closed starts a fresh session.
+            blocking.endPrivateWindow(id)
+            Task { await blocking.synchronizePrivate() }
+        }
         privateWindowClosures[id] = Task { [weak self] in
             do { try await owned.scope.release(owned.lease) }
             catch {
@@ -76,4 +104,21 @@ extension OrbitApplication {
             windows.newWindow()
         }
     }
+}
+
+/// Accepts the hidden blank document that starts a private context's renderer; nothing else.
+@MainActor
+private final class PrivateWarmUpDelegate<Surface: BrowserEngineSurface>: BrowserEngineSurfaceDelegate {
+    func surfaceDidStartNavigation(_ surface: Surface) {}
+    func surfaceDidCommitNavigation(_ surface: Surface) {}
+    func surfaceDidFinishNavigation(_ surface: Surface) {}
+    func surfaceDidFailNavigation(_ surface: Surface) {}
+    func surfaceDidRequestClose(_ surface: Surface) {}
+    func surface(_ surface: Surface, decidePolicyFor action: BrowserNavigationAction,
+                 decision: BrowserPolicyDecision<BrowserNavigationActionPolicy>) {
+        decision.decide(action.url?.absoluteString == "about:blank" ? .allow : .cancel)
+    }
+    func surface(_ surface: Surface, createSurfaceFor request: BrowserNewSurfaceRequest,
+                 make: () -> Surface) -> Surface? { nil }
+    func surface(_ surface: Surface, didStartDownload download: any BrowserEngineDownload) { download.cancel() }
 }

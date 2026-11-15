@@ -37,7 +37,11 @@ extension OrbitApplication {
             if let privateSource = privateWindows[source.id] {
                 do {
                     let lease = try await privateSource.scope.acquire()
-                    privateWindows[id] = OrbitPrivateWindow(scope: privateSource.scope, lease: lease, environment: privateSource.environment)
+                    privateWindows[id] = OrbitPrivateWindow(scope: privateSource.scope, lease: lease,
+                                                            environment: privateSource.environment, parent: privateSource.parent)
+                    if let blocking = privateSource.environment.privateContentBlocking, let parent = privateSource.parent {
+                        await blocking.openPrivateWindow(id, parent: parent)
+                    }
                 } catch { return }
             } else if source.isPrivateWindow { return }
             tearOffRequests[id] = request

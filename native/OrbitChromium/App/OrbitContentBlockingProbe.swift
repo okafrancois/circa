@@ -73,6 +73,92 @@ enum OrbitContentBlockingProbe {
         }
         func ack() async -> String { await blocker?.acknowledgement(profileID: profile) ?? "none" }
 
+        /// Each step's start, for attributing the fixture server's requests.
+        var marks: [[String: Any]] = []
+        func mark(_ name: String) { marks.append(["step": name, "t": Date().timeIntervalSince1970]) }
+        func openPrivate() async -> OrbitWindowController? {
+            let before = Set(application.privateWindows.keys)
+            application.createPrivateCommandWindow()
+            await application.waitForPrivateWindowCommands()
+            guard let id = application.privateWindows.keys.first(where: { !before.contains($0) }),
+                  let window = application.windows.windows[id] else { return nil }
+            window.palette.dismiss()
+            window.window?.setFrame(NSRect(x: 80, y: 100, width: 1280, height: 820), display: true)
+            return window
+        }
+        func privateRow(_ window: OrbitWindowController) async -> NSButton? {
+            dismissPopovers(window)
+            for _ in 0..<60 where window.siteControls.isPopoverShown { try? await Task.sleep(for: .milliseconds(25)) }
+            window.siteControls.show()
+            for _ in 0..<40 where button("site-content-blocking") == nil { try? await Task.sleep(for: .milliseconds(25)) }
+            return button("site-content-blocking")
+        }
+        /// Closes the site controls through their own toggle, so the next presentation is fresh.
+        func dismissPopovers(_ window: OrbitWindowController) {
+            if window.siteControls.isPopoverShown { window.siteControls.toggle() }
+        }
+        /// Private session cases: the parent's persistent exception (news, from the first phase)
+        /// applies read-only; a private exception lasts until the last private window closes; the
+        /// parent's switch governs private windows too.
+        func runPrivate() async -> [String: Any] {
+            result["parentExceptions"] = environment.sitePreferences.contentBlockingExceptions(profileID: profile)
+            guard let first = await openPrivate() else { result["privateWindow"] = "missing"; return result }
+            mark("privateNewsInherited")
+            result["privateNewsInherited"] = await load(first, site: "news")
+            let inherited = await privateRow(first)
+            result["privateNewsRow"] = inherited?.accessibilityLabel() ?? "absent"
+            result["privateNewsRowEditable"] = inherited?.isEnabled ?? false
+            await capture(inherited?.window, "11-private-inherited-exception")
+            dismissPopovers(first)
+            mark("privateBlocked")
+            result["privateBlocked"] = await load(first, site: "private")
+            let row = await privateRow(first)
+            result["privateRowBefore"] = row?.accessibilityLabel() ?? "absent"
+            await capture(first.window, "12-private-row-blocked")
+            mark("privateException")
+            let before = row?.accessibilityLabel()
+            row?.performClick(nil)
+            // The row is rebuilt once the engine applied the exception.
+            for _ in 0..<100 {
+                if let label = button("site-content-blocking")?.accessibilityLabel(), label != before { break }
+                try? await Task.sleep(for: .milliseconds(30))
+            }
+            result["privateRowAfter"] = button("site-content-blocking")?.accessibilityLabel() ?? "absent"
+            await capture(button("site-content-blocking")?.window, "13-private-row-allowed")
+            dismissPopovers(first)
+            result["privateException"] = await report(first)
+            await capture(first.window, "14-private-exception-page")
+            result["privateAckWithException"] = await blocker?.privateAcknowledgements() ?? []
+            result["persistentExceptionsAfterPrivate"] = environment.sitePreferences.contentBlockingExceptions(profileID: profile)
+            // End the session: every private window closes, then a new one starts fresh.
+            await application.closePrivateWindows()
+            result["privateWindowsAfterClose"] = application.privateWindows.count
+            try? await Task.sleep(for: .milliseconds(300))
+            result["privateAckAfterClose"] = await blocker?.privateAcknowledgements() ?? []
+            guard let second = await openPrivate() else { result["privateWindowAgain"] = "missing"; return result }
+            mark("privateNewSession")
+            result["privateNewSession"] = await load(second, site: "private")
+            await capture(second.window, "15-private-new-session")
+            // The parent's switch off: private windows stop blocking and lose the row.
+            try? await environment.settings.updateProfile(profile) { $0.blocksAdsAndTrackers = false }
+            try? await Task.sleep(for: .milliseconds(600))
+            mark("privateParentOff")
+            result["privateParentOff"] = await reload(second)
+            result["privateRowWhileParentOff"] = await privateRow(second)?.accessibilityLabel() ?? "absent"
+            await capture(second.window, "16-private-parent-off")
+            dismissPopovers(second)
+            try? await environment.settings.updateProfile(profile) { $0.blocksAdsAndTrackers = true }
+            try? await Task.sleep(for: .milliseconds(600))
+            mark("privateParentOnAgain")
+            result["privateParentOnAgain"] = await reload(second)
+            mark("end")
+            await application.closePrivateWindows()
+            try? await Task.sleep(for: .milliseconds(300))
+            result["privateAckFinal"] = await blocker?.privateAcknowledgements() ?? []
+            result["marks"] = marks
+            return result
+        }
+
         if command["step"] == "relaunch" {
             // After a relaunch: what the restored tab reports, then the engine's own manager page.
             result["restored"] = await report(owner)
@@ -83,6 +169,10 @@ enum OrbitContentBlockingProbe {
                 await capture(owner.window, "10-engine-extension-manager")
             }
             return result
+        }
+
+        if command["step"] == "private" {
+            return await runPrivate()
         }
 
         owner.window?.setFrame(NSRect(x: 60, y: 120, width: 1280, height: 820), display: true)
@@ -141,21 +231,25 @@ enum OrbitContentBlockingProbe {
         result["shopOnAgain"] = await reload(owner)
         result["ackFinal"] = await ack()
 
-        // 5. Private windows: isolated memory-only context without the blocker or its row.
+        // 5. Private windows: their own memory-only context, filtered through the private session.
+        let opening = ContinuousClock.now
         application.createPrivateCommandWindow()
         await application.waitForPrivateWindowCommands()
+        result["privateOpenSeconds"] = Double((ContinuousClock.now - opening).components.attoseconds) / 1e18
+            + Double((ContinuousClock.now - opening).components.seconds)
+        result["privateAcksAtOpen"] = await blocker?.privateAcknowledgements() ?? []
         if let id = application.privateWindows.keys.first, let window = application.windows.windows[id] {
             window.palette.dismiss()
             result["privateBlockerAvailable"] = window.engine.contentBlocking != nil
-            result["privateNews"] = await load(window, site: "news")
+            result["privateShop"] = await load(window, site: "shop")
             window.siteControls.show()
             try? await Task.sleep(for: .milliseconds(300))
-            result["privateSiteRow"] = button("site-content-blocking") == nil ? "absent" : "present"
+            result["privateSiteRow"] = button("site-content-blocking")?.accessibilityLabel() ?? "absent"
             await capture(window.window, "9-private-window")
             NSApp.windows.filter { $0 !== window.window && $0.isVisible && $0.level != .normal }.forEach { $0.orderOut(nil) }
             window.window?.close()
         } else {
-            result["privateNews"] = "no private window"
+            result["privateShop"] = "no private window"
         }
         return result
     }

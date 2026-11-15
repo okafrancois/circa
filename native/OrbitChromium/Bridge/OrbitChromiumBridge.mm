@@ -4160,17 +4160,72 @@ bool ContentBlockingProfile(uint64_t token, CefRefPtr<CefRequestContext>* contex
   return true;
 }
 
-CefCookie ContentBlockingCookie(const std::string& name, const std::string& value) {
+// Private windows are off-the-record children of the initial profile, which hosts no tabs. Its
+// copy of the extension, allowed in incognito and in split mode, runs one worker per private
+// context, started when that context is created. That copy never receives a configuration of its
+// own; each private context gets it in its own off-the-record cookie store, which never reaches
+// disk (the initial profile's store would: Chromium persists session cookies too).
+std::string ContentBlockingPrivatePath() {
+  return g_state ? g_state->root + "/" + kInitialProfileDirectory : std::string();
+}
+
+// Ready private (memory-only) request contexts of this runtime.
+std::vector<uint64_t> ContentBlockingPrivateContexts() {
+  std::vector<uint64_t> tokens;
+  for (const auto& [token, context] : g_state->profiles)
+    if (context && !g_state->profile_paths.contains(token) && g_state->ready_profiles.contains(token) &&
+        !g_state->auth_targets.contains(token) && !context->IsGlobal() && context->GetCachePath().empty())
+      tokens.push_back(token);
+  return tokens;
+}
+
+CefCookie ContentBlockingCookie(const std::string& name, const std::string& value, bool session) {
   CefCookie cookie;
   CefString(&cookie.name) = name;
   CefString(&cookie.value) = value;
   CefString(&cookie.path) = "/";
   cookie.secure = 1;
   cookie.same_site = CEF_COOKIE_SAME_SITE_STRICT_MODE;
-  // Persistent, so the extension finds the last configuration at its next start.
-  cookie.has_expires = 1;
-  cookie.expires.val = AuthenticationClock() + 365LL * 24 * 3600 * 1000000;
+  // Persistent profiles: persistent, so the extension finds the last configuration at its next
+  // start. Private contexts: a session cookie in an off-the-record store.
+  cookie.has_expires = session ? 0 : 1;
+  if (!session) cookie.expires.val = AuthenticationClock() + 365LL * 24 * 3600 * 1000000;
   return cookie;
+}
+
+// Host chunks first, the header last: the extension reacts to the header only. A private
+// ("session") configuration keeps its exceptions in the extension's session rules.
+int32_t ConfigureContentBlocking(CefRefPtr<CefRequestContext> context, const char* path, int32_t enabled,
+                                 const char* hosts, uint64_t revision, bool session) {
+  if ((enabled != 0 && enabled != 1) || !hosts || !revision || !context) return 0;
+  const std::string list = hosts;
+  if (list.size() > kContentBlockingHostsLimit) return 0;
+  for (const char c : list)
+    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '|')) return 0;
+  auto manager = context->GetCookieManager(nullptr);
+  if (!manager) return 0;
+  std::vector<std::string> chunks;
+  size_t start = 0;
+  while (enabled && start < list.size()) {
+    size_t end = std::min(list.size(), start + kContentBlockingChunk);
+    if (end < list.size()) {
+      const size_t separator = list.rfind('|', end);
+      if (separator == std::string::npos || separator <= start) return 0;
+      end = separator;
+    }
+    chunks.push_back(list.substr(start, end - start));
+    start = end + 1;
+  }
+  for (size_t index = 0; index < chunks.size(); ++index)
+    if (!manager->SetCookie(kContentBlockingURL, ContentBlockingCookie("h" + std::to_string(index), chunks[index], session), nullptr)) return 0;
+  const std::string header = std::to_string(revision) + "." + std::to_string(enabled) + "." +
+      std::to_string(chunks.size()) + (session ? ".s" : "");
+  if (!manager->SetCookie(kContentBlockingURL, ContentBlockingCookie("c", header, session), nullptr)) return 0;
+  // Disabled while off, as a second guard; refused until the extension finished loading, which
+  // the cookie configuration covers.
+  if (path && g_state->orbit->extension_set_enabled)
+    g_state->orbit->extension_set_enabled(path, ACRContentBlockingExtensionID(), enabled);
+  return 1;
 }
 
 class ContentBlockingAckReader final : public CefCookieVisitor {
@@ -4198,6 +4253,13 @@ class ContentBlockingAckReader final : public CefCookieVisitor {
   std::string value_;
   IMPLEMENT_REFCOUNTING(ContentBlockingAckReader);
 };
+
+int32_t ReadContentBlockingAcknowledgement(CefRefPtr<CefRequestContext> context,
+                                           orbit_content_blocking_ack_t callback, void* callback_context) {
+  auto manager = context ? context->GetCookieManager(nullptr) : nullptr;
+  return manager && manager->VisitUrlCookies(kContentBlockingURL, true,
+      new ContentBlockingAckReader(callback, callback_context)) ? 1 : 0;
+}
 }  // namespace
 
 extern "C" const char* ACRContentBlockingExtensionID(void) { return "ohenphhpjnbnlpodjanpadehdopomjnc"; }
@@ -4210,41 +4272,66 @@ extern "C" int32_t ACRContentBlockingAvailable(void) {
 extern "C" int32_t ACRContentBlockingConfigure(uint64_t token, int32_t enabled, const char* hosts, uint64_t revision) {
   CefRefPtr<CefRequestContext> context;
   const char* path = nullptr;
-  if ((enabled != 0 && enabled != 1) || !hosts || !revision || !ContentBlockingProfile(token, &context, &path)) return 0;
-  const std::string list = hosts;
-  if (list.size() > kContentBlockingHostsLimit) return 0;
-  for (const char c : list)
-    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '|')) return 0;
-  auto manager = context->GetCookieManager(nullptr);
-  if (!manager) return 0;
-  // Host chunks first, the header last: the extension reacts to the header only.
-  std::vector<std::string> chunks;
-  size_t start = 0;
-  while (enabled && start < list.size()) {
-    size_t end = std::min(list.size(), start + kContentBlockingChunk);
-    if (end < list.size()) {
-      const size_t separator = list.rfind('|', end);
-      if (separator == std::string::npos || separator <= start) return 0;
-      end = separator;
-    }
-    chunks.push_back(list.substr(start, end - start));
-    start = end + 1;
-  }
-  for (size_t index = 0; index < chunks.size(); ++index)
-    if (!manager->SetCookie(kContentBlockingURL, ContentBlockingCookie("h" + std::to_string(index), chunks[index]), nullptr)) return 0;
-  const std::string header = std::to_string(revision) + "." + std::to_string(enabled) + "." + std::to_string(chunks.size());
-  if (!manager->SetCookie(kContentBlockingURL, ContentBlockingCookie("c", header), nullptr)) return 0;
-  // Disabled while off, as a second guard; refused until the extension finished loading, which
-  // the cookie configuration covers.
-  if (g_state->orbit->extension_set_enabled)
-    g_state->orbit->extension_set_enabled(path, ACRContentBlockingExtensionID(), enabled);
-  return 1;
+  if (!ContentBlockingProfile(token, &context, &path)) return 0;
+  return ConfigureContentBlocking(context, path, enabled, hosts, revision, false);
 }
 
 extern "C" int32_t ACRContentBlockingAcknowledgement(uint64_t token, orbit_content_blocking_ack_t callback, void* context) {
   CefRefPtr<CefRequestContext> request_context;
   const char* path = nullptr;
   if (!callback || !ContentBlockingProfile(token, &request_context, &path)) return 0;
-  auto manager = request_context->GetCookieManager(nullptr);
-  return manager && manager->VisitUrlCookies(kContentBlockingURL, true, new ContentBlockingAckReader(callback, context)) ? 1 : 0;
+  return ReadContentBlockingAcknowledgement(request_context, callback, context);
+}
+
+// Incognito access is granted through the engine's per-extension preference (side API v16, bit 8).
+extern "C" int32_t ACRContentBlockingPrivateAvailable(void) {
+  return ACRContentBlockingAvailable() == 1 && (ACREngineDiagnosticCapabilities() & 8) &&
+      g_state->orbit->extension_set_enabled ? 1 : 0;
+}
+
+extern "C" int32_t ACRContentBlockingPreparePrivate(void) {
+  if (ACRContentBlockingPrivateAvailable() != 1) return 0;
+  const std::string path = ContentBlockingPrivatePath();
+  const char* id = ACRContentBlockingExtensionID();
+  // Open private contexts already run their worker: never unload the copy under them.
+  if (!ContentBlockingPrivateContexts().empty())
+    return g_state->orbit->extension_set_enabled(path.c_str(), id, 1);
+  // Allowed in incognito while disabled, then enabled, before any private context exists: a
+  // split-mode worker starts with its context. Allowing an enabled copy would reload it, and a
+  // reloaded unpacked extension is disabled as a developer extension.
+  g_state->orbit->extension_set_enabled(path.c_str(), id, 0);
+  const bool allowed = g_state->orbit->extension_incognito_set(path.c_str(), id, 1) == 1;
+  return g_state->orbit->extension_set_enabled(path.c_str(), id, 1) == 1 && allowed ? 1 : 0;
+}
+
+extern "C" int32_t ACRContentBlockingConfigurePrivate(int32_t enabled, const char* hosts, uint64_t revision) {
+  if (ACRContentBlockingPrivateAvailable() != 1) return 0;
+  for (const uint64_t token : ContentBlockingPrivateContexts()) {
+    // Path NULL: never disables the shared copy, which existing private contexts need running.
+    if (ConfigureContentBlocking(g_state->profiles.at(token), nullptr, enabled, hosts, revision, true) != 1) return 0;
+  }
+  return 1;
+}
+
+extern "C" int32_t ACRContentBlockingPrivateContextList(uint64_t* tokens, int32_t capacity) {
+  if (ACRContentBlockingPrivateAvailable() != 1 || capacity < 0 || (capacity && !tokens)) return -1;
+  const auto found = ContentBlockingPrivateContexts();
+  for (size_t index = 0; index < found.size() && index < static_cast<size_t>(capacity); ++index) tokens[index] = found[index];
+  return static_cast<int32_t>(found.size());
+}
+
+extern "C" int32_t ACRContentBlockingPrivateAcknowledgement(uint64_t token, orbit_content_blocking_ack_t callback, void* context) {
+  if (!callback || ACRContentBlockingPrivateAvailable() != 1) return 0;
+  const auto tokens = ContentBlockingPrivateContexts();
+  if (std::find(tokens.begin(), tokens.end(), token) == tokens.end()) return 0;
+  return ReadContentBlockingAcknowledgement(g_state->profiles.at(token), callback, context);
+}
+
+extern "C" int32_t ACRContentBlockingEndPrivateSession(void) {
+  if (ACRContentBlockingPrivateAvailable() != 1) return 0;
+  const std::string path = ContentBlockingPrivatePath();
+  // Unloading drops the copy's session rules (the private exceptions); it is enabled again for
+  // the next private context.
+  g_state->orbit->extension_set_enabled(path.c_str(), ACRContentBlockingExtensionID(), 0);
+  return g_state->orbit->extension_set_enabled(path.c_str(), ACRContentBlockingExtensionID(), 1);
 }
