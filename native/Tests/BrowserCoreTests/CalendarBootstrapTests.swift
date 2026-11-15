@@ -43,31 +43,72 @@ struct CalendarBootstrapTests {
         #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([invalid])) == a)
         #expect(BrowserCalendarBootstrap.occurrenceID("not base64") == nil)
     }
-    @Test func unverifiedResponseMetadataRemainsInert() throws {
-        let a = agenda(["one"])
-        let baseline = BrowserCalendarBootstrap.enrich(a, json: try payload([tuple("one")]))
-        // Invented extension data is not a verified current-user response field.
-        // Neither status-like strings nor nested attendee/organizer values are evidence.
-        let unknownValues: [Any] = [NSNull(), false, 0, 1, 2, 3,
-            "accepted", "declined", "tentative", "needsAction",
-            ["responseStatus": "declined", "self": true],
-            ["attendees": [["responseStatus": "declined", "self": true]],
-             "organizer": ["responseStatus": "accepted"]]]
-        for value in unknownValues {
-            var t = tuple("one")
-            t.append(value)
-            let result = BrowserCalendarBootstrap.enrich(a, json: try payload([t]))
-            #expect(result == baseline)
-            #expect(result.events.map(\.id) == a.events.map(\.id))
-            #expect(result.nextMeeting(at: now) == baseline.events.first)
-        }
+    func attendee(_ address: String, _ status: Any, organizer: Bool = false) -> [Any] {
+        var entry = [Any](repeating: NSNull(), count: 15)
+        entry[0] = address; entry[5] = status; entry[14] = 1_800_000_000_000
+        if organizer { entry[8] = 1; entry[9] = 1 }
+        return entry
     }
-    @Test func unverifiedResponseCannotBindByRecurringPrefix() throws {
-        let a = agenda(["series_occurrence"])
-        var master = tuple("series")
-        master.append(["responseStatus": "declined", "self": true])
-        let result = BrowserCalendarBootstrap.enrich(a, json: try payload([master]))
-        #expect(result == a)
+    func invited(_ id: String, me status: Any, extra: [[Any]] = []) -> [Any] {
+        var t = tuple(id)
+        t[20] = [attendee("organizer@example.invalid", 3, organizer: true), attendee("fixture@example.invalid", status)] + extra
+        return t
+    }
+    @Test func declinedBySelfIsRemovedEverywhere() throws {
+        let a = agenda(["one", "edited"])
+        let result = BrowserCalendarBootstrap.enrich(a, json: try payload([invited("one", me: 1), tuple("edited")]))
+        #expect(result.events.map(\.id) == [eid("edited")])
+        #expect(result.nextMeeting(at: now)?.id == eid("edited"))
+        let only = BrowserCalendarBootstrap.enrich(agenda(["one"]), json: try payload([invited("one", me: 1)]))
+        #expect(only.events.isEmpty)
+        #expect(only.nextMeeting(at: now) == nil)
+        for reminder in BrowserCalendarReminderTime.allCases { #expect(only.nextMeeting(at: now, reminderTime: reminder) == nil) }
+        var allDay = invited("one", me: 1); allDay[15] = 1
+        #expect(BrowserCalendarBootstrap.enrich(agenda(["one"]), json: try payload([allDay])).events.isEmpty)
+    }
+    @Test func otherResponsesAndOwnEventsUnchanged() throws {
+        let a = agenda(["one"])
+        let plain = BrowserCalendarBootstrap.enrich(a, json: try payload([tuple("one")]))
+        for status in [0, 2, 3] {
+            let result = BrowserCalendarBootstrap.enrich(a, json: try payload([invited("one", me: status)]))
+            #expect(result == plain)
+            #expect(result.nextMeeting(at: now) != nil)
+        }
+        var own = tuple("one"); own[20] = [attendee("fixture@example.invalid", 3, organizer: true), attendee("guest@example.invalid", 1)]
+        #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([own])) == plain)
+        var someoneElse = tuple("one"); someoneElse[20] = [attendee("organizer@example.invalid", 1, organizer: true)]
+        #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([someoneElse])) == plain)
+        var upper = tuple("one"); upper[20] = [attendee("FIXTURE@Example.Invalid", 1)]
+        #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([upper])).events.isEmpty)
+    }
+    @Test func ambiguousOrMalformedResponsesFailOpen() throws {
+        let a = agenda(["one"])
+        let plain = BrowserCalendarBootstrap.enrich(a, json: try payload([tuple("one")]))
+        let values: [Any] = [NSNull(), true, false, "1", "declined", 1.5, -1, 4, [1], ["responseStatus": "declined"]]
+        for value in values {
+            #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([invited("one", me: value)])) == plain)
+        }
+        let duplicate = invited("one", me: 1, extra: [attendee("fixture@example.invalid", 3)])
+        #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([duplicate])) == plain)
+        for shape: Any in [NSNull(), "fixture@example.invalid", ["fixture@example.invalid", 1], [["fixture@example.invalid"]],
+                           [[NSNull(), NSNull(), NSNull(), NSNull(), NSNull(), 1]], [["responseStatus": "declined", "self": true]]] {
+            var t = tuple("one"); t[20] = shape
+            #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([t])) == plain)
+        }
+        var huge = tuple("one")
+        huge[20] = [attendee("fixture@example.invalid", 1)] + Array(repeating: attendee("guest@example.invalid", 3), count: 5000)
+        #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([huge])) == plain)
+        // Unrelated trailing extension data is never read as a response.
+        var trailing = tuple("one"); trailing.append(["responseStatus": "declined", "self": true])
+        #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([trailing])) == plain)
+    }
+    @Test func declineNeedsExactBindingAndAccount() throws {
+        let series = agenda(["series_occurrence"])
+        #expect(BrowserCalendarBootstrap.enrich(series, json: try payload([invited("series", me: 1)])) == series)
+        let a = agenda(["one"])
+        var otherAccount = tuple("one"); otherAccount[20] = [attendee("other@example.invalid", 1)]
+        #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([otherAccount], binding: "other@example.invalid")) == a)
+        #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([invited("one", me: 1), invited("one", me: 1)])) == a)
     }
     @Test func strictMeetingDestinations() throws {
         for value in ["https://meet.google.com/abc-defg-hij", "https://us02web.zoom.us/j/12345678901?pwd=invented", "https://teams.microsoft.com/l/meetup-join/19%3ameeting_YWJj%40thread.v2/0?context=%7B%7D"] {
