@@ -20,6 +20,27 @@ struct CalendarRuntimeTests {
         }
     }
     func settle() async { for _ in 0..<20 { await Task.yield() } }
+    @Test func plainAndExplicitFavoritesShareBudgetAndSessionInvalidation() async throws {
+        let runtime = BrowserCalendarRuntime(), source = Session(), profile = ProfileID()
+        let plain = try #require(BrowserCalendarWebAccount(url: URL(string: "https://calendar.google.com")!))
+        let view = try #require(BrowserCalendarWebAccount(url: URL(string: "https://calendar.google.com/calendar/r/week")!))
+        var now = Date(); runtime.now = { now }
+        runtime.reconcile(profile: profile, accounts: [plain, view, account], session: source)
+        runtime.refresh(plain); runtime.refresh(view); runtime.refresh(account)
+        await settle()
+        #expect(source.calls == 1)
+        #expect(runtime.agendas.count == 1)
+        #expect(runtime.agendas[plain] == runtime.agendas[account])
+        runtime.sessionChanged(view)
+        #expect(runtime.agendas.isEmpty)
+        runtime.refresh(plain); await settle()
+        #expect(source.calls == 1)
+        now = now.addingTimeInterval(66)
+        runtime.refresh(account); await settle()
+        #expect(source.calls == 2)
+        runtime.reconcile(profile: profile, accounts: [], session: source)
+        #expect(runtime.agendas.isEmpty)
+    }
     @Test func budgetOfflinePrivateAndDisable() async {
         let runtime = BrowserCalendarRuntime(), source = Session(), profile = ProfileID()
         var now = Date(); runtime.now = { now }

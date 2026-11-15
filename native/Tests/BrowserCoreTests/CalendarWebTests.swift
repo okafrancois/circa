@@ -14,10 +14,36 @@ struct CalendarWebTests {
     }
     let heading = "<div class='date'>Sun Nov 15, 2026</div>"
     @Test func accountFences() {
-        for url in ["http://calendar.google.com/calendar/u/0/r", "https://calendar.google.com.evil.invalid/calendar/u/0/r", "https://calendar.google.com/calendar/u/00/r", "https://calendar.google.com/calendar/r", "https://calendar.google.com/calendar/u/0/r?authuser=2", "https://user@calendar.google.com/calendar/u/0/r"] {
+        for url in ["http://calendar.google.com/calendar/u/0/r", "https://calendar.google.com.evil.invalid/calendar/u/0/r", "https://calendar.google.com/calendar/u/00/r", "https://calendar.google.com/calendar/u/0/r?authuser=2", "https://user@calendar.google.com/calendar/u/0/r"] {
             #expect(BrowserCalendarWebAccount(url: URL(string: url)!) == nil)
         }
         #expect(account.slot == 2)
+    }
+    @Test func plainFavoritesUseCanonicalDefaultSlot() throws {
+        let canonical = URL(string: "https://calendar.google.com/calendar/u/0/r")!
+        for path in ["", "/", "/calendar", "/calendar/", "/calendar/r", "/calendar/r/", "/calendar/r/week/2026/11/15", "/calendar/r?hl=fr#today", "/calendar/u/0", "/calendar/u/0/", "/calendar/u/0/r/day"] {
+            let plain = try #require(BrowserCalendarWebAccount(url: URL(string: "https://calendar.google.com" + path)!))
+            #expect(plain.slot == 0)
+            #expect(plain.pageURL == canonical)
+            #expect(plain == BrowserCalendarWebAccount(url: canonical))
+        }
+    }
+    @Test func explicitSlotsArePreservedWithoutRequiringRRoute() throws {
+        for slot in [0, 1, 2, 99] {
+            for suffix in ["", "/", "/r", "/r/week/2026/11/15", "/event?eid=invented", "/r/settings"] {
+                let selected = try #require(BrowserCalendarWebAccount(url: URL(string: "https://calendar.google.com/calendar/u/\(slot)" + suffix)!))
+                #expect(selected.slot == slot)
+                #expect(selected.pageURL.absoluteString == "https://calendar.google.com/calendar/u/\(slot)/r")
+            }
+        }
+    }
+    @Test func ambiguousSelectorsAndMalformedSlotsNeverDefaultToZero() {
+        for path in ["/?authuser=1", "/calendar?src=fixture%40example.invalid", "/calendar/r?authuser=", "/calendar/u", "/calendar/u/", "/calendar/u/00", "/calendar/u/-1/r", "/calendar/u/100/r", "/calendar/u/fixture/r", "/calendar/u/1/r?src=primary", "/calendar/u/1/r?authuser=0", "/unrelated", "/calendar/unknown"] {
+            #expect(BrowserCalendarWebAccount(url: URL(string: "https://calendar.google.com" + path)!) == nil)
+        }
+        for origin in ["http://calendar.google.com", "https://calendar.google.com:443", "https://fixture@calendar.google.com", "https://calendar.google.com.example.invalid"] {
+            #expect(BrowserCalendarWebAccount(url: URL(string: origin)!) == nil)
+        }
     }
     @Test func timedRowsAreStartOnlyAndDecodeEntities() throws {
         let agenda = try decode(heading + "<table class='events'>" + row() + "</table>")
