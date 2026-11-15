@@ -22,6 +22,12 @@ final class OrbitSecureDirectory {
 
     deinit { Darwin.close(descriptor) }
 
+    /// True when `open` or `directory` failed only because the directory does not exist.
+    static func isMissing(_ error: any Error) -> Bool {
+        if case ArcImportError.backupNotFound = error { return true }
+        return false
+    }
+
     static func identity(of descriptor: Int32) throws -> Identity {
         var info = stat()
         guard fstat(descriptor, &info) == 0 else { throw ArcImportError.symbolicLinkInPath }

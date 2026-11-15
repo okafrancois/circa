@@ -47,13 +47,13 @@ public enum BrowserEngineHistoryPurge {
         guard !request.profiles.isEmpty else { return 0 }
         let engine: OrbitSecureDirectory
         do { engine = try OrbitSecureDirectory.open(engineRoot, create: false) }
-        catch ArcImportError.backupNotFound { try clear(in: root); return request.profiles.count }
+        catch let error where OrbitSecureDirectory.isMissing(error) { try clear(in: root); return request.profiles.count }
         catch { throw Failure.unsafePath }
         for profile in request.profiles {
             let name = "profile-" + profile.uuidString.lowercased()
             let directory: OrbitSecureDirectory
             do { directory = try engine.directory(name, create: false) }
-            catch ArcImportError.backupNotFound { continue }
+            catch let error where OrbitSecureDirectory.isMissing(error) { continue }
             catch { throw Failure.unsafePath }
             for file in profileFiles {
                 for companion in companions {
