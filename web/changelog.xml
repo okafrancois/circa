@@ -9,6 +9,71 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.74.0/</id>
+    <title>0.74.0 — Extensions in the Command Bar, a volume slider for each tab and faster private windows.</title>
+    <link href="https://circabrowser.com/changelog/0.74.0/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="stable" />
+    <summary>Extensions in the Command Bar, a volume slider for each tab and faster private windows.
+
+2 new · 3 fixed
+
+## New
+
+- Type an extension's name in the Command Bar to run it; its popup opens in a small window, even from a New Tab.
+- The sidebar media card's speaker now opens a volume slider for that tab; unmuting restores your previous level.
+
+## Fixed
+
+- Private windows open faster: built-in ad and tracker blocking is now configured inside the engine, without a hidden startup page.
+- The built-in blocker no longer appears on the engine's extensions page.
+- Live Calendar no longer reminds you about meetings you declined, and hides them from the preview.
+
+## Known limits
+
+- The small extension popup window shows the extension's name in its title bar and its minimise button stays enabled.
+- A meeting declined after the last calendar refresh is hidden at the next refresh.
+
+Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24
+</summary>
+    <content type="html">&lt;article class="release" id="v0.74.0" data-version="0.74.0" data-channel="stable" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.74.0" aria-label="Link to version 0.74.0"&gt;0.74.0&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Stable&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Extensions in the Command Bar, a volume slider for each tab and faster private windows.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;2 new · 3 fixed&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Type an extension&amp;#x27;s name in the Command Bar to run it; its popup opens in a small window, even from a New Tab.&lt;/li&gt;
+    &lt;li&gt;The sidebar media card&amp;#x27;s speaker now opens a volume slider for that tab; unmuting restores your previous level.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Private windows open faster: built-in ad and tracker blocking is now configured inside the engine, without a hidden startup page.&lt;/li&gt;
+    &lt;li&gt;The built-in blocker no longer appears on the engine&amp;#x27;s extensions page.&lt;/li&gt;
+    &lt;li&gt;Live Calendar no longer reminds you about meetings you declined, and hides them from the preview.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;The small extension popup window shows the extension&amp;#x27;s name in its title bar and its minimise button stays enabled.&lt;/li&gt;
+    &lt;li&gt;A meeting declined after the last calendar refresh is hidden at the next refresh.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;p class="release-engine"&gt;Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24&lt;/p&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.74.0/command-bar-extensions.jpg" aria-label="Type an extension&amp;#x27;s name in the Command Bar to run it."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.74.0/command-bar-extensions.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.74.0/command-bar-extensions.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Type an extension&amp;#x27;s name in the Command Bar to run it.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.74.0/media-volume.jpg" aria-label="Set a tab&amp;#x27;s volume from the sidebar media card."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.74.0/media-volume.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.74.0/media-volume.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Set a tab&amp;#x27;s volume from the sidebar media card.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.74.0/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.74.0-nightly.4/</id>
     <title>0.74.0-nightly.4 — A volume slider for each tab in the media card.</title>
     <link href="https://circabrowser.com/changelog/0.74.0-nightly.4/" />
