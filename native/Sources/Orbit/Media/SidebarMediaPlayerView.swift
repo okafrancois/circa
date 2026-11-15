@@ -233,9 +233,9 @@ final class SidebarMediaPlayerCard: NSView {
     let titleView = SidebarMediaPlayerTitle()
     let closeButton = SidebarMediaPlayerButton(symbol: "xmark", pointSize: Tokens.closeGlyphSize, label: uiText("Close"))
     let faviconButton = SidebarMediaPlayerButton(symbol: nil, pointSize: Tokens.faviconSize, label: uiText("Back to Tab"))
-    let previousButton = SidebarMediaPlayerButton(symbol: "backward.end.fill", pointSize: Tokens.glyphSize, label: uiText("Previous Track"))
+    let previousButton = SidebarMediaPlayerButton(symbol: "backward.end.fill", pointSize: Tokens.trackSkipGlyphSize, label: uiText("Previous Track"))
     let toggleButton = SidebarMediaPlayerButton(symbol: "pause.fill", pointSize: Tokens.glyphSize, label: uiText("Pause"))
-    let nextButton = SidebarMediaPlayerButton(symbol: "forward.end.fill", pointSize: Tokens.glyphSize, label: uiText("Next Track"))
+    let nextButton = SidebarMediaPlayerButton(symbol: "forward.end.fill", pointSize: Tokens.trackSkipGlyphSize, label: uiText("Next Track"))
     /// Per-tab volume needs an engine API that does not exist yet: the control stays disabled.
     let volumeButton = SidebarMediaPlayerButton(symbol: "speaker.wave.3.fill", pointSize: Tokens.glyphSize, label: uiText("Adjust Tab Volume"))
     private(set) var item: SidebarMediaPlayerItem?

@@ -144,5 +144,12 @@ struct SidebarMediaPlayerTests {
             #expect(OrbitIcon.templateNames.contains(name))
             for size: CGFloat in [14, 20, 24] { #expect(OrbitIcon.resourceURL(sfName: name, pointSize: size) != nil) }
         }
+        // Previous/next draw larger than play/pause but keep the 16 pt optical master.
+        #expect(OrbitIcon.opticalSize(for: OrbitTokens.MediaPlayer.trackSkipGlyphSize) == 16)
+        let card = SidebarMediaPlayerCard()
+        for button in [card.previousButton, card.nextButton] {
+            #expect(OrbitGlyph.configuration(of: button.glyph)?.pointSize == 14.5)
+        }
+        #expect(OrbitGlyph.configuration(of: card.toggleButton.glyph)?.pointSize == 14)
     }
 }

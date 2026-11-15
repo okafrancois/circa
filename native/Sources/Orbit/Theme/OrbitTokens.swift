@@ -842,6 +842,8 @@ extension OrbitTokens {
         public static let titleOriginX: CGFloat = 14.5
         public static let titleFontSize: CGFloat = 13
         public static let glyphSize: CGFloat = 14
+        /// Previous/next draw larger than play/pause: ≈13×11 pt of ink on screen.
+        public static let trackSkipGlyphSize: CGFloat = 14.5
         public static let closeGlyphSize: CGFloat = 13.5
         public static let faviconSize: CGFloat = 16
         public static let hoverSquare: CGFloat = 24
