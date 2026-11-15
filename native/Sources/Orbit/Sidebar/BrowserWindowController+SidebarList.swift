@@ -98,6 +98,7 @@ extension BrowserWindowController {
                 reason: self?.acceptsCommands == true ? "submitted" : "controller-disabled")
             self?.submitInput { $0.activateSidebarTab(id) }
         }
+        sidebar.onRemoveTab = { [weak self] id in self?.submitInput { $0.session.archiveTabs([id]) } }
         sidebar.onCloseTabs = { [weak self] ids in self?.submitInput { $0.performSidebarRowAction(ids) } }
         sidebar.onSetPinnedSectionCollapsed = { [weak self] id, collapsed in
             self?.submitInput { controller in

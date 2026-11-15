@@ -15,7 +15,7 @@ extension BrowserWindowController {
         state.hasWindow = window != nil
         state.hasSurface = surface != nil
         state.hasURL = navigation?.url != nil
-        state.canGoBack = navigation?.canGoBack == true
+        state.canGoBack = navigation?.canGoBack == true || surface.map { session.canCloseByGoingBack($0) } == true
         state.canGoForward = navigation?.canGoForward == true
         state.sidebarOnRight = windowShell.sidebarOnRight
         state.isLoading = navigation?.isLoading == true

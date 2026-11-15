@@ -257,6 +257,12 @@ extension BrowserStore {
     /// the inactivity clock measures time since a tab was last on screen.
     func markViewed(_ window: WindowRecord?) {
         guard let window else { return }
+        if let selected = visibleSelectedTabID(in: window) {
+            var order = selectionMRU[window.id]?[window.activeSpaceID] ?? []
+            order.removeAll { $0 == selected || organization.tabs[$0] == nil }
+            order.insert(selected, at: 0)
+            selectionMRU[window.id, default: [:]][window.activeSpaceID] = order
+        }
         let visible = visibleTabIDs(in: window)
         for id in visible { organization.touch(id, at: clock()) }
         recordSelectionActivity(Set(visible))
@@ -271,16 +277,22 @@ extension BrowserStore {
         }
     }
 
-    /// Removes an occurrence from its Space list. Selection moves to the next neighbor, or the
-    /// previous one at the end (same rule as closing).
+    /// Removes an occurrence and returns selection to the most recently used live tab.
     func detachOccurrence(_ occurrenceID: TabOccurrenceID, from spaceID: SpaceID, in window: inout WindowRecord) {
         var occurrenceIDs = window.occurrenceIDsBySpace[spaceID, default: []]
         guard let index = occurrenceIDs.firstIndex(of: occurrenceID) else { return }
         occurrenceIDs.remove(at: index)
         window.organizationFallbackOccurrences.remove(occurrenceID)
         if window.selectedOccurrenceBySpace[spaceID] == occurrenceID {
-            window.selectedOccurrenceBySpace[spaceID] = occurrenceIDs.isEmpty
-                ? nil : occurrenceIDs[min(index, occurrenceIDs.count - 1)]
+            let order = selectionMRU[window.id]?[spaceID] ?? []
+            var replacement = occurrenceIDs.first
+            for id in order {
+                if let match = occurrenceIDs.first(where: { tabs[$0]?.id == id }) {
+                    replacement = match
+                    break
+                }
+            }
+            window.selectedOccurrenceBySpace[spaceID] = replacement
             if spaceID == window.activeSpaceID { window.revision &+= 1 }
         }
         window.occurrenceIDsBySpace[spaceID] = occurrenceIDs
@@ -366,17 +378,17 @@ extension BrowserStore {
     }
 
     /// Archive edits may remove every live occurrence while leaving dormant sidebar tabs.
-    /// Keep a surviving selection; otherwise load the next logical neighbour, then the previous
-    /// one at the end. Replays restore their recorded selection before using this fallback.
+    /// Keep a surviving selection; otherwise load the most recently selected surviving tab.
+    /// Replays restore their recorded selection before using this fallback.
     private func recoverSelections(_ anchors: [WindowID: BrowserOrganizationSelectionAnchor]) {
         for (windowID, anchor) in anchors {
             guard let window = windows[windowID], window.activeSpaceID == anchor.spaceID,
                   visibleSelectedTabID(in: window) == nil,
                   let snapshot = try? organizationSnapshot(for: windowID) else { continue }
             let available = Set(snapshot.allTabs.map(\.id))
-            var candidates: [TabID] = []
+            var candidates = selectionMRU[windowID]?[anchor.spaceID] ?? []
             if let selected = anchor.selectedTab, let index = anchor.orderedTabs.firstIndex(of: selected) {
-                candidates = Array(anchor.orderedTabs[index...]) + anchor.orderedTabs[..<index].reversed()
+                candidates += Array(anchor.orderedTabs[index...]) + anchor.orderedTabs[..<index].reversed()
             }
             candidates += snapshot.allTabs.map(\.id)
             guard let target = candidates.first(where: available.contains),
@@ -512,6 +524,11 @@ extension BrowserStore {
     }
 
     func organizationDidClose(_ tab: BrowserTab, wasVisibleSelection: Bool, journalingIn context: BrowserContext?) {
+        if case .today? = organization.section(of: .tab(tab.id)),
+           case .folder? = organization.container(of: .tab(tab.id)) {
+            publishOrganizationChange()
+            return
+        }
         var published = false
         switch organization.section(of: .tab(tab.id)) {
         case let .today(spaceID)?:

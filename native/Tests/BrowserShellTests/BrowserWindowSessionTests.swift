@@ -672,3 +672,38 @@ func destinationCloseDuringStoreHop() async throws {
     #expect(publications == 0)
     #expect(!session.hasPendingCommands)
 }
+
+@Suite @MainActor struct LinkBackTests {
+    @Test("Back walks history then closes to opener, or MRU if opener closed", arguments: [false, true])
+    func historyThenClose(openerClosed: Bool) async throws {
+        let recorder = SurfaceRecorder()
+        let session = recorder.session()
+        session.openTab(url: URL(string: "https://example.test/parent")!)
+        await session.waitForPendingCommands()
+        let parent = try #require(session.selectedSurface)
+        let parentID = try #require(session.snapshot?.selectedOccurrenceID)
+        session.openTab(url: URL(string: "https://example.test/other")!)
+        await session.waitForPendingCommands()
+        let otherID = try #require(session.snapshot?.selectedOccurrenceID)
+        let child = TestSurface(profileID: parent.profileID, url: URL(string: "https://example.test/child")!)
+        let childID = try #require(await session.adoptSurface(child, from: parent, profileID: parent.profileID, url: child.initialURL, isLink: true).value)
+        session.selectOccurrence(childID)
+        await session.waitForPendingCommands()
+        #expect(session.canCloseByGoingBack(child))
+        if openerClosed {
+            session.closeOccurrence(parentID)
+            await session.waitForPendingCommands()
+        }
+        var history = 1
+        session.navigateBack(canGoBack: { _ in history > 0 }, goBack: { _ in history -= 1; return child.initialURL })
+        await session.waitForPendingCommands()
+        #expect(session.snapshot?.selectedOccurrenceID == childID)
+        #expect(child.disposalCount == 0 && history == 0)
+        session.navigateBack(canGoBack: { _ in history > 0 }, goBack: { _ in Issue.record("No history remains"); return nil })
+        await session.waitForPendingCommands()
+        #expect(session.snapshot?.selectedOccurrenceID == (openerClosed ? otherID : parentID))
+        #expect(child.disposalCount == 1)
+        #expect(recorder.errors.isEmpty)
+        session.close()
+    }
+}

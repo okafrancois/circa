@@ -31,6 +31,7 @@ protocol SidebarRowEventHandler: AnyObject {
     func rowRightMouseDown(_ row: SidebarListRow, with event: NSEvent)
     func rowPerformPress(_ row: SidebarListRow) -> Bool
     func rowClose(_ row: SidebarTabRow)
+    func rowMiddleClose(_ row: SidebarTabRow)
     func rowResetToPinnedURL(_ row: SidebarTabRow)
     func rowToggleAudio(_ row: SidebarTabRow)
     /// Nil title: the edit was cancelled. `initialTitle` is the text the field started with: the
@@ -39,6 +40,7 @@ protocol SidebarRowEventHandler: AnyObject {
 }
 
 extension SidebarRowEventHandler {
+    func rowMiddleClose(_ row: SidebarTabRow) { rowClose(row) }
     func rowToggleAudio(_ row: SidebarTabRow) {}
 }
 
@@ -292,7 +294,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
               event.window === window, let target = middleClickCloseTarget, press.tab == target.item.id,
               bounds.contains(convert(event.locationInWindow, from: nil)),
               visibleRect.contains(convert(event.locationInWindow, from: nil)) else { return }
-        events?.rowClose(target)
+        events?.rowMiddleClose(target)
     }
 
     override func accessibilityPerformPress() -> Bool {
@@ -471,7 +473,7 @@ class SidebarTabRow: SidebarListRow {
     override var hoverFill: NSColor { item.isPinned ? OrbitTokens.Color.State.pinnedHover : super.hoverFill }
     var isCloseButtonVisible: Bool { closeButton.alphaValue > 0 }
     override var middleClickCloseTarget: SidebarTabRow? {
-        !item.isPinned && !item.isErrandSummary && !isRenaming && !closeButton.isHidden
+        !item.isErrandSummary && !isRenaming && !closeButton.isHidden
             && closeButton.isEnabled ? self : nil
     }
 
