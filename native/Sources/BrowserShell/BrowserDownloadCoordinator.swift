@@ -131,8 +131,14 @@ public final class BrowserDownloadCoordinator {
     private var publicationDepth = 0
 
     private let clock: @MainActor () -> Date
+    /// Waits out one coalescing window; throws when the pending delivery is cancelled.
+    private let progressDelay: @MainActor () async throws -> Void
 
-    public init(clock: @escaping @MainActor () -> Date = { Date() }) { self.clock = clock }
+    public init(clock: @escaping @MainActor () -> Date = { Date() },
+                progressDelay: @escaping @MainActor () async throws -> Void = { try await Task.sleep(for: .milliseconds(100)) }) {
+        self.clock = clock
+        self.progressDelay = progressDelay
+    }
 
     /// Inserts before publication and performs no engine startup or callback installation.
     /// Configure the adapter with the returned registration before starting any engine work.
@@ -486,8 +492,9 @@ public final class BrowserDownloadCoordinator {
         if progressOnly {
             for item in changed { pendingProgress[item.key] = item }
             if progressTask == nil {
+                let delay = progressDelay
                 progressTask = Task { @MainActor [weak self] in
-                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                    do { try await delay() } catch { return }
                     guard let self else { return }
                     self.progressTask = nil
                     let items = Array(self.pendingProgress.values)
