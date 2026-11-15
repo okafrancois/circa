@@ -237,19 +237,19 @@
   <div class="release-meta"><h2><a href="#v0.71.2" aria-label="Link to version 0.71.2">0.71.2</a></h2>
   <time datetime="2026-11-15">November 15, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Security and privacy fixes with less battery use.</h3>
-  <p class="release-counts">4 fixed · 3 smaller</p>
+  <p class="release-counts">3 faster · 4 fixed</p>
+  <h4>Faster</h4>
+  <ul>
+    <li>iCloud sync no longer checks in every 5 seconds. It runs when something changes, when iCloud pushes a change, when you come back to Circa, and every 10 minutes as a safety net. At idle, forced disk flushes drop from about 2 every 5 seconds → 0 between two 10-minute safety checks, saving battery and disk writes. A change made on another Mac can take up to 10 minutes to arrive if its push notification is missed.</li>
+    <li>Swiping between Spaces with a textured theme repaints the paper grain 240 → 2 times over a 120-frame swipe, and tabs with a custom symbol icon no longer rebuild the sidebar on every update.</li>
+    <li>Deleting history entries no longer runs the icon cleanup when no visit is actually removed: about 198 ms → skipped on a 200,000-visit history.</li>
+  </ul>
   <h4>Fixed</h4>
   <ul>
     <li>Clearing your history also removes the deleted pages from the iCloud sync journal and from the synced copies in iCloud. &quot;All Time&quot; and removing a profile also wipe the engine&#x27;s own internal history files the next time Circa starts.</li>
     <li>Icons from websites are checked more strictly before they are displayed, so a malicious page can no longer use an unusual image format to reach the system&#x27;s image decoder.</li>
     <li>Look-alike addresses in the command bar suggestions now show in their real form. An address that imitates another one with foreign letters (for example a Cyrillic &quot;а&quot; in place of a Latin &quot;a&quot;) shows as <code>xn--…</code>. Normal international addresses such as <code>münchen.de</code> still display normally.</li>
     <li>The app is signed with narrower system permissions: the main process now refuses to load code that is not signed by Circa, and only the engine processes that need it keep the exceptions.</li>
-  </ul>
-  <h4>Smaller</h4>
-  <ul>
-    <li>iCloud sync no longer checks in every 5 seconds. It runs when something changes, when iCloud pushes a change, when you come back to Circa, and every 10 minutes as a safety net. This saves battery and disk writes when you are idle. A change made on another Mac can take up to 10 minutes to arrive if its push notification is missed.</li>
-    <li>Swiping between Spaces with a textured theme repaints much less, and tabs with a custom symbol icon no longer rebuild the sidebar on every update.</li>
-    <li>Deleting history entries is faster on large histories.</li>
   </ul>
   <h4>Known limits</h4>
   <ul>
