@@ -68,7 +68,8 @@
 <p class="mono vn-title">Releases</p>
 <label for="release-search" hidden id="search-label">Find a release</label>
 <input id="release-search" type="search" placeholder="Find a release" aria-label="Find a release" hidden>
-<nav aria-label="Versions" id="versions"><a href="#v0.73.0-nightly.2" data-channel="nightly" data-version="0.73.0-nightly.2">0.73.0-nightly.2</a>
+<nav aria-label="Versions" id="versions"><a href="#v0.73.0-nightly.3" data-channel="nightly" data-version="0.73.0-nightly.3">0.73.0-nightly.3</a>
+<a href="#v0.73.0-nightly.2" data-channel="nightly" data-version="0.73.0-nightly.2">0.73.0-nightly.2</a>
 <a href="#v0.73.0-nightly.1" data-channel="nightly" data-version="0.73.0-nightly.1">0.73.0-nightly.1</a>
 <a href="#v0.72.0" data-channel="stable" data-version="0.72.0">0.72.0</a>
 <a href="#v0.71.2" data-channel="stable" data-version="0.71.2">0.71.2</a>
@@ -218,7 +219,34 @@
 <a href="#v0.1.0" data-channel="stable" data-version="0.1.0">0.1.0</a></nav>
 <a class="archive-link" href="changelog.xml">Subscribe via Atom ↗</a>
 </aside>
-<div class="timeline"><div id="releases"><article class="release" id="v0.73.0-nightly.2" data-version="0.73.0-nightly.2" data-channel="nightly" data-latest="false">
+<div class="timeline"><div id="releases"><article class="release" id="v0.73.0-nightly.3" data-version="0.73.0-nightly.3" data-channel="nightly" data-latest="false">
+  <div class="release-meta"><h2><a href="#v0.73.0-nightly.3" aria-label="Link to version 0.73.0-nightly.3">0.73.0-nightly.3</a></h2>
+  <time datetime="2026-11-15">November 15, 2026</time><span class="release-channel">Nightly</span></div>
+  <div class="release-copy"><h3>The sidebar can sit on the right, and closing a tab takes you back where you were.</h3>
+  <p class="release-counts">5 new · 4 fixed</p>
+  <h4>New</h4>
+  <ul>
+    <li>The sidebar can sit on the right: View &gt; Sidebar on Right or Settings &gt; Appearance. Window controls move with it.</li>
+    <li>Closing a tab now returns to the tab you used before it. Links open right below their tab, and Back on a link-opened tab with no history closes it and returns to the opener. Middle-click now also removes pinned tabs.</li>
+    <li>Leaving Circa while a video plays now moves it to picture-in-picture at the window&#x27;s top-right; switching back to its tab brings it back inline. Hiding or minimising the window does not trigger it.</li>
+    <li>The optional toolbar now hosts pinned extensions, shows the full URL (toggle in its menu), follows the page tint, and can be turned on from the sidebar address menu (Show as Toolbar).</li>
+    <li>The sidebar media card gains mute, a progress bar with seeking and a picture-in-picture button.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Menu commands remain available after typing an accent dead key or using an input method, including keyboard and accessibility activation.</li>
+    <li>Improved reliability of link summaries when the app is busy.</li>
+    <li>The Library (Downloads, Media, Spaces, Boosts, Archived Tabs) now uses the Space theme&#x27;s text colour, like the sidebar, instead of dark text on dark themes.</li>
+    <li>The download status line keeps the state and size visible and truncates only at the end; the full status is in a tooltip.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
+    <li>On a muted tab, the media card greys out pause and seeking, and its close button does not pause playback yet.</li>
+  </ul>
+  <a class="release-source" href="changelog/0.73.0-nightly.3/">Release permalink ↗</a>
+  </div>
+</article>
+<article class="release" id="v0.73.0-nightly.2" data-version="0.73.0-nightly.2" data-channel="nightly" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.73.0-nightly.2" aria-label="Link to version 0.73.0-nightly.2">0.73.0-nightly.2</a></h2>
   <time datetime="2026-11-15">November 15, 2026</time><span class="release-channel">Nightly</span></div>
   <div class="release-copy"><h3>Search Settings, and ad blocking no longer changes files inside the app.</h3>
