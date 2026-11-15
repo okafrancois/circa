@@ -3,20 +3,37 @@ import BrowserCore
 import BrowserEngine
 
 extension BrowserWindowController {
-    func renderDeveloperToolbar() {
-        guard let surface = session.selectedSurface,
-              siteControls.preferences.preferences(url: surface.navigationState.committedURL,
-                                                   profileID: surface.profileID).developerMode else {
-            developerTintSurface?.setPageTintObservationEnabled(false)
-            developerTintSurface = nil
-            contentCard.setHeader(nil)
-            return
+    /// The content card's page-coloured header: the developer toolbar for sites in Developer Mode,
+    /// otherwise the optional toolbar when it is shown outside Split View, where panes carry their own.
+    func renderPageHeader() {
+        guard let surface = session.selectedSurface else { return clearPageHeader() }
+        if siteControls.preferences.preferences(url: surface.navigationState.committedURL,
+                                                profileID: surface.profileID).developerMode {
+            observePageTint(of: surface)
+            renderDeveloperToolbar(for: surface)
+        } else if isToolbarVisible, session.activeSplit == nil {
+            pageTintSurface?.setPageTintObservationEnabled(false)
+            pageTintSurface = nil
+            renderOptionalToolbar(for: surface)
+        } else {
+            clearPageHeader()
         }
-        if developerTintSurface !== surface {
-            developerTintSurface?.setPageTintObservationEnabled(false)
-            developerTintSurface = surface
-            surface.setPageTintObservationEnabled(true)
-        }
+    }
+
+    private func clearPageHeader() {
+        pageTintSurface?.setPageTintObservationEnabled(false)
+        pageTintSurface = nil
+        contentCard.setHeader(nil)
+    }
+
+    private func observePageTint(of surface: Surface) {
+        guard pageTintSurface !== surface else { return }
+        pageTintSurface?.setPageTintObservationEnabled(false)
+        pageTintSurface = surface
+        surface.setPageTintObservationEnabled(true)
+    }
+
+    private func renderDeveloperToolbar(for surface: Surface) {
         developerToolbar.apply(theme: windowShell.theme)
         developerToolbar.updateTint(surface.navigationState.pageTint)
         developerToolbar.update(url: surface.navigationState.committedURL, canCapture: engine.capabilities.contains(.snapshots))

@@ -86,7 +86,7 @@ import UniformTypeIdentifiers
             var preferences = owner.siteControls.preferences.preferences(url: surface.navigationState.committedURL, profileID: surface.profileID)
             preferences.developerMode = true
             try? owner.siteControls.preferences.set(preferences, url: surface.navigationState.committedURL, profileID: surface.profileID)
-            owner.renderDeveloperToolbar()
+            owner.renderPageHeader()
             try? await Task.sleep(for: .seconds(1))
             let c = cpu(), begin = ProcessInfo.processInfo.systemUptime
             try? await Task.sleep(for: .seconds(6))

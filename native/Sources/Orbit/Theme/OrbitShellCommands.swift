@@ -5,5 +5,6 @@ enum OrbitShellCommands {
     @MainActor
     static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>) {
         try! registry.register(.showHideSidebar) { controller, _ in controller.toggleSidebar() }
+        try! registry.register(.showHideToolbar) { controller, _ in controller.toggleToolbar() }
     }
 }

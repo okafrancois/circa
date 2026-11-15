@@ -472,6 +472,9 @@ extension OrbitTokens {
             public static let paddingX: CGFloat = 8
             public static let addressTop: CGFloat = 46
             public static let addressHeight: CGFloat = 36
+            /// With the optional toolbar the address row leaves the sidebar and the content
+            /// below it moves up 46 pt, starting right under the 36 pt window-control row.
+            public static let addressTopWithoutAddress: CGFloat = 36
             public static let addressTextInsetX: CGFloat = 12
             public static let favoritesTopGap: CGFloat = 8
             public static let favoriteTileHeight: CGFloat = 47

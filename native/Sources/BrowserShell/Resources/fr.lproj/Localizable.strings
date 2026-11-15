@@ -1708,3 +1708,5 @@
 "Receive nightly builds" = "Recevoir les versions nightly";
 
 "New features first, with less stability. Turning this off keeps your build until a newer stable release." = "Les nouveautés en premier, avec moins de stabilité. Désactiver conserve votre version jusqu’à une version stable plus récente.";
+
+"Toolbar" = "Barre d’outils";

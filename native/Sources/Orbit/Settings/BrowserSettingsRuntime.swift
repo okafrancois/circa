@@ -37,6 +37,13 @@ final class BrowserSettingsRuntime: ObservableObject {
         await refresh()
     }
 
+    /// Publishes the choice to every window at once, then persists it; a failed write reverts.
+    func setShowsToolbar(_ visible: Bool) async throws {
+        document.interaction.showsToolbar = visible
+        onChange?()
+        try await updateInteraction { $0.showsToolbar = visible }
+    }
+
     func setOpensExternalLinksInQuickWindow(_ value: Bool) async throws {
         do { try await store.setOpensExternalLinksInQuickWindow(value) }
         catch { await refresh(); throw error }
@@ -147,6 +154,7 @@ final class BrowserWindowSettings {
         owner.sidebar.onReorderSnap = { [weak runtime] in runtime?.feedback.reorderSnapped() }
         owner.windowShell.showsSpaceAroundPages = runtime.document.showsSpaceAroundPages
         if !runtime.document.showsTabHoverPreviews { owner.richTabPreview.dismiss() }
+        owner.setToolbarVisible(runtime.document.interaction.showsToolbar)
         guard let profileID = owner.session.activeProfileID else { return }
         let settings = runtime.document.profile(profileID)
         owner.addressResolver.searchEngine = settings.searchEngine

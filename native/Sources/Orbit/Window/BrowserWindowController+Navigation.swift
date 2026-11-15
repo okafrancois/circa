@@ -26,6 +26,8 @@ extension BrowserWindowController {
         session.performWindowAction { [weak self] in
             guard let self, !isPreparingForTermination else { return }
             hideLibrary()
+            // The optional toolbar replaces the sidebar address row: edit in the Command Bar.
+            if isToolbarVisible { palette.present(.currentTab); return }
             setSidebarVisible(true)
             window?.makeFirstResponder(addressField)
             addressField.currentEditor()?.selectAll(nil)
@@ -108,7 +110,7 @@ extension BrowserWindowController {
         guard session.selectedSurface === surface else { return }
         refreshPageZoom()
         renderLoadingIndicator()
-        renderDeveloperToolbar()
+        renderPageHeader()
         addressSecurityObservation.observe(surface.nativePageServices) { [weak self, weak surface] in
             guard let self, let surface, !self.isPreparingForTermination else { return }
             self.refreshNavigation(for: surface)

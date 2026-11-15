@@ -518,7 +518,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.siteControls.privateContentBlocking = privateContentBlocking
         controller.siteControls.onPreferencesChange = { [weak self] in
             guard let self else { return }
-            for controller in liveControllers { controller.renderDeveloperToolbar() }
+            for controller in liveControllers { controller.renderPageHeader() }
         }
         controller.siteControls.permissionsUnavailable = permissionsUnavailable
         controllers[id] = WeakController(controller)

@@ -158,7 +158,7 @@ struct DeveloperToolbarTests {
         var preferences = BrowserSitePreferences()
         preferences.developerMode = true
         try owner.siteControls.preferences.set(preferences, url: surface.currentURL, profileID: surface.profileID)
-        owner.renderDeveloperToolbar()
+        owner.renderPageHeader()
         #expect(surface.observesPageTint)
         let dark = BrowserPageTint(red: 48, green: 46, blue: 43)
         surface.pageTint = dark
@@ -175,7 +175,7 @@ struct DeveloperToolbarTests {
         #expect(owner.developerToolbar.pageTint == nil)
         preferences.developerMode = false
         try owner.siteControls.preferences.set(preferences, url: surface.currentURL, profileID: surface.profileID)
-        owner.renderDeveloperToolbar()
+        owner.renderPageHeader()
         #expect(!surface.observesPageTint)
         owner.session.close()
         try await environment.finalize()

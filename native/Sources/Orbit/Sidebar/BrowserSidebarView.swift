@@ -43,6 +43,16 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var favoriteMinimumTileWidth = Metrics.favoriteMinimumTileWidth { didSet { if favoriteMinimumTileWidth != oldValue { needsLayout = true } } }
     var favoritePreviewCount: Int? { didSet { if favoritePreviewCount != oldValue { needsLayout = true } } }
     var showsEmptyFavoritesDropZone = false { didSet { if showsEmptyFavoritesDropZone != oldValue { needsLayout = true } } }
+    /// False while the optional toolbar carries navigation and the address: the sidebar drops its
+    /// back/forward/reload buttons and address row, and its content moves up.
+    var showsNavigationChrome = true {
+        didSet {
+            guard showsNavigationChrome != oldValue else { return }
+            navigationContainer.showsNavigation = showsNavigationChrome
+            addressContainer.isHidden = !showsNavigationChrome
+            needsLayout = true
+        }
+    }
     /// Pinned rows laid out above the separator, gap pitches included (0 when collapsed).
     var pinnedRowCount: Int { page.list.displayedLayout.pinnedSlotCount }
     let footer = SidebarFooterView()
@@ -344,7 +354,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             favoriteCount: max(favoriteCount, favoritePreviewCount ?? 0, showsEmptyFavoritesDropZone ? 1 : 0),
             favoriteMinimumTileWidth: favoriteMinimumTileWidth,
             pinnedRowCount: layout.pinnedSlotCount, todayRowCount: layout.todaySlotCount,
-            spaceCount: renderedCatalog?.spaces.count ?? 1))
+            spaceCount: renderedCatalog?.spaces.count ?? 1, showsAddress: showsNavigationChrome))
         if standaloneProfileName != nil { geometry.spaceTitleCenterY = 4 }
         navigationContainer.frame = NSRect(x: 0, y: 0, width: bounds.width, height: geometry.addressFrame.minY)
         navigationContainer.apply(geometry)
@@ -1515,6 +1525,8 @@ final class SidebarToolbarRow: SidebarFlippedView {
     /// Set by the window: the system spacing of its buttons and the full-screen state.
     var trafficLightPitch: CGFloat = OrbitTrafficLights.pitch { didSet { if trafficLightPitch != oldValue { reapply() } } }
     var isFullScreen = false { didSet { if isFullScreen != oldValue { reapply() } } }
+    /// Back, forward, reload and the compact overflow; the sidebar toggle always stays.
+    var showsNavigation = true { didSet { if showsNavigation != oldValue { reapply() } } }
 
     /// Order: sidebar toggle, back, forward, reload.
     func install(_ buttons: [NSButton]) {
@@ -1543,13 +1555,14 @@ final class SidebarToolbarRow: SidebarFlippedView {
         let size = OrbitTokens.Metrics.Toolbar.buttonHitSize
         let centers = [toolbar.sidebarToggleCenterX, toolbar.backCenterX, toolbar.forwardCenterX, toolbar.reloadCenterX]
         for (index, (button, center)) in zip(buttons, centers).enumerated() {
-            if button.isHidden != (center == nil) { button.isHidden = center == nil }
-            guard let center else { continue }
+            let hidden = center == nil || (index > 0 && !showsNavigation)
+            if button.isHidden != hidden { button.isHidden = hidden }
+            guard let center, !hidden else { continue }
             let width = index == 0 ? size : toolbar.hitWidth
             button.frame = NSRect(x: center - width / 2, y: toolbar.centerY - size / 2, width: width, height: size)
         }
         if let overflowButton {
-            overflowButton.isHidden = toolbar.overflowCenterX == nil
+            overflowButton.isHidden = toolbar.overflowCenterX == nil || !showsNavigation
             if let center = toolbar.overflowCenterX {
                 overflowButton.frame = NSRect(x: center - toolbar.hitWidth / 2, y: toolbar.centerY - size / 2,
                                               width: toolbar.hitWidth, height: size)
@@ -1809,7 +1822,7 @@ extension BrowserSidebarView {
         OrbitSidebarGeometry.resolve(.init(width: bounds.width, height: bounds.height,
             favoriteCount: favorites, favoriteMinimumTileWidth: favoriteMinimumTileWidth,
             pinnedRowCount: page.list.displayedLayout.pinnedSlotCount, todayRowCount: page.list.displayedLayout.todaySlotCount,
-            spaceCount: renderedCatalog?.spaces.count ?? 1))
+            spaceCount: renderedCatalog?.spaces.count ?? 1, showsAddress: showsNavigationChrome))
     }
     private func frozenFavorites(_ items: [FavoriteTileItem], profile: ProfileID?, attach: Bool = true) -> FavoritesGridView {
         let grid = FavoritesGridView()

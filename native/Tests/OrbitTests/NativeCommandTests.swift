@@ -299,7 +299,7 @@ struct NativeCommandTests {
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
         // Includes 24 additional native responder actions, Network Inspector, Exit, Media, Assistant and two support actions.
-        #expect(implemented.count == 233, "\(implemented.count): \(implemented.sorted())")
+        #expect(implemented.count == 234, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.startErrand))
         #expect(system.registry.isImplemented(.cycleExtensions))
         #expect(system.registry.isImplemented(.toggleAssistant))
@@ -320,6 +320,7 @@ struct NativeCommandTests {
         #expect(!system.registry.isImplemented(.reloadWithWebKit) && !system.registry.isImplemented(.reloadWithChromium))
         #expect(system.registry.definition(.reloadWithWebKit)?.menu == "View")
         #expect(system.registry.isImplemented(.showHideSidebar))
+        #expect(system.registry.isImplemented(.showHideToolbar))
         #expect(system.registry.isImplemented(.forceRefreshThePage))
         #expect(system.registry.isImplemented(.javascriptConsole))
         #expect(system.registry.isImplemented(.pasteAsNewTab))
@@ -327,7 +328,7 @@ struct NativeCommandTests {
         #expect(system.registry.isImplemented(.newQuickWindowWindow))
         #expect(!system.registry.isImplemented(.newChatGPTMessage))
         // Unsupported declarations retain no handler until their behavior is specified.
-        for id: BrowserCommandID in [.blankWindow, .showHideToolbar, .joinMeeting,
+        for id: BrowserCommandID in [.blankWindow, .joinMeeting,
                                      .peekEmail, .copyURLAsQuote] {
             #expect(!system.registry.isImplemented(id))
         }
@@ -557,7 +558,7 @@ struct NativeCommandTests {
             Dark [dark]
           ---
           Show/Hide Sidebar [showHideSidebar] ⌘S
-          Show/Hide Toolbar [showHideToolbar] ⇧⌘D (hidden)
+          Show/Hide Toolbar [showHideToolbar] ⇧⌘D
           Expand Pinned Section [expandPinnedSection] (hidden)
           Collapse Pinned Section [collapsePinnedSection] (hidden)
           Reveal Current Tab [revealCurrentTab] ⌃Space (hidden) (key when hidden)

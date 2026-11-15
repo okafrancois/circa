@@ -92,7 +92,9 @@ extension BrowserWindowController: BrowserSiteControlsHost {
             guard let self else { return }
             sidebar.addressContainer.holdsAccessoriesVisible = siteControls.isPopoverShown
         }
-        if isAddressFieldOnScreen { panel.show(rows: rows, anchor: button) }
+        if let toolbar = optionalToolbarSiteAnchor, button === toolbar || button.isDescendant(of: sidebar) {
+            panel.show(rows: rows, anchor: toolbar)
+        } else if isAddressFieldOnScreen { panel.show(rows: rows, anchor: button) }
         else {
             let top = contentCard.isFlipped ? contentCard.bounds.minY : contentCard.bounds.maxY - SiteControlTokens.anchorSize
             let rect = NSRect(x: contentCard.bounds.minX + SiteControlTokens.inset, y: top,
