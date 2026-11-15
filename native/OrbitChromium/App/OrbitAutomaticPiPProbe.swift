@@ -10,8 +10,8 @@ enum OrbitAutomaticPiPProbe {
         guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.autopip-app",
               activeSiteSessionConfiguration()?.syntheticGuard != nil,
               let window = owner.window,
-              let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(window.windowNumber)) as? [[String: Any]],
-              rows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) else { return ["refused": true] }
+              let rows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]],
+              rows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() && ($0[kCGWindowNumber as String] as? Int) == window.windowNumber }) || (NSApp.isHidden && command["action"] == "state") else { return ["refused": true] }
         switch command["action"] {
         case "prepare":
             guard let text = command["url"], let url = URL(string: text),
@@ -22,6 +22,23 @@ enum OrbitAutomaticPiPProbe {
             await owner.session.waitForPendingCommands()
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+        case "play-click":
+            guard NSApp.isActive, let surface = owner.session.selectedSurface,
+                  surface.focusDocument(),
+                  let button = await OrbitPerformanceProbe.evaluate(surface,
+                    "(()=>{let r=document.querySelector('button').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()"),
+                  let x = button["x"] as? Double, let y = button["y"] as? Double else { return ["refused": true] }
+            let view = surface.documentView
+            let point = view.convert(NSPoint(x:x,y:view.isFlipped ? y : view.bounds.height-y),to:nil)
+            for type in [NSEvent.EventType.leftMouseDown,.leftMouseUp] {
+                guard NSApp.isActive,
+                      let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow,CGWindowID(window.windowNumber)) as? [[String:Any]],
+                      rows.contains(where:{ ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }),
+                      let event = NSEvent.mouseEvent(with:type,location:point,modifierFlags:[],
+                        timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:window.windowNumber,
+                        context:nil,eventNumber:1,clickCount:1,pressure:1) else { return ["refused":true] }
+                NSApp.sendEvent(event)
+            }
         case "other":
             owner.session.openTab(url: URL(string: "about:blank")!)
             await owner.session.waitForPendingCommands()
@@ -47,7 +64,7 @@ enum OrbitAutomaticPiPProbe {
             $0.styleMask.contains(.fullSizeContentView) && !$0.styleMask.contains(.titled) && $0.level == .floating
         }
         let page = if let surface = owner.session.selectedSurface {
-            await OrbitPerformanceProbe.evaluate(surface, "({pip:!!document.pictureInPictureElement,playing:!!document.querySelector('video')&&!document.querySelector('video').paused,activated:navigator.userActivation.hasBeenActive,button:(()=>{let r=document.querySelector('button')?.getBoundingClientRect();return r?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()})")
+            await OrbitPerformanceProbe.evaluate(surface, "({pip:!!document.pictureInPictureElement,muted:document.querySelector('video')?.muted,volume:document.querySelector('video')?.volume,audioBytes:document.querySelector('video')?.webkitAudioDecodedByteCount,click:globalThis.fixtureClick||null,playing:!!document.querySelector('video')&&!document.querySelector('video').paused,activated:navigator.userActivation.hasBeenActive,button:(()=>{let r=document.querySelector('button')?.getBoundingClientRect();return r?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()})")
         } else { nil as [String: Any]? }
         var clickPoint: [String: Double] = [:]
         if let button = page?["button"] as? [String: Double], let surface = owner.session.selectedSurface,

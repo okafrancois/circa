@@ -4,7 +4,8 @@ import AppKit
 /// the video surface, hit testing, playback controls, accessibility and close/return actions.
 @MainActor
 final class ChromiumPictureInPicturePresentation {
-    private let existingWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
+    // A returned player remains hidden and can be reused by the next native request.
+    private let existingWindows = Set(NSApp.windows.filter(\.isVisible).map(ObjectIdentifier.init))
     private weak var sourceWindow: NSWindow?
     private var observations: [NSObjectProtocol] = []
     private weak var window: NSWindow?
