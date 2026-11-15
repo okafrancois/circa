@@ -50,6 +50,14 @@ public struct BrowserCalendarWebAgenda: Equatable, Sendable {
         return now >= fetchedAt && now.timeIntervalSince(fetchedAt) < 120 && calendar.isDate(day, inSameDayAs: now)
     }
 
+    public func nextMeeting(at now: Date) -> BrowserCalendarWebEvent? {
+        guard isFresh(at: now) else { return nil }
+        return events.filter { event in
+            guard let url = event.joinURL, BrowserCalendarBootstrap.meetingURL(url.absoluteString) == url else { return false }
+            return event.start >= now && event.start.timeIntervalSince(now) <= 180
+        }.min { $0.start < $1.start }
+    }
+
     public static func decode(html: String, account: BrowserCalendarWebAccount, binding: String,
                               day: Date, timeZone: TimeZone, fetchedAt: Date) throws -> Self {
         guard html.utf8.count <= 1_048_576, !html.localizedCaseInsensitiveContains("<!ENTITY"),

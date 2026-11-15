@@ -16,9 +16,6 @@ final class CalendarPreviewView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true; layer?.cornerRadius = 12; layer?.masksToBounds = true
-        let material = NSVisualEffectView(frame: bounds)
-        material.material = .popover; material.blendingMode = .withinWindow; material.state = .active
-        material.autoresizingMask = [.width, .height]; addSubview(material)
         scroll.documentView = timeline; scroll.drawsBackground = false
         scroll.hasVerticalScroller = true; scroll.scrollerStyle = .overlay; scroll.autohidesScrollers = true
         addSubview(scroll)
@@ -41,6 +38,9 @@ final class CalendarPreviewView: NSView {
             var calendar = Calendar(identifier: .gregorian); calendar.timeZone = agenda.timeZone
             scroll.contentView.scroll(to: .init(x: 0, y: CGFloat(calendar.component(.hour, from: Date())) * 41.8))
         }
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        OrbitTokens.Color.Calendar.shell.setFill(); bounds.fill()
     }
     func clear() { timeline.agenda = nil; timeline.needsDisplay = true }
     override func layout() {
@@ -97,10 +97,10 @@ private final class CalendarTimelineView: NSView {
             let width = (bounds.width - 54) / CGFloat(group.count)
             for (column, event) in group.enumerated() {
                 let rect = NSRect(x: 49 + CGFloat(column) * width, y: offset(event.start), width: max(1, width - 1),
-                                  height: max(1, CGFloat((event.end?.timeIntervalSince(event.start) ?? 3600) / 3600) * pitch - 1))
+                                  height: max(1, CGFloat((event.end?.timeIntervalSince(event.start) ?? 3600) / 3600) * pitch - 2))
                 let path = NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4)
-                OrbitTokens.Color.Text.secondary.withAlphaComponent(0.18).setFill(); path.fill()
-                OrbitTokens.Color.Text.secondary.withAlphaComponent(0.24).setStroke(); path.lineWidth = 0.5; path.stroke()
+                OrbitTokens.Color.Calendar.event.setFill(); path.fill()
+                OrbitTokens.Color.Calendar.outline.setStroke(); path.lineWidth = 0.5; path.stroke()
                 NSGraphicsContext.saveGraphicsState(); path.addClip()
                 (event.title as NSString).draw(in: NSRect(x: rect.minX + 3, y: rect.minY + 3, width: max(0, rect.width - 6), height: 14), withAttributes: text)
                 NSGraphicsContext.restoreGraphicsState()

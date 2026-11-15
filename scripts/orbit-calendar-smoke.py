@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Confined Calendar session/hover acceptance with invented rows and window-only recording."""
 import argparse
+import base64
 import datetime
 import importlib.util
 import json
@@ -24,16 +25,36 @@ class Fixture(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
+    starts = [(datetime.datetime.now().astimezone() + datetime.timedelta(minutes=m)).replace(second=0, microsecond=0) for m in [3, 65, 125]]
+    counts = {}
+    titles = ['📅 Kickoff meeting', 'Design workshop', 'Focus time']
+
     def do_GET(self):
         path = urlparse(self.path)
+        self.counts[path.path] = self.counts.get(path.path, 0) + 1
         status, cookie = 200, False
         if path.path in ['/seed', '/notes', '/tasks']:
-            body = '<html><title>Synthetic calendar</title><body>Calendar fixture</body></html>'
+            body = '<html><title>Synthetic calendar</title><link rel="icon" href="/calendar.svg" type="image/svg+xml"><body style="font:16px system-ui;padding:40px;background:#fafafa;color:#555">Calendar fixture</body></html>'
             cookie = True
-        elif 'calendar-fixture=yes' not in self.headers.get('Cookie', ''):
+        elif path.path == '/calendar.svg':
+            payload = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="4" fill="#4285f4"/><path d="M7 9h18v17H7z" fill="white"/><path d="M7 26h18v4H7z" fill="#34a853"/><path d="M25 9h5v17h-5z" fill="#fbbc04"/><text x="16" y="22" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="13" fill="#4285f4">15</text></svg>'
+            self.send_response(200); self.send_header('Content-Type', 'image/svg+xml'); self.end_headers(); self.wfile.write(payload); return
+        elif 'calendar-fixture=yes'  not in self.headers.get('Cookie', ''):
             status, body = 404, '<html><body>Signed out</body></html>'
         elif path.path == '/calendar/u/0/r':
             body = '<html><body><a href="https://accounts.google.com/SignOutOptions" aria-label="Google Account: Synthetic (fixture@example.invalid)">Account</a></body></html>'
+        elif path.path == '/calendar/u/0/r/day':
+            tuples = []
+            for i, start in enumerate(self.starts):
+                t = [None] * 83
+                t[0] = f'fixture{i}'
+                t[35] = [None, [start.timestamp() * 1000]]
+                t[36] = [None, [(start + datetime.timedelta(minutes=[45, 60, 90][i])).timestamp() * 1000]]
+                t[57] = [[[1, 'https://meet.google.com/abc-defg-hij']]] if i == 0 else []
+                tuples.append([None, None, None, t])
+            bootstrap = [None] * 40
+            bootstrap[39] = [None, [['fixture@example.invalid', tuples]]]
+            body = '<html><script id="initialdata" type="application/json">' + json.dumps(bootstrap) + '</script></html>'
         elif path.path == '/calendar/u/0/htmlembed':
             query = parse_qs(path.query)
             if query.get('src') != ['fixture@example.invalid'] or query.get('mode') != ['AGENDA']:
@@ -41,10 +62,10 @@ class Fixture(BaseHTTPRequestHandler):
             else:
                 now = datetime.datetime.now().astimezone()
                 rows = []
-                for i, minutes in enumerate([3, 65, 125]):
-                    start = now + datetime.timedelta(minutes=minutes)
+                for i, start in enumerate(self.starts):
+                    eid = base64.b64encode(f"fixture{i} opaque-calendar".encode()).decode()
                     stamp = start.strftime('%I:%M%p').lstrip('0').lower()
-                    rows.append(f'<tr class="event"><td class="event-time">{stamp}</td><td class="event-summary"><a class="event-link" href="https://calendar.google.com/calendar/u/0/event?eid=fixture{i}">Synthetic session {i + 1}</a></td></tr>')
+                    rows.append(f'<tr class="event"><td class="event-time">{stamp}</td><td class="event-summary"><a class="event-link" href="https://calendar.google.com/calendar/u/0/event?eid={eid}">{self.titles[i]}</a></td></tr>')
                 body = '<html><body><div class="date">' + now.strftime('%a %b %d, %Y') + '</div><table class="events">' + ''.join(rows) + '</table></body></html>'
         else:
             status, body = 404, '<html></html>'
@@ -73,6 +94,7 @@ def phase(args):
         raise TimeoutError('Calendar GUI lease expired')
     signal.signal(signal.SIGALRM, expired)
     signal.alarm(55)
+    (root / "capture.mov").unlink(missing_ok=True)
     recording = None
     with validation.lab.OwnedProcessRun() as owner:
         with (root / 'stdout.log').open('w') as out, (root / 'stderr.log').open('w') as err:
@@ -104,7 +126,7 @@ def phase(args):
                         subprocess.run(['/usr/bin/osascript', '-e',
                             f'tell application "System Events" to set frontmost of first application process whose unix id is {process.pid} to true'],
                             check=True, timeout=4, stdout=out, stderr=err)
-                        recording = subprocess.Popen(['/usr/sbin/screencapture', '-x', '-v', '-V', '8', '-l', str(window), str(root / 'capture.mov')], stdout=out, stderr=err)
+                        recording = subprocess.Popen(['/usr/sbin/screencapture', '-x', '-v', '-V', '13', '-l', str(window), str(root / 'capture.mov')], stdout=out, stderr=err)
                     try:
                         result = json.loads(state.read_text())
                     except (ValueError, OSError):
@@ -116,7 +138,7 @@ def phase(args):
                 else:
                     raise TimeoutError('Calendar acceptance')
                 if recording is not None:
-                    recording.wait(timeout=10)
+                    assert recording.wait(timeout=10) == 0, "Window recording failed"
             finally:
                 if recording is not None and recording.poll() is None:
                     recording.terminate(); recording.wait(timeout=3)
@@ -150,6 +172,7 @@ def main():
         subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__, '--app', str(args.app.resolve()), '--output', str(args.output.resolve()), '--phase', '--port', str(server.server_port), '--appearance', args.appearance] + (['--no-record'] if args.no_record else []), check=True)
     finally:
         server.shutdown(); server.server_close(); thread.join()
+        (args.output / 'fixture-requests.json').write_text(json.dumps(Fixture.counts, indent=2))
         info = plistlib.loads((args.app / 'Contents/Info.plist').read_bytes())
         identifier = info['CFBundleIdentifier']
         if info.get('OrbitSyntheticBundle') is True and identifier.startswith('lab.orbit.orbit.'):

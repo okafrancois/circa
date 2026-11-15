@@ -38,6 +38,27 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var extensionsContainer: SidebarExtensionStrip { addressContainer.extensions }
     /// Seam for the Favorites grid (`BrowserOrganizationSnapshot.favorites`): set `favoriteCount`
     /// so the page starts below the tiles, and place tiles with `geometry.favoriteTileFrame(index:)`.
+    let calendarReminder = CalendarReminderView()
+    private let calendarMotion = SidebarListAnimator()
+    private var calendarReminderVisible = false
+    private var calendarHeight: CGFloat = 0
+    func presentCalendarReminder(id: String?, title: String?, join: (() -> Bool)?) {
+        calendarReminder.render(id: id, title: title, action: join)
+        let visible = id != nil && !isPrivate && standaloneProfileName == nil
+        guard visible != calendarReminderVisible else { return }
+        calendarReminderVisible = visible
+        if calendarReminder.superview == nil { pageContainer.addSubview(calendarReminder) }
+        calendarReminder.isHidden = false
+        calendarMotion.onFrame = { [weak self] time in
+            guard let self else { return }
+            calendarHeight = calendarMotion.value(of: .newTab, at: time) ?? (calendarReminderVisible ? 36 : 0)
+            calendarReminder.alphaValue = calendarHeight / 36
+            calendarReminder.isHidden = calendarHeight == 0
+            needsLayout = true; layoutSubtreeIfNeeded()
+        }
+        calendarMotion.move(.newTab, from: calendarHeight, to: visible ? 36 : 0, at: calendarMotion.now)
+        calendarMotion.run(in: self)
+    }
     let favoritesContainer = SidebarFlippedView()
     var favoriteCount = 0 { didSet { if favoriteCount != oldValue { needsLayout = true } } }
     var favoriteMinimumTileWidth = Metrics.favoriteMinimumTileWidth { didSet { if favoriteMinimumTileWidth != oldValue { needsLayout = true } } }
@@ -384,6 +405,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         page.titleLabel.isHidden = standaloneProfileName != nil
         if standaloneProfileName != nil { page.iconButton.isHidden = true }
         if standaloneProfileName != nil { footer.isHidden = isPrivate; favoritesContainer.isHidden = true }
+        geometry.pageFrame.origin.y += calendarHeight
+        geometry.pageFrame.size.height = max(0, geometry.pageFrame.height - calendarHeight)
+        calendarReminder.frame = contentFrame(.init(x: 0, y: geometry.pageFrame.minY - calendarHeight,
+                                                   width: bounds.width, height: 36))
         pageContainer.frame = contentViewportFrame
         favoritesContainer.frame = contentFrame(geometry.favoritesFrame)
         for page in [page, leavingPage, swipePreview, swipeOutgoing].compactMap({ $0 }) {

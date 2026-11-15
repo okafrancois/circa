@@ -157,6 +157,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
 
     func shutdown() {
         gmailRefreshTimer?.invalidate(); gmailRefreshTimer = nil
+        owner?.sidebar.presentCalendarReminder(id: nil, title: nil, join: nil)
         calendarPreview.dismiss(); calendar.clear()
         gmailPreview.dismiss(); gmail.clear()
         observer?.cancel()
@@ -234,6 +235,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         owner.sidebar.favoriteCount = items.count
         grid.accent = owner.sidebar.currentThemeAccent
         grid.render(items, profileID: snapshot?.profileID)
+        renderCalendarReminder(tabs)
         updatePinnedBadges()
         calendarPreview.sidebarOnRight = gmailPreview.sidebarOnRight
         calendarPreview.reconcile()

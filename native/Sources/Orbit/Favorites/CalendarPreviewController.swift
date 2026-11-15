@@ -84,10 +84,15 @@ final class CalendarPreviewController {
         container.wantsLayer = true
         container.clipsToBounds = false
         container.layer?.masksToBounds = false
-        container.layer?.shadowColor = NSColor.black.cgColor
-        container.layer?.shadowOpacity = 0.22
-        container.layer?.shadowRadius = 14
-        container.layer?.shadowOffset = .init(width: 0, height: -6)
+        tile.effectiveAppearance.performAsCurrentDrawingAppearance {
+            container.layer?.backgroundColor = OrbitTokens.Color.Calendar.shell.cgColor
+        }
+        container.layer?.cornerRadius = 12
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.32)
+        shadow.shadowBlurRadius = 18
+        shadow.shadowOffset = .init(width: 0, height: -6)
+        container.shadow = shadow
         container.addSubview(view)
         host.addSubview(container, positioned: .above, relativeTo: nil)
         self.container = container

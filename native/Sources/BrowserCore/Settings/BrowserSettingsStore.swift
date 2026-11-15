@@ -31,13 +31,14 @@ public struct BrowserProfileSettings: Codable, Equatable, Sendable {
     public var extensionPinOrder: [String] = []
     public var disabledLiveCalendars: Set<TabID> = []
     public var hiddenCalendarPreviews: Set<TabID> = []
+    public var hiddenCalendarMeetingLinks: Set<TabID> = []
     public var hiddenCalendarCountdowns: Set<TabID> = []
     public var hiddenGmailBadges: Set<TabID> = []
     /// Built-in ad and tracker blocking, on by default.
     public var blocksAdsAndTrackers = true
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case disabledLiveCalendars, hiddenCalendarPreviews, hiddenCalendarCountdowns
+        case disabledLiveCalendars, hiddenCalendarPreviews, hiddenCalendarCountdowns, hiddenCalendarMeetingLinks
         case showSearchSuggestions, searchEngine, opensPinnedLinksInPeek, shiftClickOpensPeek, extensionPinOrder, hiddenGmailBadges, blocksAdsAndTrackers
     }
     public init(from decoder: Decoder) throws {
@@ -49,6 +50,7 @@ public struct BrowserProfileSettings: Codable, Equatable, Sendable {
         extensionPinOrder = (try? values.decode([String].self, forKey: .extensionPinOrder)) ?? []
         disabledLiveCalendars = try values.decodeIfPresent(Set<TabID>.self, forKey: .disabledLiveCalendars) ?? []
         hiddenCalendarPreviews = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenCalendarPreviews) ?? []
+        hiddenCalendarMeetingLinks = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenCalendarMeetingLinks) ?? []
         hiddenCalendarCountdowns = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenCalendarCountdowns) ?? []
         hiddenGmailBadges = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenGmailBadges) ?? []
         blocksAdsAndTrackers = try values.decodeIfPresent(Bool.self, forKey: .blocksAdsAndTrackers) ?? true

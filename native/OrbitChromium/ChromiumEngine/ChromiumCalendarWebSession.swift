@@ -66,22 +66,41 @@ extension ChromiumBrowserEngine: BrowserCalendarWebSession {
             const ids=[...new Set(labels.flatMap(s=>s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/ig)||[]))];
             if(ids.length!==1)throw Error('identity'); return ids[0];
           };
+          const signal=AbortSignal.timeout(10000);
           const binding=identity(), args=\(args), url=new URL(args.path,location.origin);
           url.search=new URLSearchParams({src:binding,mode:'AGENDA',dates:args.dates,ctz:args.zone,hl:'en'});
           const r=await fetch(url.href,{credentials:'same-origin',redirect:'manual',cache:'no-store',
-            signal:AbortSignal.timeout(10000),headers:{Accept:'text/html'}});
+            signal,headers:{Accept:'text/html'}});
           if(r.type==='opaqueredirect'||[401,403,404].includes(r.status))return {signedOut:true};
           if([429,503].includes(r.status))return {throttled:true,retry:r.headers.get('Retry-After')};
           if(!r.ok||r.url!==url.href||!/^text\\/html(?:;|$)/i.test(r.headers.get('Content-Type')||''))throw Error('response');
           const charset=(r.headers.get('Content-Type')||'').match(/charset=([^; ]+)/i);
           if(charset&&!/^utf-?8$/i.test(charset[1].replaceAll('"','')))throw Error('charset');
-          const reader=r.body.getReader(),decoder=new TextDecoder('utf-8',{fatal:true});
-          let body='',size=0;
-          try {while(true){const p=await reader.read();if(p.done)break;
-            size+=p.value.byteLength;if(size>1048576)throw Error('size');body+=decoder.decode(p.value,{stream:true});}
-            body+=decoder.decode();}finally{await reader.cancel();}
+          async function bounded(response) {
+            const reader=response.body.getReader(),decoder=new TextDecoder('utf-8',{fatal:true});
+            let body='',size=0;
+            try {while(true){const p=await reader.read();if(p.done)break;
+              size+=p.value.byteLength;if(size>1048576)throw Error('size');body+=decoder.decode(p.value,{stream:true});}
+              body+=decoder.decode();}finally{await reader.cancel();}
+            return body;
+          }
+          const body=await bounded(r);
+          let bootstrap=null, retry=null;
+          try {
+            const dayURL=new URL(location.pathname+'/day',location.origin);
+            const d=await fetch(dayURL.href,{credentials:'same-origin',redirect:'manual',cache:'no-store',signal,headers:{Accept:'text/html'}});
+            if([401,403].includes(d.status))return {signedOut:true};
+            if([429,503].includes(d.status))retry=d.headers.get('Retry-After')||'120';
+            if(d.ok && d.url===dayURL.href && /^text\\/html(?:;|$)/i.test(d.headers.get('Content-Type')||'')) {
+              const html=await bounded(d);
+              // DOMParser is inert; never insert nodes or execute page scripts.
+              const doc=new DOMParser().parseFromString(html,'text/html');
+              const nodes=doc.querySelectorAll('script#initialdata[type="application/json"]');
+              if(nodes.length===1)bootstrap=JSON.stringify(JSON.parse(nodes[0].textContent));
+            }
+          } catch { /* Optional enrichment fails silently. */ }
           if(identity()!==binding)throw Error('identity');
-          return {body,binding};
+          return {body,binding,bootstrap,retry};
         })()
         """
         let params = try JSONSerialization.data(withJSONObject: ["contextId": context, "expression": expression,
@@ -105,8 +124,16 @@ extension ChromiumBrowserEngine: BrowserCalendarWebSession {
             throw BrowserCalendarWebError.throttled(bounded)
         }
         guard let body = value["body"] as? String, let binding = value["binding"] as? String else { throw BrowserCalendarWebError.invalidResponse }
-        return try BrowserCalendarWebAgenda.decode(html: body, account: account, binding: binding,
-                                                   day: day, timeZone: timeZone, fetchedAt: Date())
+        if let retry = value["retry"] as? String {
+            let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
+            let delay = Double(retry) ?? formatter.date(from: retry)?.timeIntervalSinceNow ?? 120
+            calendarReadAfter[profileID, default: [:]][account.slot] = Date().addingTimeInterval(max(120, min(86400, delay)))
+        }
+        let agenda = try BrowserCalendarWebAgenda.decode(html: body, account: account, binding: binding,
+                                                         day: day, timeZone: timeZone, fetchedAt: Date())
+        guard let bootstrap = value["bootstrap"] as? String else { return agenda }
+        return BrowserCalendarBootstrap.enrich(agenda, json: Data(bootstrap.utf8))
     }
 }
 

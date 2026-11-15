@@ -38,6 +38,12 @@ extension NSColor {
 
 extension OrbitTokens {
     public enum Color {
+        public enum Calendar {
+            public static let shell = NSColor.orbitDynamic("Calendar.shell", light: .orbitSRGB(0xF5F5F5), dark: .orbitSRGB(0x303030))
+            public static let event = NSColor.orbitDynamic("Calendar.event", light: .orbitSRGB(0xE8E2DA), dark: .orbitSRGB(0x64584C))
+            public static let outline = NSColor.orbitDynamic("Calendar.outline", light: .orbitSRGB(0xF1ECE5), dark: .orbitSRGB(0x72695B))
+            public static let join = NSColor.orbitDynamic("Calendar.join", light: .orbitSRGB(0x744B63), dark: .orbitSRGB(0x744B63))
+        }
         // MARK: Text tiers
         public enum Text {
             ///  — primary labels outside the themed sidebar.
