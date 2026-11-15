@@ -25,8 +25,7 @@ final class CalendarPreviewView: NSView {
         for (button, symbol, title, action) in [(gear, "gearshape.fill", uiText("Live Calendar"), #selector(showMenu)),
                                                (add, "plus", uiText("Create event"), #selector(createEvent))] {
             button.bezelStyle = .circular; button.imagePosition = .imageOnly
-            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)?
-                .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+            button.image = OrbitIcon.image(sfName: symbol, pointSize: 15)
             button.target = self; button.action = action; button.toolTip = title; button.setAccessibilityLabel(title)
             addSubview(button)
         }
