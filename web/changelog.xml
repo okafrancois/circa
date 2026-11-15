@@ -9,6 +9,36 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.73.0-nightly.2/</id>
+    <title>0.73.0-nightly.2 — WebKit tabs keep their address in sync when you go back or forward.</title>
+    <link href="https://circabrowser.com/changelog/0.73.0-nightly.2/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>WebKit tabs keep their address in sync when you go back or forward.
+
+2 fixed
+
+## Fixed
+
+- In WebKit tabs, Back and Forward across History API entries now update the address field.
+- Removing a profile no longer crashes the browser when no WebKit page was opened.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.73.0-nightly.2" data-version="0.73.0-nightly.2" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.73.0-nightly.2" aria-label="Link to version 0.73.0-nightly.2"&gt;0.73.0-nightly.2&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;WebKit tabs keep their address in sync when you go back or forward.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;2 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;In WebKit tabs, Back and Forward across History API entries now update the address field.&lt;/li&gt;
+    &lt;li&gt;Removing a profile no longer crashes the browser when no WebKit page was opened.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.73.0-nightly.2/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.73.0-nightly.1/</id>
     <title>0.73.0-nightly.1 — Middle-click to close, unread dots on every Favorite, search bangs and an optional toolbar.</title>
     <link href="https://circabrowser.com/changelog/0.73.0-nightly.1/" />

@@ -75,12 +75,18 @@ public final class WebKitBrowserEngine: BrowserPrivateEngine {
         return surface
     }
 
+    /// WebKit answers its class-level store requests on its main run loop, which exists only once
+    /// a WebKit object was created in this process. A run that never showed a WebKit document
+    /// (a Chromium window removing a profile) has none, and the answer would crash.
+    private static let webKitInitialization: Void = { _ = WKWebsiteDataStore.nonPersistent() }()
+
     public func removeProfile(_ profileID: ProfileID) async throws {
         guard !permissionSurfaces.contains(where: { $0.surface.map { $0.profileID == profileID && !$0.isDisposed } == true }) else {
             throw BrowserEngineError.profileInUse
         }
         guard let dataStore = dataStores[profileID] else {
             // A persistent store this run never opened still exists on disk.
+            _ = Self.webKitInitialization
             if persistence == .persistent, await WKWebsiteDataStore.allDataStoreIdentifiers.contains(profileID.rawValue) {
                 try await WKWebsiteDataStore.remove(forIdentifier: profileID.rawValue)
             }
