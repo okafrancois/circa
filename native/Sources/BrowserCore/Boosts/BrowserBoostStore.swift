@@ -164,6 +164,7 @@ public actor BrowserBoostStore {
         let bytes = try encoder.encode(next)
         guard bytes.count <= Self.maximumDocumentBytes else { throw BrowserBoostError.limitExceeded }
         if let destination {
+            defer { BrowserSyncLocalChanges.post() }
             do {
                 try BrowserPermissionFile.save(bytes, to: destination, maximumBytes: Self.maximumDocumentBytes,
                                                beforeReplace: beforeReplace)

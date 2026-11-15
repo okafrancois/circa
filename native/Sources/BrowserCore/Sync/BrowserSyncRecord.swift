@@ -94,7 +94,15 @@ public struct BrowserSyncReplica: Codable, Sendable {
 
     public mutating func capture(_ projection: BrowserSyncProjection, now: Date = Date()) throws {
         guard version == BrowserSyncSchema.version else { throw BrowserSyncError.unsupportedVersion }
-        let editStamp = stamp(now: now)
+        // Stamp lazily: an unchanged projection must not advance the clock, so an idle cycle
+        // leaves the replica (and its durable clock record) byte-for-byte unchanged.
+        var issued: BrowserSyncStamp?
+        func editStamp() -> BrowserSyncStamp {
+            if let issued { return issued }
+            let value = stamp(now: now)
+            issued = value
+            return value
+        }
         var entries = projection.entries
         // Decode only listed baseline placements, once, including malformed suffix values
         // that the original eager traversal would reject even when an order was reusable.
@@ -127,16 +135,16 @@ public struct BrowserSyncReplica: Codable, Sendable {
         }
         for id in baseline.keys where entries[id] == nil {
             guard var record = records[id], !record.deleted else { continue }
-            record.deleted = true; record.life = editStamp; records[id] = record
+            record.deleted = true; record.life = editStamp(); records[id] = record
         }
         for (id, fields) in entries {
             let prior = baseline[id]
-            var record = records[id] ?? .init(id: id, fields: [:], life: editStamp, deleted: false)
-            if prior == nil && record.deleted { record.deleted = false; record.life = editStamp }
+            var record = records[id] ?? .init(id: id, fields: [:], life: editStamp(), deleted: false)
+            if prior == nil && record.deleted { record.deleted = false; record.life = editStamp() }
             // Explicit nulls represent removal of an optional field.
             for key in Set(fields.keys).union(prior?.keys.map { $0 } ?? []) {
                 let value = fields[key] ?? Data("null".utf8)
-                if prior?[key] != value { record.fields[key] = .init(value: value, stamp: editStamp) }
+                if prior?[key] != value { record.fields[key] = .init(value: value, stamp: editStamp()) }
             }
             records[id] = record
         }
@@ -174,7 +182,13 @@ public struct BrowserSyncReplica: Codable, Sendable {
 public protocol BrowserSyncTransport: Sendable {
     func account() async throws -> String?
     func exchange(_ records: [BrowserSyncRecord]) async throws -> [BrowserSyncRecord]
+    /// Forces the next exchange to fetch and send, even when its inputs are unchanged.
+    func requestRefresh() async
     func stop() async
+}
+
+public extension BrowserSyncTransport {
+    func requestRefresh() async {}
 }
 
 /// Separate private databases per identity, with the same field merge rules as the real adapter.

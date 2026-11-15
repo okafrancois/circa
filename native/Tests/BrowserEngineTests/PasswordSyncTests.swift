@@ -34,6 +34,8 @@ private actor PasswordCloudDuringExchange: BrowserPasswordSyncTransport {
     func stop() {}
 }
 
+/// These fakes never notify, so every cycle uses the full rescan (the pre-event behavior);
+/// the notification-driven fast path is covered by PasswordSyncEventTests.
 @MainActor
 struct PasswordSyncTests {
     private func check(_ condition: Bool, sourceLocation: SourceLocation = #_sourceLocation) {
@@ -55,7 +57,7 @@ struct PasswordSyncTests {
     @Test func twoMacAddUpdateUsernameBlocklistAndDelete() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let key = SymmetricKey(size: .bits256), p = ProfileID(), cloud = BrowserPasswordSyncMemoryCloud()
-        let a = try BrowserPasswordSync(cache: cache(root, "a", key)), b = try BrowserPasswordSync(cache: cache(root, "b", key))
+        let a = try BrowserPasswordSync(cache: cache(root, "a", key), fullScanInterval: 0), b = try BrowserPasswordSync(cache: cache(root, "b", key), fullScanInterval: 0)
         defer { let currentA = a; Task { await currentA.stop(); await b.stop() } }
         let first = SyncPasswordStore(), second = SyncPasswordStore()
         try await first.add(row(), profileID: p)
@@ -90,7 +92,7 @@ struct PasswordSyncTests {
     @Test func firstMergeDuplicatesNewerPasswordAndFieldConflicts() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let key = SymmetricKey(size: .bits256), p = ProfileID(), cloud = BrowserPasswordSyncMemoryCloud()
-        let a = try BrowserPasswordSync(cache: cache(root, "a", key)), b = try BrowserPasswordSync(cache: cache(root, "b", key))
+        let a = try BrowserPasswordSync(cache: cache(root, "a", key), fullScanInterval: 0), b = try BrowserPasswordSync(cache: cache(root, "b", key), fullScanInterval: 0)
         defer { let currentA = a; Task { await currentA.stop(); await b.stop() } }
         let first = SyncPasswordStore(), second = SyncPasswordStore()
         let older = row(), newer = row(password: "synthetic-newer", modified: 13_000_000_000_000_300)
@@ -116,13 +118,13 @@ struct PasswordSyncTests {
     @Test func offlineEditCannotResurrectTombstoneAndRestartKeepsIdentity() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let key = SymmetricKey(size: .bits256), p = ProfileID(), cloud = BrowserPasswordSyncMemoryCloud()
-        var a = try BrowserPasswordSync(cache: cache(root, "a", key))
-        let b = try BrowserPasswordSync(cache: cache(root, "b", key)), first = SyncPasswordStore(), second = SyncPasswordStore()
+        var a = try BrowserPasswordSync(cache: cache(root, "a", key), fullScanInterval: 0)
+        let b = try BrowserPasswordSync(cache: cache(root, "b", key), fullScanInterval: 0), first = SyncPasswordStore(), second = SyncPasswordStore()
         defer { let currentA = a; Task { await currentA.stop(); await b.stop() } }
         first.rows[p] = [row()]
         try await a.synchronize(store: first, profiles: [p], transport: cloud)
         try await b.synchronize(store: second, profiles: [p], transport: cloud)
-        await a.stop(); a = try BrowserPasswordSync(cache: cache(root, "a", key))
+        await a.stop(); a = try BrowserPasswordSync(cache: cache(root, "a", key), fullScanInterval: 0)
         first.rows[p] = []
         try await a.synchronize(store: first, profiles: [p], transport: cloud)
         second.rows[p]?[0].passwordValue = "synthetic-offline-change"
@@ -135,7 +137,7 @@ struct PasswordSyncTests {
 
     @Test func privateUnknownProfilesAndMissingSchemaFailClosed() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
-        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)))
+        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)), fullScanInterval: 0)
         defer { Task { await sync.stop() } }
         let store = SyncPasswordStore(), p = ProfileID(), cloud = BrowserPasswordSyncMemoryCloud(schemaAvailable: false)
         store.rows[p] = [row()]
@@ -150,7 +152,7 @@ struct PasswordSyncTests {
 
     @Test func accountAdmissionBeforeAndAfterExchange() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
-        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)))
+        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)), fullScanInterval: 0)
         defer { Task { await sync.stop() } }
         let store = SyncPasswordStore(), p = ProfileID(), cloud = BrowserPasswordSyncMemoryCloud()
         store.rows[p] = [row()]
@@ -174,7 +176,7 @@ struct PasswordSyncTests {
     @Test func encryptedWireAndNoPlaintextAnywhereInCaches() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let key = SymmetricKey(size: .bits256), local = cache(root, "replica", key), cloudCache = cache(root, "cloudkit", key)
-        let sync = try BrowserPasswordSync(cache: local), store = SyncPasswordStore(), p = ProfileID(), cloud = BrowserPasswordSyncMemoryCloud()
+        let sync = try BrowserPasswordSync(cache: local, fullScanInterval: 0), store = SyncPasswordStore(), p = ProfileID(), cloud = BrowserPasswordSyncMemoryCloud()
         defer { Task { await sync.stop() } }
         store.rows[p] = [row()]
         try await sync.synchronize(store: store, profiles: [p], transport: cloud)
@@ -214,7 +216,7 @@ struct PasswordSyncTests {
 
     @Test func oldUsernameCanBecomeAnIndependentCredentialAndExplicitReaddSurvives() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
-        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)))
+        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)), fullScanInterval: 0)
         defer { Task { await sync.stop() } }
         let cloud = BrowserPasswordSyncMemoryCloud(), p = ProfileID(), store = SyncPasswordStore()
         let initial = row(); store.rows[p] = [initial]
@@ -235,7 +237,7 @@ struct PasswordSyncTests {
 
     @Test func ambiguousUsernameEditPausesWithoutDeletingAnything() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
-        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)))
+        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)), fullScanInterval: 0)
         defer { Task { await sync.stop() } }
         let cloud = BrowserPasswordSyncMemoryCloud(), p = ProfileID(), store = SyncPasswordStore()
         store.rows[p] = [row("first"), row("second")]
@@ -248,7 +250,7 @@ struct PasswordSyncTests {
     @Test func localEditDuringExchangeWinsWithoutBeingAcknowledgedAway() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let key = SymmetricKey(size: .bits256), cloud = BrowserPasswordSyncMemoryCloud(), p = ProfileID()
-        let a = try BrowserPasswordSync(cache: cache(root, "a", key)), b = try BrowserPasswordSync(cache: cache(root, "b", key))
+        let a = try BrowserPasswordSync(cache: cache(root, "a", key), fullScanInterval: 0), b = try BrowserPasswordSync(cache: cache(root, "b", key), fullScanInterval: 0)
         defer { let currentA = a; Task { await currentA.stop(); await b.stop() } }
         let first = SyncPasswordStore(), second = SyncPasswordStore()
         first.rows[p] = [row()]
@@ -267,7 +269,7 @@ struct PasswordSyncTests {
 
     @Test func neverEntryDoesNotReplaceAnEmptyUsernameCredential() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
-        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)))
+        let sync = try BrowserPasswordSync(cache: cache(root, "a", SymmetricKey(size: .bits256)), fullScanInterval: 0)
         defer { Task { await sync.stop() } }
         let cloud = BrowserPasswordSyncMemoryCloud(), p = ProfileID(), store = SyncPasswordStore()
         let credential = row("")
@@ -283,7 +285,7 @@ struct PasswordSyncTests {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let cloudA = BrowserPasswordSyncMemoryCloud(), cloudB = BrowserPasswordSyncMemoryCloud(), p = ProfileID()
         let key = SymmetricKey(size: .bits256)
-        let a = try BrowserPasswordSync(cache: cache(root, "a", key)), b = try BrowserPasswordSync(cache: cache(root, "b", key))
+        let a = try BrowserPasswordSync(cache: cache(root, "a", key), fullScanInterval: 0), b = try BrowserPasswordSync(cache: cache(root, "b", key), fullScanInterval: 0)
         defer { let currentA = a; Task { await currentA.stop(); await b.stop() } }
         let first = SyncPasswordStore(), second = SyncPasswordStore()
         first.rows[p] = [row(password: "synthetic-tie-a")]; second.rows[p] = [row(password: "synthetic-tie-b")]

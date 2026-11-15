@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import BrowserCore
+import CloudKit
 @testable import Orbit
 
 @MainActor
@@ -69,4 +70,95 @@ struct BrowserSyncRuntimeTests {
             await runtime.prepareForTermination()
         }
     }
+
+    private func root() -> URL {
+        URL(fileURLWithPath: "/private/tmp", isDirectory: true).appendingPathComponent(UUID().uuidString)
+    }
+    private func wait(until condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+    }
+
+    @Test("Idle sync runs no cycle between safety ticks; the launch cycle is immediate")
+    func idleRuntimeDoesNotPoll() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        var cycles = 0
+        let runtime = BrowserSyncRuntime(destination: root.appendingPathComponent("sync.json"), interval: .milliseconds(10),
+                                         debounce: .milliseconds(20), safetyInterval: .seconds(60)) { cycles += 1 }
+        try await runtime.setEnabled(true)
+        try await wait { cycles == 1 }
+        #expect(cycles == 1)
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(cycles == 1)
+        #expect(runtime.hasScheduledCycle)
+        await runtime.prepareForTermination()
+    }
+
+    @Test("A burst of local changes triggers one debounced cycle; a remote push triggers another")
+    func localAndRemoteWakes() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        var cycles = 0
+        let runtime = BrowserSyncRuntime(destination: root.appendingPathComponent("sync.json"), interval: .milliseconds(10),
+                                         debounce: .milliseconds(150), safetyInterval: .seconds(60)) { cycles += 1 }
+        try await runtime.setEnabled(true)
+        try await wait { cycles == 1 }
+        // Counts are relative and the burst is synchronous, so a loaded host cannot split it.
+        var before = cycles
+        for _ in 0..<5 { runtime.localStateChanged() }
+        #expect(cycles == before)
+        try await wait { cycles > before }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(cycles == before + 1)
+        before = cycles
+        runtime.remoteChangeArrived()
+        try await wait { cycles > before }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(cycles == before + 1)
+        // Account changes also wake (with a forced refresh).
+        before = cycles
+        runtime.accountChanged()
+        try await wait { cycles > before }
+        #expect(cycles == before + 1)
+        await runtime.prepareForTermination()
+    }
+
+    @Test("Committed store edits and account notifications reach an observing runtime")
+    func notificationPlumbing() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        var cycles = 0
+        let runtime = BrowserSyncRuntime(destination: root.appendingPathComponent("sync.json"), interval: .milliseconds(10),
+                                         debounce: .milliseconds(20), safetyInterval: .seconds(60), observesSignals: true) { cycles += 1 }
+        try await runtime.setEnabled(true)
+        try await wait { cycles >= 1 }
+        let settings = try BrowserSettingsStore(destination: root.appendingPathComponent("settings.json"))
+        let before = cycles
+        try await settings.setReducedMotion(.reduce)
+        try await wait { cycles > before }
+        #expect(cycles > before)
+        let afterSettings = cycles
+        NotificationCenter.default.post(name: .CKAccountChanged, object: nil)
+        try await wait { cycles > afterSettings }
+        #expect(cycles > afterSettings)
+        await runtime.prepareForTermination()
+    }
+
+    @Test("The safety timer still cycles when nothing signals; a local race retries without a signal")
+    func safetyTimerAndLocalRace() async throws {
+        let root = root(); defer { try? FileManager.default.removeItem(at: root) }
+        var cycles = 0
+        var raced = true
+        let runtime = BrowserSyncRuntime(destination: root.appendingPathComponent("sync.json"), interval: .milliseconds(10),
+                                         debounce: .milliseconds(10), safetyInterval: .milliseconds(150)) {
+            cycles += 1
+            if raced { raced = false; throw BrowserSyncError.localChange }
+        }
+        try await runtime.setEnabled(true)
+        try await wait { cycles >= 2 }
+        #expect(cycles >= 2)
+        let settled = cycles
+        try await wait { cycles > settled }
+        #expect(cycles > settled)
+        await runtime.prepareForTermination()
+    }
 }
+

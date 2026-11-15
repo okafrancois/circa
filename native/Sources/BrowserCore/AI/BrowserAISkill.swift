@@ -111,6 +111,7 @@ public actor BrowserAISkillStore {
         let data = try encoder.encode(next)
         guard data.count <= Self.maximumBytes else { throw BrowserAISkillError.limitExceeded }
         if let destination {
+            defer { BrowserSyncLocalChanges.post() }
             do { try BrowserPermissionFile.save(data, to: destination, maximumBytes: Self.maximumBytes) }
             catch BrowserPermissionFile.Failure.committedButNotDurable {
                 document = next; throw BrowserPermissionFile.Failure.committedButNotDurable

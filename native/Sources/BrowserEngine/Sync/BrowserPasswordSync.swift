@@ -115,7 +115,13 @@ public struct BrowserPasswordSyncEntry: Codable, Sendable, Equatable, CustomStri
 
 public protocol BrowserPasswordSyncTransport: Sendable {
     func exchange(_ entries: [BrowserPasswordSyncEntry]) async throws -> [BrowserPasswordSyncEntry]
+    /// Forces the next exchange to fetch and send, even when its inputs are unchanged.
+    func requestRefresh() async
     func stop() async
+}
+
+public extension BrowserPasswordSyncTransport {
+    func requestRefresh() async {}
 }
 
 public actor BrowserPasswordSyncMemoryCloud: BrowserPasswordSyncTransport {
@@ -147,12 +153,22 @@ public actor BrowserPasswordSync {
     private var stopped = false
     private var running = false
     private var invalidated: Set<ProfileID> = []
+    private var unobserved: Set<ProfileID> = []
     private var observers: [ProfileID: Task<Void, Never>] = [:]
+    private let fullScanInterval: TimeInterval
+    private var lastFullScan: Date?
+    /// Conservative at launch: the sealed cache may hold merged entries never applied locally.
+    private var needsApply = true
+    private var onLocalChange: @Sendable () -> Void = {}
+    private(set) var listCalls = 0
 
-    public init(cache: BrowserPasswordSyncCache) throws {
+    public init(cache: BrowserPasswordSyncCache, fullScanInterval: TimeInterval = 600) throws {
         self.cache = cache
+        self.fullScanInterval = fullScanInterval
         state = State()
     }
+    /// Called (on this actor) when the engine store reports a credential change.
+    public func setLocalChangeHandler(_ handler: @escaping @Sendable () -> Void) { onLocalChange = handler }
     public func stop() {
         stopped = true
         for task in observers.values { task.cancel() }
@@ -161,6 +177,11 @@ public actor BrowserPasswordSync {
         state = State()
     }
     deinit { for task in observers.values { task.cancel() } }
+
+    private func list(_ store: any BrowserPasswordStore, _ profile: ProfileID) async throws -> [BrowserPasswordRecord] {
+        listCalls += 1
+        return try await store.list(profileID: profile)
+    }
 
     public func synchronize(store: any BrowserPasswordStore, profiles: [ProfileID], isPrivate: Bool = false,
                             transport: any BrowserPasswordSyncTransport, now: Date = Date(),
@@ -172,8 +193,13 @@ public actor BrowserPasswordSync {
         state = try cache.load(State.self) ?? State()
         try await admitted()
         for profile in observers.keys where !profiles.contains(profile) { observers.removeValue(forKey: profile)?.cancel() }
+        // A full list runs for a profile without a live observer (first cycle, or after our own
+        // writes), on an invalidation, and on the slow periodic rescan for missed notifications.
+        let fullScan = lastFullScan.map { now.timeIntervalSince($0) >= fullScanInterval || now < $0 } ?? true
+        var listed = false
         for profile in profiles {
-            invalidated.remove(profile)
+            let invalid = invalidated.remove(profile) != nil
+            var subscribed = false
             if observers[profile] == nil {
                 let stream = try await store.changes(profileID: profile)
                 // Secret-free notifications schedule a fresh list on the next bounded cycle.
@@ -181,33 +207,62 @@ public actor BrowserPasswordSync {
                     for await change in stream {
                         guard !Task.isCancelled, change != .closed, let self, await self.invalidate(profile) else { break }
                     }
+                    // A stream that ended on its own no longer covers this profile: list it on
+                    // every cycle (the previous behavior) until a new observer replaces it.
+                    if !Task.isCancelled { await self?.unobserve(profile) }
                 }
+                unobserved.remove(profile)
+                subscribed = true
             }
-            try capture(try await store.list(profileID: profile), profile: profile, now: now)
+            guard fullScan || invalid || subscribed || unobserved.contains(profile) || state.baseline[profile] == nil else { continue }
+            try capture(try await list(store, profile), profile: profile, now: now)
+            listed = true
         }
-        try cache.save(state)
-        let incoming = try await transport.exchange(state.entries)
+        if listed { try cache.save(state) }
+        let outgoing = state.entries
+        let incoming = try await transport.exchange(outgoing)
         try Task.checkCancellation(); try await admitted()
         guard !stopped else { return }
         // Recapture edits that occurred during the exchange, before admitting remote values.
-        for profile in profiles { try capture(try await store.list(profileID: profile), profile: profile, now: Date()) }
-        state.entries = try BrowserPasswordSyncEntry.merged(state.entries + incoming)
+        for profile in profiles where invalidated.remove(profile) != nil || fullScan || unobserved.contains(profile) {
+            try capture(try await list(store, profile), profile: profile, now: Date())
+        }
+        let merged = try BrowserPasswordSyncEntry.merged(state.entries + incoming)
+        // Nothing new from the cloud and the last application completed: the engine store
+        // already equals the merged entries, so there is nothing to list, write or seal.
+        if merged == outgoing, !needsApply, !fullScan, unobserved.isDisjoint(with: profiles) {
+            if !invalidated.isDisjoint(with: profiles) { onLocalChange() }
+            return
+        }
+        if merged != state.entries { needsApply = true }
+        state.entries = merged
         try cache.save(state)
         for profile in profiles {
             try await admitted()
             try await apply(store, profile: profile, admitted: admitted)
         }
+        needsApply = false
+        if fullScan { lastFullScan = now }
         // Drain notifications received during admission/application without acknowledging
         // an unseen local edit. Periodic full lists also cover missed notifications.
         for profile in profiles where invalidated.remove(profile) != nil {
-            try capture(try await store.list(profileID: profile), profile: profile, now: Date())
+            try capture(try await list(store, profile), profile: profile, now: Date())
         }
         try cache.save(state)
+        // Application drops its own observers; schedule the follow-up cycle that re-subscribes
+        // and lists, so later local edits keep waking the runtime.
+        if profiles.contains(where: { observers[$0] == nil }) { onLocalChange() }
+    }
+
+    private func unobserve(_ profile: ProfileID) {
+        guard !stopped else { return }
+        unobserved.insert(profile)
     }
 
     private func invalidate(_ profile: ProfileID) -> Bool {
         guard !stopped else { return false }
         invalidated.insert(profile)
+        onLocalChange()
         return true
     }
 
@@ -276,7 +331,7 @@ public actor BrowserPasswordSync {
     private func apply(_ store: any BrowserPasswordStore, profile: ProfileID,
                        admitted: @MainActor () async throws -> Void) async throws {
         // Refuse to overwrite an edit made since the merge's authoritative capture.
-        let actual = try await store.list(profileID: profile)
+        let actual = try await list(store, profile)
         var expected = state.baseline[profile] ?? []
         let values = try actual.map { try BrowserPasswordSyncEntry.values($0) }
         guard values.count == expected.count, values.allSatisfy({ v in expected.contains { $0.fields == v } }) else {
@@ -294,7 +349,7 @@ public actor BrowserPasswordSync {
             if entry.deleted && bound.isEmpty { continue }
             if !entry.deleted, bound.count == 1, bound[0].fields == (try BrowserPasswordSyncEntry.values(desired)) { continue }
             try await admitted()
-            let rows = try await store.list(profileID: profile)
+            let rows = try await list(store, profile)
             try Task.checkCancellation()
             guard !stopped else { return }
             let currentValues = try rows.map { try BrowserPasswordSyncEntry.values($0) }
@@ -319,7 +374,7 @@ public actor BrowserPasswordSync {
             state.baseline[profile] = expected
             try cache.save(state)
         }
-        let rows = try await store.list(profileID: profile)
+        let rows = try await list(store, profile)
         let finalValues = try rows.map { try BrowserPasswordSyncEntry.values($0) }
         guard finalValues.count == expected.count, finalValues.allSatisfy({ v in expected.contains { $0.fields == v } }) else {
             try capture(rows, profile: profile, now: Date()); try cache.save(state)

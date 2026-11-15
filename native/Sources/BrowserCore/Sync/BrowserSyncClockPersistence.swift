@@ -39,14 +39,24 @@ struct BrowserSyncClockPersistence: Sendable {
            let loaded = try? BrowserSyncState.load(destination),
            let expected = try? BrowserSyncReplica.encodeValue(state),
            let actual = try? BrowserSyncReplica.encodeValue(loaded), expected == actual {
-            content = try? Self.contentBytes(state)
-            replicaDigest = Data(SHA256.hash(data: bytes))
-            // A previous process may have died after rename but before directory
-            // sync. Force the first barrier to synchronize this directory again,
-            // using a tiny clock write even when the reloaded state is unchanged.
-            tick = nil
-            self.destination = destination
+            seed(state: state, bytes: bytes, destination: destination)
         }
+    }
+
+    /// `state` must be exactly what `BrowserSyncState.load(bytes:at:)` decoded from `bytes`
+    /// (the replica file read once at launch); no second read or decode is needed to seed.
+    init(loaded state: BrowserSyncState, bytes: Data?, destination: URL) {
+        if let bytes { seed(state: state, bytes: bytes, destination: destination) }
+    }
+
+    private mutating func seed(state: BrowserSyncState, bytes: Data, destination: URL) {
+        content = try? Self.contentBytes(state)
+        replicaDigest = Data(SHA256.hash(data: bytes))
+        // A previous process may have died after rename but before directory
+        // sync. Force the first barrier to synchronize this directory again,
+        // using a tiny clock write even when the reloaded state is unchanged.
+        tick = nil
+        self.destination = destination
     }
 
     mutating func save(_ state: BrowserSyncState, to destination: URL,
