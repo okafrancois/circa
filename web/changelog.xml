@@ -9,6 +9,44 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.72.0/</id>
+    <title>0.72.0 — Try new features first with nightly builds.</title>
+    <link href="https://circabrowser.com/changelog/0.72.0/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="stable" />
+    <summary>Try new features first with nightly builds.
+
+2 new
+
+## New
+
+- Nightly builds: turn on Settings &gt; Advanced &gt; Receive nightly builds to get new features before they reach everyone. Nightlies update automatically like regular releases and may be less stable. Turning the option off keeps your current build until a newer regular release replaces it; Circa never moves you back to an older version.
+- The changelog on the website now lists every release since the first one, with its own page and permanent link for each version, a Stable / Nightly filter and an Atom feed you can subscribe to.
+
+## Known limits
+
+- The first nightly build is published after this release; until then the option has nothing new to offer.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.72.0" data-version="0.72.0" data-channel="stable" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.72.0" aria-label="Link to version 0.72.0"&gt;0.72.0&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Stable&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Try new features first with nightly builds.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;2 new&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Nightly builds: turn on Settings &amp;gt; Advanced &amp;gt; Receive nightly builds to get new features before they reach everyone. Nightlies update automatically like regular releases and may be less stable. Turning the option off keeps your current build until a newer regular release replaces it; Circa never moves you back to an older version.&lt;/li&gt;
+    &lt;li&gt;The changelog on the website now lists every release since the first one, with its own page and permanent link for each version, a Stable / Nightly filter and an Atom feed you can subscribe to.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;The first nightly build is published after this release; until then the option has nothing new to offer.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.72.0/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.71.2/</id>
     <title>0.71.2 — Security and privacy fixes with less battery use.</title>
     <link href="https://circabrowser.com/changelog/0.71.2/" />
