@@ -23,7 +23,7 @@ final class BrowserArchiveFilterPanel: NSView {
         super.init(frame: frame)
         let title = NSTextField(labelWithString: uiText("Filter Archived Tabs"))
         title.font = BrandTextStyle.ui.font(size: 14, weight: .bold)
-        title.textColor = ArchiveFilterStyle.ink
+        title.textColor = ArchiveFilterStyle.ink(in: self)
         title.lineBreakMode = .byTruncatingTail
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let done = ArchiveFilterDoneButton()
@@ -37,7 +37,7 @@ final class BrowserArchiveFilterPanel: NSView {
         func section(_ text: String) -> NSTextField {
             let label = NSTextField(labelWithString: text)
             label.font = BrandTextStyle.ui.font(size: 13, weight: .bold)
-            label.textColor = ArchiveFilterStyle.ink
+            label.textColor = ArchiveFilterStyle.ink(in: self)
             return label
         }
         let reasonTitle = section(uiText("How was the tab closed?"))
@@ -104,7 +104,7 @@ final class BrowserArchiveFilterPanel: NSView {
 @MainActor
 enum ArchiveFilterStyle {
     /// Section titles, chip labels and the title row share one ink (about 65 % of the Library foreground).
-    static var ink: NSColor { BrowserLibraryStyle.foreground.withAlphaComponent(0.65) }
+    static func ink(in view: NSView) -> NSColor { BrowserLibraryStyle.foreground(in: view, secondary: true).withAlphaComponent(0.65) }
     static let chipHeight: CGFloat = 33
     static let chipRadius: CGFloat = 12
     static let horizontalSpacing: CGFloat = 6.5
@@ -175,12 +175,12 @@ final class ArchiveFilterChip: NSButton {
     override func accessibilityRole() -> NSAccessibility.Role? { .checkBox }
 
     override func draw(_ dirtyRect: NSRect) {
-        let foreground = BrowserLibraryStyle.foreground
+        let foreground = BrowserLibraryStyle.foreground(in: self)
         foreground.withAlphaComponent(isSelected ? 0.6 : 0.065).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: ArchiveFilterStyle.chipRadius, yRadius: ArchiveFilterStyle.chipRadius).fill()
         let ink: NSColor = isSelected
-            ? NSColor.white
-            : ArchiveFilterStyle.ink
+            ? OrbitFloatingMaterial.contrastingInk(on: foreground.resolved(for: effectiveAppearance))
+            : ArchiveFilterStyle.ink(in: self)
         let text = NSAttributedString(string: label, attributes: [.font: chipFont, .foregroundColor: ink])
         let size = text.size()
         text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
@@ -200,9 +200,9 @@ private final class ArchiveFilterDoneButton: NSButton {
     required init?(coder: NSCoder) { nil }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
-        BrowserLibraryStyle.foreground.withAlphaComponent(0.08).setFill()
+        BrowserLibraryStyle.foreground(in: self).withAlphaComponent(0.08).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill()
-        let text = NSAttributedString(string: title, attributes: [.font: BrandTextStyle.ui.font(size: 14, weight: .medium), .foregroundColor: ArchiveFilterStyle.ink])
+        let text = NSAttributedString(string: title, attributes: [.font: BrandTextStyle.ui.font(size: 14, weight: .medium), .foregroundColor: ArchiveFilterStyle.ink(in: self)])
         let size = text.size()
         text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
     }

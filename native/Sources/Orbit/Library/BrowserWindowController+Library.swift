@@ -296,7 +296,7 @@ extension BrowserWindowController {
         windowShell.libraryPreservesDocumentWidth = library.category == .spaces
         library.widthConstraint?.isActive = library.category != .spaces
         library.spacesWidthConstraint?.isActive = library.category == .spaces
-        library.view.select(library.category, theme: windowShell.theme)
+        library.view.select(library.category, theme: windowShell.spaceSwipePaintedTheme ?? windowShell.theme)
         library.historyView.isHidden = library.category != .history
         library.spacesView.isHidden = library.category != .spaces
         library.mediaView.isHidden = library.category != .media

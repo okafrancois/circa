@@ -316,7 +316,7 @@ final class BrowserDownloadsView: NSView {
     private func makeHeading() -> NSTextField {
         let heading = NSTextField(labelWithString: "")
         heading.font = BrandTextStyle.ui.font(size: 13, weight: .bold)
-        heading.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
+        heading.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
         heading.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
         document.addSubview(heading)
         return heading
@@ -372,7 +372,7 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
         titleLabel.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         detailLabel.font = BrandTextStyle.mono.font(size: 12, weight: .medium)
-        detailLabel.lineBreakMode = .byTruncatingMiddle
+        detailLabel.lineBreakMode = .byTruncatingTail
         progress.style = .bar
         progress.controlSize = .small
         progress.minValue = 0
@@ -432,6 +432,7 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
         updateIcon(row)
         titleLabel.stringValue = row.title
         detailLabel.stringValue = row.detail
+        detailLabel.toolTip = row.detail
         progress.isHidden = !row.isRunning
         progress.isIndeterminate = row.totalBytes == nil || row.totalBytes == 0
         if let total = row.totalBytes, total > 0 {
@@ -464,6 +465,7 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
             let button = NSButton(image: OrbitIcon.image(sfName: pair.name, pointSize: 11, accessibilityDescription: pair.label)!,
                                   target: self, action: #selector(performRowAction(_:)))
             button.isBordered = false
+            button.contentTintColor = BrowserLibraryStyle.foreground(in: self, secondary: true)
             button.widthAnchor.constraint(equalToConstant: 16).isActive = true
             button.heightAnchor.constraint(equalToConstant: 24).isActive = true
             button.toolTip = pair.label
@@ -557,8 +559,8 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
     private func updateColors() {
-        titleLabel.textColor = BrowserLibraryStyle.foreground
-        detailLabel.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.55)
+        titleLabel.textColor = BrowserLibraryStyle.foreground(in: self)
+        detailLabel.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.55)
     }
 
     override func updateTrackingAreas() {
@@ -570,7 +572,7 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
     }
     override func mouseEntered(with event: NSEvent) {
         hovered = true
-        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.07).cgColor
+        layer?.backgroundColor = BrowserLibraryStyle.foreground(in: self).withAlphaComponent(0.07).cgColor
         updateActionsVisibility()
     }
     override func mouseExited(with event: NSEvent) {

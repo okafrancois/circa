@@ -76,8 +76,8 @@ extension DownloadRowPresentation {
         case .interrupted: detail = uiText("Interrupted")
         case .complete:
             let size = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
-            let status = item.fileAvailability == .missing ? uiText("Complete · File Unavailable") : uiText("Complete")
-            detail = uiFormat("%@ · %@", status, size)
+            let summary = uiFormat("%@ · %@", uiText("Complete"), size)
+            detail = item.fileAvailability == .missing ? uiFormat("%@ · %@", summary, uiText("File Unavailable")) : summary
         case .cancelled: detail = uiText("Canceled")
         case .failed: detail = item.failure == .destinationUnavailable ? uiText("Destination Unavailable") : uiText("Download Failed")
         }

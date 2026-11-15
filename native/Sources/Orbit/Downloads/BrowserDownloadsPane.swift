@@ -28,15 +28,16 @@ final class BrowserDownloadsPane: NSView, NSSearchFieldDelegate {
         super.init(frame: frameRect)
         railWidth = rail.widthAnchor.constraint(equalToConstant: 64)
         let category = NSImageView(image: OrbitIcon.image(sfName: "arrow.down.circle.fill", pointSize: 20, accessibilityDescription: uiText("Downloads"))!)
-        category.contentTintColor = .labelColor
+        category.contentTintColor = BrowserLibraryStyle.foreground(in: self)
         let back = NSButton(image: OrbitIcon.image(sfName: "arrow.left", pointSize: 20, accessibilityDescription: uiText("Back to Tabs"))!, target: self, action: #selector(goBack(_:)))
         back.isBordered = false
         back.toolTip = uiText("Back to Tabs")
         for control in [category, back] { control.translatesAutoresizingMaskIntoConstraints = false; rail.addSubview(control) }
         let results = NSView()
+        titleLabel.textColor = BrowserLibraryStyle.foreground(in: self)
         titleLabel.font = OrbitTokens.Typography.commandBarInput
         profileLabel.font = BrandTextStyle.caption.font(size: 13)
-        profileLabel.textColor = OrbitTokens.Color.Text.secondary
+        profileLabel.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
         searchField.placeholderString = uiText("Search Downloads…")
         searchField.maximumRecents = 0
         searchField.recentsAutosaveName = nil

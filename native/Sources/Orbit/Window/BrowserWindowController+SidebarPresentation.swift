@@ -134,6 +134,7 @@ extension BrowserWindowController {
         windowShell.onThemePaint = { [weak self] painted in
             let accent = OrbitSpaceThemes.accent(for: painted)
             self?.sidebar.applyAccent(accent)
+            self?.library.view.apply(theme: painted)
             self?.contentCard.themeForeground = accent.foreground
             self?.paintAssistant(painted)
         }

@@ -12,7 +12,7 @@ final class BrowserLibrarySearchField: NSSearchField {
         cell?.usesSingleLineMode = true
         cell?.isScrollable = true
         font = BrandTextStyle.ui.font(size: 14, weight: .medium)
-        textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
+        textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
         focusRingType = .none
         isBezeled = false
         drawsBackground = false
@@ -22,9 +22,20 @@ final class BrowserLibrarySearchField: NSSearchField {
         heightAnchor.constraint(equalToConstant: 36).isActive = true
     }
     required init?(coder: NSCoder) { nil }
+    override var placeholderString: String? {
+        get { super.placeholderString ?? super.placeholderAttributedString?.string }
+        set {
+            super.placeholderAttributedString = newValue.map {
+                NSAttributedString(string: $0, attributes: [
+                    .font: font ?? BrandTextStyle.ui.font(size: 14, weight: .medium),
+                    .foregroundColor: BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.5)
+                ])
+            }
+        }
+    }
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
+        textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
         needsDisplay = true
     }
 }
@@ -47,15 +58,15 @@ private final class BrowserLibrarySearchCell: NSSearchFieldCell {
         NSRect(x: rect.maxX - 24, y: rect.midY - 7, width: 14, height: 14)
     }
     override func draw(withFrame rect: NSRect, in view: NSView) {
-        BrowserLibraryStyle.foreground.withAlphaComponent(0.08).setFill()
+        BrowserLibraryStyle.foreground(in: view).withAlphaComponent(0.08).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12).fill()
-        let color = BrowserLibraryStyle.foreground.withAlphaComponent(0.5)
+        let color = BrowserLibraryStyle.foreground(in: view, secondary: true).withAlphaComponent(0.5)
         OrbitIcon.draw(OrbitIcon.image(sfName: "magnifyingglass", pointSize: 16), in: searchButtonRect(forBounds: rect), tint: color)
-        if stringValue.isEmpty, let placeholderString {
+        if stringValue.isEmpty, let placeholder = placeholderString ?? placeholderAttributedString?.string {
             // While editing, the field editor draws the placeholder itself; drawing it here too
             // superimposes two slightly offset copies.
             if (view as? NSTextField)?.currentEditor() == nil {
-                NSAttributedString(string: placeholderString, attributes: [.font: font ?? BrandTextStyle.ui.font(size: 14, weight: .medium),
+                NSAttributedString(string: placeholder, attributes: [.font: font ?? BrandTextStyle.ui.font(size: 14, weight: .medium),
                     .foregroundColor: color]).draw(in: searchTextRect(forBounds: rect))
             }
         } else {
@@ -63,7 +74,8 @@ private final class BrowserLibrarySearchCell: NSSearchFieldCell {
                 NSAttributedString(string: stringValue, attributes: [.font: font ?? BrandTextStyle.ui.font(size: 14, weight: .medium),
                     .foregroundColor: color]).draw(in: searchTextRect(forBounds: rect))
             }
-            cancelButtonCell?.draw(withFrame: cancelButtonRect(forBounds: rect), in: view)
+            OrbitIcon.draw(OrbitIcon.image(sfName: "xmark.circle.fill", pointSize: 14),
+                           in: cancelButtonRect(forBounds: rect), tint: color)
         }
     }
 }

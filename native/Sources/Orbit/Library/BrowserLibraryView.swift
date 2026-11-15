@@ -8,6 +8,8 @@ func libraryText(_ key: String, _ fallback: String) -> String { uiText(fallback)
 @MainActor
 final class BrowserLibraryView: NSView {
     static let railWidth: CGFloat = 112
+    private(set) var accent = OrbitSpaceThemes.accent(for: .default)
+    private var theme: OrbitTokens.SpaceTheme?
     let body = NSView()
     let railBackground = NSView()
     private(set) var categoryButtons: [BrowserLibraryCategory: BrowserLibraryCategoryButton] = [:]
@@ -42,6 +44,7 @@ final class BrowserLibraryView: NSView {
             rail.addSubview(button)
         }
         let back = OrbitGlyphButton(glyph: OrbitGlyph.symbol("arrow.left", pointSize: 17, weight: .regular), label: uiText("Exit Library"))
+        back.tint = BrowserLibraryStyle.foreground(in: back, secondary: true)
         back.toolTip = uiText("Exit Library")
         back.target = self
         back.action = #selector(goBack)
@@ -90,9 +93,27 @@ final class BrowserLibraryView: NSView {
     override func cancelOperation(_ sender: Any?) { onBack?() }
 
     func select(_ category: BrowserLibraryCategory, theme: OrbitTokens.SpaceTheme) {
+        apply(theme: theme)
         updatePageAppearance()
         for (destination, button) in categoryButtons { button.state = destination == category ? .on : .off }
     }
+    /// Called by the same paint callback as the sidebar, including interactive Space swipes.
+    func apply(theme: OrbitTokens.SpaceTheme) {
+        guard self.theme != theme else { return }
+        self.theme = theme
+        accent = OrbitFloatingMaterial.sidebarInk(OrbitSpaceThemes.accent(for: theme))
+        func invalidate(_ view: NSView) {
+            view.needsDisplay = true
+            for child in view.subviews { invalidate(child) }
+        }
+        invalidate(self)
+        if let field = window?.firstResponder as? NSTextView,
+           let control = field.delegate as? NSView, control.isDescendant(of: self) {
+            field.insertionPointColor = accent.sidebarText
+            field.textColor = BrowserLibraryStyle.foreground(in: control, secondary: true).withAlphaComponent(0.65)
+        }
+    }
+
     @objc private func selectCategory(_ sender: BrowserLibraryCategoryButton) {
         guard acceptsLibraryInput else { return }
         onCategory?(sender.category)
@@ -155,7 +176,7 @@ final class BrowserLibraryCategoryButton: NSButton {
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
         let alpha: CGFloat = state == .on ? 0.12 : hovered ? 0.07 : 0
-        let ink = NSColor(srgbRed: 0, green: 0, blue: 0.092, alpha: 1)
+        let ink = BrowserLibraryStyle.foreground(in: self)
         ink.withAlphaComponent(alpha).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill()
         let foreground = ink.withAlphaComponent(state == .on ? 1 : 0.65)

@@ -1769,3 +1769,5 @@
 "The page refused Picture in Picture. Try again." = "La page a refusé l’image dans l’image. Réessayez.";
 "Picture in Picture did not respond. Try again." = "L’image dans l’image n’a pas répondu. Réessayez.";
 "The media page could not be reached. Try again." = "La page du média est inaccessible. Réessayez.";
+
+"File Unavailable" = "Fichier indisponible";
