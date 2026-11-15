@@ -43,6 +43,32 @@ struct CalendarBootstrapTests {
         #expect(BrowserCalendarBootstrap.enrich(a, json: try payload([invalid])) == a)
         #expect(BrowserCalendarBootstrap.occurrenceID("not base64") == nil)
     }
+    @Test func unverifiedResponseMetadataRemainsInert() throws {
+        let a = agenda(["one"])
+        let baseline = BrowserCalendarBootstrap.enrich(a, json: try payload([tuple("one")]))
+        // Invented extension data is not a verified current-user response field.
+        // Neither status-like strings nor nested attendee/organizer values are evidence.
+        let unknownValues: [Any] = [NSNull(), false, 0, 1, 2, 3,
+            "accepted", "declined", "tentative", "needsAction",
+            ["responseStatus": "declined", "self": true],
+            ["attendees": [["responseStatus": "declined", "self": true]],
+             "organizer": ["responseStatus": "accepted"]]]
+        for value in unknownValues {
+            var t = tuple("one")
+            t.append(value)
+            let result = BrowserCalendarBootstrap.enrich(a, json: try payload([t]))
+            #expect(result == baseline)
+            #expect(result.events.map(\.id) == a.events.map(\.id))
+            #expect(result.nextMeeting(at: now) == baseline.events.first)
+        }
+    }
+    @Test func unverifiedResponseCannotBindByRecurringPrefix() throws {
+        let a = agenda(["series_occurrence"])
+        var master = tuple("series")
+        master.append(["responseStatus": "declined", "self": true])
+        let result = BrowserCalendarBootstrap.enrich(a, json: try payload([master]))
+        #expect(result == a)
+    }
     @Test func strictMeetingDestinations() throws {
         for value in ["https://meet.google.com/abc-defg-hij", "https://us02web.zoom.us/j/12345678901?pwd=invented", "https://teams.microsoft.com/l/meetup-join/19%3ameeting_YWJj%40thread.v2/0?context=%7B%7D"] {
             #expect(BrowserCalendarBootstrap.meetingURL(value) != nil)
