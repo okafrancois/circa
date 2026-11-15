@@ -51,16 +51,15 @@ extension NativeWebKitTests {
         #expect(handler.selections == 0 && handler.drags == 0)
     }
 
-    @Test("Pins, folders, unavailable controls and side buttons do not close rows")
+    @Test("Folders, unavailable controls and side buttons do not close rows")
     func ignoredTargets() throws {
         let handler = MiddleClickHandler()
-        let pin = SidebarTabRow(item: .init(id: TabID(), title: "Pin", selected: false, isPinned: true))
         let folder = SidebarFolderRow(item: .init(id: FolderID(), title: "Folder", isCollapsed: false, childCount: 0))
         let hidden = SidebarTabRow(item: .init(id: TabID(), title: "Hidden control", selected: false))
         hidden.closeButton.isHidden = true
         let disabled = SidebarTabRow(item: .init(id: TabID(), title: "Disabled", selected: false))
         disabled.commandsEnabled = false
-        for row: SidebarListRow in [pin, folder, hidden, disabled] {
+        for row: SidebarListRow in [folder, hidden, disabled] {
             row.frame = NSRect(x: 0, y: 0, width: 240, height: 32)
             row.events = handler
             row.otherMouseDown(with: try event(.otherMouseDown))
@@ -75,6 +74,17 @@ extension NativeWebKitTests {
         }
         #expect(handler.closed.isEmpty)
         #expect(handler.selections == 0 && handler.drags == 0)
+    }
+
+    @Test("Pinned rows accept middle release whether loaded or dormant", arguments: [false, true])
+    func pinned(loaded: Bool) throws {
+        let handler = MiddleClickHandler()
+        let row = SidebarTabRow(item: .init(id: TabID(), title: "Pin", selected: false, isPinned: true, isLoadedInThisWindow: loaded), depth: 1)
+        row.frame = NSRect(x: 0, y: 0, width: 240, height: 32)
+        row.events = handler
+        row.otherMouseDown(with: try event(.otherMouseDown))
+        row.otherMouseUp(with: try event(.otherMouseUp))
+        #expect(handler.closed == [row.item.id])
     }
 
     @Test("Favorite tiles ignore middle clicks without selection or dragging")

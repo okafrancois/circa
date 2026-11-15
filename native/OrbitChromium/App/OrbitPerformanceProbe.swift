@@ -145,7 +145,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "github-compatibility" {
+                if name == "close-back", ownsWindow(owner, bundleID: "lab.orbit.orbit.close-back") {
+                    result["closeBack"] = await closeBack(owner, command: command)
+                } else if name == "github-compatibility" {
                     result["githubCompatibility"] = await OrbitGitHubCompatibilityProbe.run(application, root: root, action: command["action"] ?? "decode")
                 } else if name == "extension-import-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.extensions-import") {
                     application.confirmQuit = { .quit }
@@ -3896,5 +3898,89 @@ extension OrbitPerformanceProbe {
         result["tabSwitchCleared"] = alpha("after-tab-switch") == 0
         result["navigationCleared"] = alpha("after-navigation") == 0
         return result
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Synthetic-only actions use the real engine and refuse windows outside this process.
+    private static func closeBack(_ owner: OrbitWindowController, command: [String: String]) async -> [String: Any] {
+        func owns() -> Bool { ownsWindow(owner, bundleID: "lab.orbit.orbit.close-back") }
+        guard owns(), let window = owner.window else { return ["refused": true] }
+        let action = command["action"] ?? "state"
+        if action == "seed" {
+            guard let base = command["base"].flatMap(URL.init(string:)), base.host == "127.0.0.1" else { return [:] }
+            owner.palette.dismiss()
+            window.appearance = NSAppearance(named: .aqua)
+            window.setFrame(NSRect(x: 100, y: 100, width: 1100, height: 800), display: true)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            try? await Task.sleep(for: .milliseconds(200))
+            owner.session.closeSelectedTab()
+            await owner.session.waitForPendingCommands()
+            for index in stride(from: 5, through: 1, by: -1) {
+                guard owns() else { return [:] }
+                owner.session.openTab(url: base.appendingPathComponent("t\(index).html"))
+                await owner.session.waitForPendingCommands()
+            }
+        } else if action == "select", let title = command["title"],
+                  let tab = owner.session.organization?.allTabs.first(where: { $0.pageTitle == title }) {
+            guard owns() else { return [:] }
+            owner.session.selectTab(tab.id)
+        } else if action == "close" {
+            guard owns() else { return [:] }
+            guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 0) else { return [:] }
+            _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
+        } else if action == "back" {
+            guard owns() else { return [:] }
+            owner.backButton.performClick(nil)
+        } else if action == "back-key" {
+            guard owns(), let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                characters: "[", charactersIgnoringModifiers: "[", isARepeat: false, keyCode: 0) else { return [:] }
+            _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
+        } else if action == "row-x" || action == "middle" {
+            guard let title = command["title"], let row = owner.sidebar.page.list.tabRows.first(where: { $0.item.title == title }) else { return ["rowMissing": true] }
+            if action == "row-x" { guard owns() else { return [:] }; row.closeButton.performClick(nil) }
+            else {
+                for kind: NSEvent.EventType in [.otherMouseDown, .otherMouseUp] {
+                    guard owns(), let event = NSEvent.mouseEvent(with: kind, location: row.convert(NSPoint(x: 80, y: 16), to: nil),
+                        modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                        context: nil, eventNumber: 0, clickCount: 1, pressure: 1), let cg = event.cgEvent else { return [:] }
+                    cg.setIntegerValueField(.mouseEventButtonNumber, value: 2)
+                    guard let native = NSEvent(cgEvent: cg) else { return [:] }
+                    if kind == .otherMouseDown { row.otherMouseDown(with: native) } else { row.otherMouseUp(with: native) }
+                }
+            }
+        } else if action == "pin", let tab = owner.session.organization?.selectedTab {
+            owner.session.pinTabs([tab.id])
+        } else if action == "undo" { owner.session.undoOrganization() }
+        else if action == "link", let surface = owner.session.selectedSurface {
+            guard owns() else { return [:] }
+            _ = await evaluate(surface, "document.getElementById('blank').click(); ({ok:true})")
+        } else if action == "popup", let surface = owner.session.selectedSurface {
+            guard owns() else { return [:] }
+            _ = await evaluate(surface, "window.open('/t7.html','','popup,width=480,height=640'); ({ok:true})")
+        } else if action == "next", let surface = owner.session.selectedSurface {
+            guard owns() else { return [:] }
+            _ = await evaluate(surface, "document.getElementById('next').click(); ({ok:true})")
+        } else if action == "command-link", let surface = owner.session.selectedSurface {
+            for type in ["mousePressed", "mouseReleased"] {
+                guard owns() else { return [:] }
+                _ = await surface.devToolsCall("Input.dispatchMouseEvent", params: "{\"type\":\"\(type)\",\"x\":100,\"y\":180,\"button\":\"left\",\"clickCount\":1,\"modifiers\":4}")
+            }
+        }
+        await owner.session.waitForPendingCommands()
+        try? await Task.sleep(for: .milliseconds(350))
+        return ["selected": owner.session.organization?.selectedTab?.pageTitle ?? "",
+                "path": owner.session.selectedSurface?.currentURL?.path ?? "",
+                "backEnabled": owner.backButton.isEnabled,
+                "tabs": owner.session.organization?.allTabs.map { ["title": $0.pageTitle, "loaded": $0.isLoadedInThisWindow] as [String: Any] } ?? [],
+                "windows": NSApp.windows.filter { $0.isVisible }.count,
+                "visible": window.occlusionState.contains(.visible), "key": window.isKeyWindow,
+                "reducedMotion": OrbitMotionPreferences.prefersReducedMotion,
+                "pid": getpid(), "window": window.windowNumber]
     }
 }

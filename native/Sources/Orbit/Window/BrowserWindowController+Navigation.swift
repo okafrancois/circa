@@ -77,11 +77,9 @@ extension BrowserWindowController {
     func navigateBack() {
         guard acceptsCommands else { return }
         hideLibrary()
-        session.performOnSelectedSurface { [weak self] surface in
+        session.navigateBack(canGoBack: { $0.navigationState.canGoBack }) { [weak self] surface in
             self?.cancelErrandForOwnerNavigation(surface)
-            if let url = surface.goBack() {
-                self?.session.updateDestination(for: surface, to: url)
-            }
+            return surface.goBack()
         }
     }
 
@@ -118,7 +116,8 @@ extension BrowserWindowController {
             let address = BrowserAddressPresentation(surface: surface)
             addressField.refreshAddress(address.value, in: session.snapshot?.activeSpaceID, presentation: address)
         }
-        if backButton.isEnabled != state.canGoBack { backButton.isEnabled = state.canGoBack }
+        let canGoBack = state.canGoBack || session.canCloseByGoingBack(surface)
+        if backButton.isEnabled != canGoBack { backButton.isEnabled = canGoBack }
         if forwardButton.isEnabled != state.canGoForward { forwardButton.isEnabled = state.canGoForward }
         if reloadButton.isEnabled != (state.url != nil) { reloadButton.isEnabled = state.url != nil }
     }

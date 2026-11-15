@@ -156,6 +156,27 @@ struct TabErgonomicsTests {
         }
     }
 
+    @Test("Middle removal of loaded and dormant pins uses organization undo", arguments: [false, true], [false, true])
+    func middlePinRemoval(loaded: Bool, inFolder: Bool) async throws {
+        let owner = try await fixture()
+        defer { owner.session.close(); owner.window?.close() }
+        let tab = try #require(owner.session.organization?.selectedTab)
+        owner.session.pinTabs([tab.id])
+        await owner.session.waitForPendingCommands()
+        if inFolder {
+            _ = await owner.session.createFolder(title: "Folder", at: .init(.pinned(owner.session.snapshot!.activeSpaceID)), containing: [.tab(tab.id)]).value
+        }
+        if !loaded { owner.session.closeSelectedTab() }
+        await owner.session.waitForPendingCommands()
+        owner.window?.contentView?.layoutSubtreeIfNeeded()
+        let row = try #require(owner.sidebar.page.list.row(for: .tab(tab.id)) as? SidebarTabRow)
+        owner.sidebar.page.list.rowMiddleClose(row)
+        await owner.session.waitForPendingCommands()
+        #expect(owner.session.organization?.tab(tab.id) == nil)
+        _ = await owner.session.undoOrganization().value
+        #expect(owner.session.organization?.tab(tab.id)?.section == .pinned(owner.session.snapshot!.activeSpaceID))
+    }
+
     @Test("Option copies a sidebar tab into a folder without moving its original")
     func copyDrop() async throws {
         let owner = try await fixture()

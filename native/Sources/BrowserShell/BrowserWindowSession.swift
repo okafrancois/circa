@@ -183,7 +183,8 @@ private extension BrowserStore {
                 guard source.windowID == context.windowID, source.spaceID == context.spaceID,
                       source.profileID == context.profileID,
                       before.occurrenceAuthorities[source.occurrenceID] == source else { return nil }
-                let occurrenceID = try openTab(url: url, from: context, activate: false)
+                let occurrenceID = try openTab(url: url, from: context, activate: false,
+                    nextTo: before.occurrenceTabIDs[source.occurrenceID])
                 return (occurrenceID, try captureWindowState(from: context))
             } ?? nil
         } ?? nil
@@ -227,6 +228,27 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public enum SurfaceLoadingPolicy { case eager, visibleOnly }
     public var surfaceLoadingPolicy: SurfaceLoadingPolicy = .eager
     private var requestedSurfaceIDs: Set<TabOccurrenceID> = []
+    private var linkOpenedOccurrences: Set<TabOccurrenceID> = []
+    private var linkOpeners: [TabOccurrenceID: TabOccurrenceID] = [:]
+
+    public func canCloseByGoingBack(_ surface: Surface) -> Bool {
+        occurrenceID(for: surface).map { linkOpenedOccurrences.contains($0) } ?? false
+    }
+
+    /// History is tested inside the command queue, so rapid Back commands cannot retarget.
+    public func navigateBack(canGoBack: @escaping (Surface) -> Bool, goBack: @escaping (Surface) -> URL?) {
+        enqueue { session in
+            guard let context = try await session.validatedContext(),
+                  let id = context.selectedOccurrenceID, let surface = session.surfaces[id] else { return }
+            if canGoBack(surface) {
+                if let url = goBack(surface) { session.updateDestination(for: surface, to: url) }
+            } else if session.linkOpenedOccurrences.contains(id) {
+                let opener = session.linkOpeners[id]
+                let state = try await session.store.closeLinkOccurrence(id, returningTo: opener, from: context)
+                session.install(state)
+            }
+        }
+    }
     private var deferredErrandSurfaceIDs: Set<TabOccurrenceID> = []
     private var errandSurfaceAdmissions: [TabOccurrenceID: BrowserSidebarSelectionAdmission] = [:]
     /// Only the active Space is represented here. Inactive surfaces remain in ownedSurfaces.
@@ -601,7 +623,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     /// Source ownership is captured synchronously; later commands cannot retarget it to another
     /// Space or profile. The returned task joins the command chain before this method returns.
     public func adoptSurface(
-        _ surface: Surface, from sourceSurface: Surface, profileID: ProfileID, url: URL
+        _ surface: Surface, from sourceSurface: Surface, profileID: ProfileID, url: URL, isLink: Bool = false
     ) -> Task<TabOccurrenceID?, Never> {
         let reservation = BrowserSurfaceProvenance.reserve(surface, for: self)
         let sourceID = occurrenceID(for: sourceSurface)
@@ -640,6 +662,10 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
                 // Record ownership before reconciliation invokes factories or disposal callbacks.
                 // A reentrant close then retires this exact provided instance with the whole batch.
                 record(surface, as: occurrenceID, authority: state.occurrenceAuthorities[occurrenceID])
+                if isLink {
+                    linkOpenedOccurrences.insert(occurrenceID)
+                    linkOpeners[occurrenceID] = sourceID
+                }
                 install(state)
                 reconcileDestination(of: surface, recorded: recordedURL)
                 return isClosed ? nil : self.occurrenceID(for: surface)
@@ -939,6 +965,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         let perfStart = BrowserPerformance.begin()
         defer { BrowserPerformance.end(.sessionInstall, since: perfStart) }
         guard !isClosed else { return }
+        linkOpenedOccurrences.formIntersection(state.occurrenceAuthorities.keys)
+        linkOpeners = linkOpeners.filter { state.occurrenceAuthorities[$0.key] != nil && state.occurrenceAuthorities[$0.value] != nil }
         // A placeholder follows its model occurrence, including to another Space of its profile;
         // one that left the model or its profile loses its return path (a failed move then goes
         // to the rescue holder).

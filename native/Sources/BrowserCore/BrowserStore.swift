@@ -151,6 +151,8 @@ struct WindowRecord {
 
 /// Owns browser state without depending on AppKit or a web engine.
 public actor BrowserStore {
+    // Selection order is independent of loading and the wall-clock inactivity timestamps.
+    var selectionMRU: [WindowID: [SpaceID: [TabID]]] = [:]
     let storeGeneration = UUID()
     var catalogRevision: UInt64 = 0
     nonisolated let spaceSettingsOwnership = BrowserSpaceSettingsOwnership()
@@ -367,6 +369,7 @@ public actor BrowserStore {
     /// Removes the window and its occurrences. Its logical tabs stay in the shared sidebar.
     public func closeWindow(_ windowID: WindowID) throws {
         markViewed(windows[windowID])
+        selectionMRU[windowID] = nil
         guard let window = windows.removeValue(forKey: windowID) else {
             throw BrowserStoreError.windowMissing
         }
@@ -516,6 +519,7 @@ public actor BrowserStore {
         }
         windows[context.windowID] = window
         organizationDidOpen(tab, nextTo: nextTo)
+        if activate { markViewed(window) }
         return occurrenceID
     }
 
@@ -637,7 +641,7 @@ public actor BrowserStore {
     }
 
     /// Closes an occurrence in the captured active Space without closing its window.
-    /// Selection moves to the next neighbor, or the previous one at the end.
+    /// Selection returns to the most recently selected remaining tab.
     public func closeOccurrence(_ occurrenceID: TabOccurrenceID, from context: BrowserContext) throws {
         guard isCurrent(context), let window = windows[context.windowID] else {
             throw BrowserStoreError.staleContext
@@ -699,6 +703,15 @@ public actor BrowserStore {
 
     /// Membership and replacement selection are resolved by the model in the same actor turn.
     /// Background insertions/removals can preserve context while invalidating a shell's cached order.
+    public func closeLinkOccurrence(_ id: TabOccurrenceID, returningTo opener: TabOccurrenceID?,
+                                    from context: BrowserContext) throws -> BrowserWindowState {
+        try closeOccurrence(id, from: context)
+        if let opener, let tab = tabs[opener], tab.windowID == context.windowID, tab.spaceID == context.spaceID {
+            try selectOccurrence(opener, in: context.windowID)
+        }
+        return try captureWindowState(in: context.windowID)
+    }
+
     public func closeOccurrenceAndCaptureState(
         _ occurrenceID: TabOccurrenceID, from context: BrowserContext
     ) throws -> BrowserWindowState {

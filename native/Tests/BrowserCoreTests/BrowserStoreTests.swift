@@ -109,7 +109,7 @@ func spaceRequiresProfile() async throws {
     }
 }
 
-@Test("Closing the selected tab chooses its neighbor and leaves an empty window alive")
+@Test("Closing the selected tab chooses the last used tab and leaves an empty window alive")
 func selectedTabClosureUpdatesSelection() async throws {
     let store = BrowserStore()
     let profile = await store.createProfile(name: "Test")
@@ -121,7 +121,7 @@ func selectedTabClosureUpdatesSelection() async throws {
     try await store.selectOccurrence(second, in: window)
     let oldContext = try await store.captureContext(in: window)
     try await store.closeOccurrence(second, from: oldContext)
-    #expect(try await store.snapshot(of: window).selectedOccurrenceID == third)
+    #expect(try await store.snapshot(of: window).selectedOccurrenceID == first)
     #expect(!(await store.isCurrent(oldContext)))
     try await store.closeOccurrence(third, from: store.captureContext(in: window))
     #expect(try await store.snapshot(of: window).selectedOccurrenceID == first)

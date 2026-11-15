@@ -230,7 +230,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
         bindSurface(surface)
         let key = ObjectIdentifier(surface)
         let previous = session.captureContextInCommandOrder()
-        let adoption = session.adoptSurface(surface, from: source, profileID: source.profileID, url: url)
+        let adoption = session.adoptSurface(surface, from: source, profileID: source.profileID, url: url, isLink: true)
         let background = (request.modifiers.contains(.command) && !request.modifiers.contains(.shift))
             || request.buttonNumber == 2
         nativeCreations[key] = NativeCreation(surface: surface, adoption: adoption, previousContext: previous,

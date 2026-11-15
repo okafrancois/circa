@@ -290,7 +290,7 @@ func spacesSessionRapidCommandsStayOrdered() async throws {
     session.duplicateSelectedTab()
     session.closeSelectedTab()
     await session.waitForPendingCommands()
-    #expect(session.selectedSurface?.initialURL == homeURL)
+    #expect(session.selectedSurface === homeSelected)
     #expect(session.surface(for: fixture.homeTabs[1]) === homeSelected)
     #expect(session.snapshot?.tabs.count == 3)
     #expect(session.surface(for: fixture.officeTabs[1])?.actions == 1)

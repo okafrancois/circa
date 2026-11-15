@@ -194,9 +194,10 @@ struct NativeWindowTests {
         _ = try await firstView.evaluateJavaScript("document.title='Updated title'; history.pushState({}, '', '/dynamic');")
         try await waitForNativeState("committed address and dynamic tab title publication", observed: { "address=\(first.displayedAddress), titles=\(first.displayedTabTitles)" }) {
             firstView.url?.path == "/dynamic" && first.displayedTabTitles.contains("Updated title")
+                && first.displayedAddress == firstView.url?.absoluteString
         }
-        // This adapter has not published a new committed identity for the History API change.
-        #expect(first.displayedAddress == secondURL.absoluteString)
+        // Same-document navigation publishes its committed identity and address together.
+        #expect(first.session.selectedSurface?.navigationState.committedURL == firstView.url)
         first.navigateBack()
         await first.session.waitForPendingCommands()
         try await waitForNativeState("firstView.url == secondURL",

@@ -10,6 +10,7 @@ private typealias Metrics = OrbitTokens.Metrics.Sidebar
 protocol SidebarListHost: AnyObject {
     /// A click on a row; modifiers distinguish activation, ⌘-click and ⇧-click.
     func list(_ list: SidebarListView, activate node: BrowserOrganizationNode, modifiers: NSEvent.ModifierFlags)
+    func list(_ list: SidebarListView, remove tab: TabID)
     func list(_ list: SidebarListView, close tab: TabID)
     func list(_ list: SidebarListView, resetToPinnedURL tab: TabID)
     func list(_ list: SidebarListView, toggleAudio tab: TabID)
@@ -31,6 +32,7 @@ protocol SidebarListHost: AnyObject {
 }
 
 extension SidebarListHost {
+    func list(_ list: SidebarListView, remove tab: TabID) {}
     func list(_ list: SidebarListView, tearOff payload: SidebarDragPayload, at point: NSPoint) -> Bool { false }
     func list(_ list: SidebarListView, toggleAudio tab: TabID) {}
     func list(_ list: SidebarListView, dragLeftWindow payload: SidebarDragPayload) {}
@@ -124,6 +126,11 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private(set) var commandsEnabled = true
     /// Tests drive motion with `animator.advance(to:)` in hidden windows.
     var forcesAnimation = false
+    private var closeTimings: [BrowserOrganizationNode: OrbitAnimationTiming] = [:]
+
+    func prepareClose(_ node: BrowserOrganizationNode, duration: TimeInterval) {
+        closeTimings[node] = .init(duration: duration, x1: 0, y1: 0, x2: 0.58, y2: 1)
+    }
     var onLayoutChange: (() -> Void)?
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
     var onTabHover: ((SidebarTabRow, Bool) -> Bool)?
@@ -386,9 +393,11 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let previousByNode = Dictionary(previous.entries.map { ($0.node, $0) }, uniquingKeysWith: { first, _ in first })
         let newNodes = Set(displayedLayout.rows.map(\.node))
         let toggledPinned = previous.isPinnedSectionCollapsed != content.isPinnedSectionCollapsed
+        let removed = previous.entries.filter { entriesByNode[$0.node] == nil }
+        let closeTiming = removed.first.map { closeTimings[$0.node] ?? OrbitAnimationTiming(duration: 7.0 / 60, x1: 0, y1: 0, x2: 0.58, y2: 1) }
         let timing = toggledPinned
             ? (content.isPinnedSectionCollapsed ? SidebarSpaceDisclosure.collapseTiming : SidebarSpaceDisclosure.expandTiming)
-            : OrbitAnimationTiming.tabList
+            : closeTiming ?? OrbitAnimationTiming.tabList
         if toggledPinned, style == .spring {
             let from = pinnedMotion.map { $0.segment.value(at: time) } ?? (previous.isPinnedSectionCollapsed ? 0.0 : 1.0)
             let expanded = content.isPinnedSectionCollapsed ? (pinnedMotion?.expanded ?? old) : displayedLayout
@@ -443,7 +452,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
                 view.commandsEnabled = false
                 leavingRows[ObjectIdentifier(view)] = (view, row.node)
             } else if style == .spring, !hidden.contains(row.node) {
-                startLeaving(view, node: row.node, old: old, time: time)
+                startLeaving(view, node: row.node, old: old, time: time, timing: timing)
             } else {
                 recycle(view)
             }
@@ -452,6 +461,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             for (_, leaving) in leavingRows { recycle(leaving.row) }
             leavingRows.removeAll()
         }
+        for entry in removed { closeTimings[entry.node] = nil }
         liftedNodes.formIntersection(hidden)
         refreshGapPlaceholder(animated: style == .spring)
         materialize(at: time)
@@ -479,7 +489,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var liftedNodes: Set<BrowserOrganizationNode> = []
 
     private func startLeaving(_ row: SidebarListRow, node: BrowserOrganizationNode, old: SidebarListLayout,
-                              time: CFTimeInterval) {
+                              time: CFTimeInterval, timing: OrbitAnimationTiming) {
         let slot = SidebarListSlot.node(node)
         let current = animator.value(of: slot, at: time) ?? old.centerY(of: slot) ?? row.frame.midY
         // Folder children slide back into their folder when it collapses.
@@ -497,7 +507,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let archiving = node.tabID.map { todayArchivingTabs.contains($0) } == true
         let fadeTiming = archiving
             ? OrbitAnimationTiming(duration: 0.3, x1: 1.0 / 3, y1: 0, x2: 2.0 / 3, y2: 0)
-            : OrbitAnimationTiming.tabList
+            : timing
         Self.fade(row, to: 0, timing: fadeTiming)
         if archiving {
             let slide = CABasicAnimation(keyPath: "transform.translation.x")
@@ -1048,7 +1058,19 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         return true
     }
 
+    func rowMiddleClose(_ row: SidebarTabRow) {
+        prepareClose(row.node, duration: 0.15)
+        if row.item.isPinned {
+            window?.makeFirstResponder(self)
+            host?.list(self, remove: row.item.id)
+        } else {
+            window?.makeFirstResponder(self)
+            host?.list(self, close: row.item.id)
+        }
+    }
+
     func rowClose(_ row: SidebarTabRow) {
+        prepareClose(row.node, duration: 0.10)
         window?.makeFirstResponder(self)
         host?.list(self, close: row.item.id)
     }

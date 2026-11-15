@@ -76,6 +76,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onTabHover: ((SidebarTabRow, Bool) -> Bool)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
     var onSelectTab: ((TabID) -> Void)?
+    var onRemoveTab: ((TabID) -> Void)?
     var onCloseTabs: (([TabID]) -> Void)?
     var onSetFolderCollapsed: ((FolderID, Bool) -> Void)?
     var onSetPinnedSectionCollapsed: ((SpaceID, Bool) -> Void)?
@@ -668,6 +669,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         }
     }
 
+    func list(_ list: SidebarListView, remove tab: TabID) {
+        if commandsEnabled { onRemoveTab?(tab) }
+    }
     func list(_ list: SidebarListView, close tab: TabID) {
         if commandsEnabled { onCloseTabs?(organization?.split(containing: tab)?.group.tabIDs ?? [tab]) }
     }
