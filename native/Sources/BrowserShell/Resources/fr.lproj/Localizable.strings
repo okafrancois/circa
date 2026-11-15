@@ -1799,3 +1799,9 @@
 "Show Next Meeting Link" = "Afficher le lien de la prochaine réunion";
 
 "3 minutes before" = "3 minutes avant";
+
+"2 minutes before" = "2 minutes avant";
+"5 minutes before" = "5 minutes avant";
+"10 minutes before" = "10 minutes avant";
+"Meeting reminder sound" = "Son de rappel de réunion";
+"Starts in %d min" = "Commence dans %d min";

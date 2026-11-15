@@ -50,11 +50,11 @@ public struct BrowserCalendarWebAgenda: Equatable, Sendable {
         return now >= fetchedAt && now.timeIntervalSince(fetchedAt) < 120 && calendar.isDate(day, inSameDayAs: now)
     }
 
-    public func nextMeeting(at now: Date) -> BrowserCalendarWebEvent? {
-        guard isFresh(at: now) else { return nil }
+    public func nextMeeting(at now: Date, reminderTime: BrowserCalendarReminderTime = .fiveMinutes) -> BrowserCalendarWebEvent? {
+        guard isFresh(at: now), let interval = reminderTime.interval else { return nil }
         return events.filter { event in
             guard let url = event.joinURL, BrowserCalendarBootstrap.meetingURL(url.absoluteString) == url else { return false }
-            return event.start >= now && event.start.timeIntervalSince(now) <= 180
+            return event.start >= now && event.start.timeIntervalSince(now) <= interval
         }.min { $0.start < $1.start }
     }
 

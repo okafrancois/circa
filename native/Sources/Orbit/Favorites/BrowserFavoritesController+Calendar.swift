@@ -33,23 +33,42 @@ extension BrowserFavoritesController {
             guard let account = BrowserCalendarWebAccount(url: tab.pinnedURL ?? tab.url), calendarPermitted(tab, account),
                   let profile = owner.session.organization?.profileID,
                   owner.settingsPreferences?.runtime.document.profile(profile).hiddenCalendarMeetingLinks.contains(tab.id) != true,
-                  let agenda = calendar.agendas[account], let event = agenda.nextMeeting(at: calendar.now()) else { return nil }
+                  let agenda = calendar.agendas[account], let event = agenda.nextMeeting(at: calendar.now(), reminderTime: owner.settingsPreferences?.runtime.document.profile(profile).calendarReminderTime(for: tab.id) ?? .fiveMinutes) else { return nil }
             return (tab, account, agenda, event)
         }
         guard let (tab, account, agenda, event) = candidates.min(by: { $0.3.start < $1.3.start }), calendar.online else {
+            BrowserMeetingReminders.shared.update(owner: calendarReminderOwner, reminder: nil, now: calendar.now())
             owner.sidebar.presentCalendarReminder(id: nil, title: nil, join: nil); return
         }
-        owner.sidebar.presentCalendarReminder(id: "\(tab.id)-\(agenda.binding)-\(event.id)", title: event.title) { [weak self] in
-            guard let self, self.calendar.online, self.calendarPermitted(tab, account),
-                  self.owner?.session.organization?.profileID == profile,
-                  self.owner?.settingsPreferences?.runtime.document.profile(profile).hiddenCalendarMeetingLinks.contains(tab.id) != true,
+        let valid = { [weak self] in
+            guard let self, let owner = self.owner, self.calendar.online, self.calendarPermitted(tab, account),
+                  owner.session.organization?.profileID == profile,
                   let current = self.calendar.agendas[account], current.binding == agenda.binding,
-                  current.nextMeeting(at: self.calendar.now()) == event,
+                  current.nextMeeting(at: self.calendar.now(), reminderTime: owner.settingsPreferences?.runtime.document.profile(profile).calendarReminderTime(for: tab.id) ?? .fiveMinutes) == event,
                   let url = event.joinURL, BrowserCalendarBootstrap.meetingURL(url.absoluteString) == url else { return false }
-            self.owner?.session.openTab(url: url)
             return true
         }
+        let join = { [weak self] in
+            guard valid(), let url = event.joinURL else { return false }
+            self?.owner?.session.openTab(url: url)
+            return true
+        }
+        owner.sidebar.presentCalendarReminder(id: "\(tab.id)-\(agenda.binding)-\(event.id)", title: event.title, join: join)
+        BrowserMeetingReminders.shared.update(owner: calendarReminderOwner, reminder: .init(
+            key: "\(profile)-\(account.slot)-\(agenda.binding)-\(event.id)-\(event.start.timeIntervalSince1970)",
+            title: event.title, start: event.start,
+            sound: owner.settingsPreferences?.runtime.document.interaction.meetingReminderSound != false
+                && owner.settingsPreferences?.runtime.document.interaction.playSoundEffects != false,
+            valid: valid,
+            inactive: { [weak owner] in
+                !NSApp.isActive || owner?.window?.isVisible != true || owner?.window?.isMiniaturized == true || NSApp.isHidden
+            },
+            activate: { [weak owner] in
+                NSApp.unhide(nil); NSApp.activate(ignoringOtherApps: true)
+                owner?.window?.deminiaturize(nil); owner?.window?.makeKeyAndOrderFront(nil)
+            }, join: join), now: calendar.now())
     }
+
     func calendarCountdown(_ tab: BrowserOrganizationTabItem) -> String? {
         guard let account = BrowserCalendarWebAccount(url: tab.pinnedURL ?? tab.url), calendarPermitted(tab, account),
               let owner, let profile = owner.session.organization?.profileID,
@@ -104,10 +123,25 @@ extension BrowserFavoritesController {
             preference(uiText("Show Time to Next Meeting"), 1, checked: settings?.hiddenCalendarCountdowns.contains(tab.id) != true)
             let parent = NSMenuItem(title: uiText("Show Next Meeting Link"), action: nil, keyEquivalent: "")
             let submenu = NSMenu(); submenu.autoenablesItems = false
-            let hidden = settings?.hiddenCalendarMeetingLinks.contains(tab.id) == true
-            for (title, checked) in [(uiText("3 minutes before"), !hidden), (uiText("Never"), hidden)] {
-                let item = preference(title, 3, checked: checked)
-                item.isEnabled = !checked
+            let selected = settings?.calendarReminderTime(for: tab.id) ?? .fiveMinutes
+            for (title, value) in [(uiText("2 minutes before"), BrowserCalendarReminderTime.twoMinutes),
+                                   (uiText("5 minutes before"), .fiveMinutes),
+                                   (uiText("10 minutes before"), .tenMinutes), (uiText("Never"), .never)] {
+                let item = action(title) { [weak self] in
+                    guard let self, let runtime = self.owner?.settingsPreferences?.runtime else { return }
+                    Task { @MainActor [weak self] in
+                        do {
+                            try await runtime.updateProfile(profile) { settings in
+                                settings.calendarReminderTimes[tab.id] = value
+                                if value == .never { settings.hiddenCalendarMeetingLinks.insert(tab.id) }
+                                else { settings.hiddenCalendarMeetingLinks.remove(tab.id) }
+                            }
+                            self?.calendarPreview.dismiss(); self?.render()
+                        } catch { /* Keep the saved choice on failure. */ }
+                    }
+                }
+                item.state = selected == value ? .on : .off
+                item.isEnabled = selected != value
                 menu.removeItem(item); submenu.addItem(item)
             }
             parent.submenu = submenu; menu.addItem(parent)

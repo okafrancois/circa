@@ -269,6 +269,10 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         try await runtime.updateInteraction { $0.warnBeforeQuitting = value }
     }
 
+    func setMeetingReminderSound(_ value: Bool) async throws {
+        try await runtime.updateInteraction { $0.meetingReminderSound = value }
+    }
+
     func setPlaySoundEffects(_ value: Bool) async throws {
         try await runtime.updateInteraction { $0.playSoundEffects = value }
     }
