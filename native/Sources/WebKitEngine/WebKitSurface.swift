@@ -44,6 +44,21 @@ public final class WebKitSurface: BrowserEngineSurface {
 
     public var pageZoom: Double { Double(webView.pageZoom) }
 
+    /// Connection security of the committed document, from WebKit's public state.
+    public var pageSecurityState: BrowserPageSecurityState? {
+        committedURL.flatMap { Self.securityState(url: $0, hasOnlySecureContent: webView.hasOnlySecureContent) }
+    }
+
+    /// An HTTPS document whose resources all loaded securely is secure (level 3); WebKit refuses
+    /// invalid certificates itself, so no certificate error is ever reported. nil off the web.
+    public nonisolated static func securityState(url: URL, hasOnlySecureContent: Bool) -> BrowserPageSecurityState? {
+        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else { return nil }
+        guard scheme == "https" else { return BrowserPageSecurityState(level: 0) }
+        return hasOnlySecureContent
+            ? BrowserPageSecurityState(level: 3)
+            : BrowserPageSecurityState(level: 0, displayedMixedContent: true)
+    }
+
     /// A standalone surface outside any engine, with its own zoom scope. Used by tests.
     public convenience init(profileID: ProfileID, dataStore: WKWebsiteDataStore) {
         let configuration = WKWebViewConfiguration()
@@ -96,6 +111,8 @@ public final class WebKitSurface: BrowserEngineSurface {
         guard !isDisposed, !isProvisionalNavigationInFlight, let documentURL, let url = webView.url, url != documentURL,
               requestedNavigation == nil || url != requestedDestination else { return }
         self.documentURL = url
+        // The committed entry follows a History API or fragment navigation, as in Chromium.
+        committedURL = url
         delegate?.surface(self, didNavigateWithinDocument: BrowserSameDocumentNavigation(url: url, previous: documentURL))
     }
 

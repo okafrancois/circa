@@ -130,6 +130,46 @@ extension ChromiumSurface: BrowserSiteEngineSwitching {
         _ = ACRExecuteDevToolsMethod(token, "Runtime.evaluate", String(decoding: params, as: UTF8.self))
     }
 
+    /// Extension actions run on this tab's Chromium document, which a WebKit document covers on
+    /// purpose; its popup opens like on any other tab. The extension's active tab stays the hidden
+    /// Chromium document (content scripts cannot reach WebKit documents).
+    var isDocumentHiddenForAction: Bool {
+        (webContent == nil ? documentView : hostView).isHiddenOrHasHiddenAncestor
+    }
+
+    /// The engine keeps an extension popup only while its source view is unhidden. Over a WebKit
+    /// document that view is unhidden for the action, still covered by the opaque WebKit view, and
+    /// hidden again once no popup opened within 5 s or the popup closed. Hiding it cancels the
+    /// action (`hostDidChange(hidden:)`).
+    func revealDocumentForExtensionAction() {
+        guard let content = webContent, !isDisposed else { return }
+        extensionActionReveal &+= 1
+        let reveal = extensionActionReveal
+        let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+        documentView.isHidden = false
+        Task { @MainActor [weak self] in
+            var appeared = false
+            var waited = 0
+            while true {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard let self, !self.isDisposed, self.extensionActionReveal == reveal, self.webContent === content else { return }
+                if NSApp.windows.contains(where: { !before.contains(ObjectIdentifier($0)) && $0.isVisible }) {
+                    appeared = true
+                } else if appeared || waited >= 25 {
+                    break
+                }
+                waited += 1
+            }
+            self?.endExtensionActionReveal(reveal)
+        }
+    }
+
+    func endExtensionActionReveal(_ reveal: UInt64? = nil) {
+        guard webContent != nil, reveal == nil || reveal == extensionActionReveal else { return }
+        extensionActionReveal &+= 1
+        documentView.isHidden = true
+    }
+
     /// Chromium document events that would overwrite the WebKit document's state.
     static func webContentMasksEvent(_ kind: ACREventKind) -> Bool {
         [ACR_EVENT_ADDRESS, ACR_EVENT_TITLE, ACR_EVENT_LOADING, ACR_EVENT_DOCUMENT, ACR_EVENT_LOAD_END,
@@ -151,6 +191,8 @@ final class ChromiumWebContent {
     private var faviconImage: BrowserFaviconImage?
     private var faviconRevision: UInt64 = 0
     private var faviconSettled = true
+    /// Stable for the life of this document so the shell's security observation is not restarted.
+    private(set) lazy var pageServices = ChromiumWebContentPageServices(surface: surface)
 
     init(surface: WebKitSurface) {
         self.surface = surface
@@ -171,6 +213,7 @@ final class ChromiumWebContent {
 
     func dispose() {
         ChromiumWebContentMessages.shared.detach(self)
+        pageServices.close()
         relay.owner = nil
         surface.dispose()
     }
@@ -250,10 +293,12 @@ final class ChromiumWebContent {
         faviconSettled = false
         faviconRevision &+= 1
         if isAudioMuted { applyMuting() }
+        pageServices.securityMayHaveChanged()
     }
 
     func documentDidFinish() {
         if isAudioMuted { applyMuting() }
+        pageServices.securityMayHaveChanged()
         let script = """
         (() => {
           const pick = s => { const e = document.querySelector(s); return e && e.href ? e.href : null; };
@@ -287,6 +332,66 @@ final class ChromiumWebContent {
     }
 
     func mediaActivityDidChange() { owner?.onChange?() }
+}
+
+/// Native page services of a WebKit document shown by a ChromiumSurface. The address comes from
+/// WebKit and is formatted by Chromium's URL formatter, so both engines display identities the
+/// same way; security is `WebKitSurface.pageSecurityState`. History menus, media sessions and fullscreen origins are not
+/// available for WebKit documents.
+@MainActor
+final class ChromiumWebContentPageServices: BrowserNativePageServices {
+    private weak var surface: WebKitSurface?
+    private var closed = false
+    private var listeners: [UUID: AsyncStream<BrowserPageSecurityState>.Continuation] = [:]
+    private var secureContentObservation: NSKeyValueObservation?
+
+    init(surface: WebKitSurface) {
+        self.surface = surface
+        secureContentObservation = surface.webView.observe(\.hasOnlySecureContent) { [weak self] _, _ in
+            Task { @MainActor [weak self] in self?.securityMayHaveChanged() }
+        }
+    }
+
+    func committedURL() -> URL? { closed ? nil : surface?.navigationState.committedURL }
+
+    func securityDisplay(for url: URL, scheme: BrowserSecuritySchemeDisplay) -> String? {
+        closed ? nil : ChromiumNativePageServices.securityDisplay(for: url, scheme: scheme)
+    }
+
+    func securityState() -> BrowserPageSecurityState? {
+        closed ? nil : surface?.pageSecurityState
+    }
+
+    func securityChanges() -> AsyncStream<BrowserPageSecurityState> {
+        let id = UUID()
+        return AsyncStream(bufferingPolicy: .bufferingNewest(8)) { continuation in
+            guard !closed else { continuation.finish(); return }
+            listeners[id] = continuation
+            continuation.onTermination = { [weak self] _ in Task { @MainActor in self?.listeners[id] = nil } }
+            if let state = securityState() { continuation.yield(state) }
+        }
+    }
+
+    func securityMayHaveChanged() {
+        guard !closed, let state = securityState() else { return }
+        for listener in listeners.values { listener.yield(state) }
+    }
+
+    func fullscreenChanges() -> AsyncStream<BrowserPageFullscreenChange> { AsyncStream { $0.finish() } }
+    func navigationHistory() -> BrowserNavigationHistory? { nil }
+    func goToEntry(index: Int) -> Bool { false }
+    func mediaState() -> BrowserMediaSessionState? { nil }
+    func mediaChanges() -> AsyncStream<BrowserMediaSessionState> { AsyncStream { $0.finish() } }
+    func mediaAction(_ action: BrowserMediaAction, seconds: Double) -> Bool { false }
+
+    func close() {
+        guard !closed else { return }
+        closed = true
+        secureContentObservation = nil
+        let current = listeners
+        listeners.removeAll()
+        for listener in current.values { listener.finish() }
+    }
 }
 
 /// Forwards the WebKit surface's delegate events to the owner's delegate, as events of the owner.

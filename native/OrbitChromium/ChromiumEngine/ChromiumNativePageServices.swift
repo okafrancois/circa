@@ -84,7 +84,11 @@ final class ChromiumNativePageServices: BrowserNativePageServices {
     }
     func securityDisplay(for url: URL, scheme: BrowserSecuritySchemeDisplay) -> String? {
         guard !closed else { return nil }
-        return url.absoluteString.withCString { text in
+        return Self.securityDisplay(for: url, scheme: scheme)
+    }
+    /// Chromium's URL formatter; it reads no document state.
+    static func securityDisplay(for url: URL, scheme: BrowserSecuritySchemeDisplay) -> String? {
+        url.absoluteString.withCString { text in
             copyText { ACRSecurityDisplay(text, scheme.rawValue, $0, $1) }
                 .flatMap { String(data: $0, encoding: .utf8) }
         }
@@ -183,7 +187,8 @@ final class ChromiumNativePageServices: BrowserNativePageServices {
         guard !closed else { return nil }
         return copyText { ACRNativePageRead(token, kind, $0, $1) }
     }
-    private func copyText(_ call: (UnsafeMutablePointer<CChar>?, UInt32) -> Int32) -> Data? {
+    private func copyText(_ call: (UnsafeMutablePointer<CChar>?, UInt32) -> Int32) -> Data? { Self.copyText(call) }
+    private static func copyText(_ call: (UnsafeMutablePointer<CChar>?, UInt32) -> Int32) -> Data? {
         let size = call(nil, 0)
         guard size >= 0, size < 1_048_576 else { return nil }
         // Live position timestamps can change JSON length between these two calls.

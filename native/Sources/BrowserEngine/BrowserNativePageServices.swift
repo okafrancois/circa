@@ -11,6 +11,15 @@ public struct BrowserPageSecurityState: Codable, Sendable, Equatable {
     public let displayedCertificateErrorContent: Bool
     public let ranCertificateErrorContent: Bool
     public let interstitial: Bool
+    public init(level: Int, certificateStatus: UInt32 = 0, certificateError: Bool = false,
+                displayedMixedContent: Bool = false, ranMixedContent: Bool = false,
+                displayedCertificateErrorContent: Bool = false, ranCertificateErrorContent: Bool = false,
+                interstitial: Bool = false) {
+        self.level = level; self.certificateStatus = certificateStatus; self.certificateError = certificateError
+        self.displayedMixedContent = displayedMixedContent; self.ranMixedContent = ranMixedContent
+        self.displayedCertificateErrorContent = displayedCertificateErrorContent
+        self.ranCertificateErrorContent = ranCertificateErrorContent; self.interstitial = interstitial
+    }
 }
 
 public struct BrowserPageFullscreenChange: Sendable, Equatable {

@@ -55,7 +55,7 @@ extension ChromiumSurface {
             updatePageTint(tint)
             return
         }
-        guard isBrowserCreated, !pageTintFailed, !navigationState.isLoading,
+        guard isBrowserCreated, webContent == nil, !pageTintFailed, !navigationState.isLoading,
               let url = navigationState.committedURL,
               ["http", "https", "file"].contains(url.scheme?.lowercased() ?? ""),
               let window = documentView.window, window.occlusionState.contains(.visible),

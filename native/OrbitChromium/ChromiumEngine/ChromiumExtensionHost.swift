@@ -138,16 +138,22 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
         guard let engine, let surface = surface as? ChromiumSurface, surface.engine === engine,
               !surface.isDisposed, surface.isReady, surface.hostedWindowToken != 0,
               let window = surface.documentView.window, anchor.window === window,
-              !surface.documentView.isHiddenOrHasHiddenAncestor else {
+              !surface.isDocumentHiddenForAction else {
             throw BrowserEngineError.unsupportedOperation
         }
         // Restoring or reattaching a visible tab may have revoked the previous
         // extension lease while Chrome still reports the tab as active. Publish
         // the current selection before granting an action a new native lease.
-        guard surface.activateTab() else { throw BrowserEngineError.unsupportedOperation }
-        _ = try profileToken(surface.profileID)
-        guard ACRPerformExtensionAction(surface.token, extensionID, Unmanaged.passUnretained(anchor).toOpaque()) == 1 else {
-            throw BrowserEngineError.unsupportedOperation
+        surface.revealDocumentForExtensionAction()
+        do {
+            guard surface.activateTab() else { throw BrowserEngineError.unsupportedOperation }
+            _ = try profileToken(surface.profileID)
+            guard ACRPerformExtensionAction(surface.token, extensionID, Unmanaged.passUnretained(anchor).toOpaque()) == 1 else {
+                throw BrowserEngineError.unsupportedOperation
+            }
+        } catch {
+            surface.endExtensionActionReveal()
+            throw error
         }
     }
 
