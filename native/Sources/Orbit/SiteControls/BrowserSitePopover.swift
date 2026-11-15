@@ -30,7 +30,7 @@ final class SiteControlButton: NSButton {
         guard toolbarForeground != nil, let toolbarHelp else { return }
         toolbarHelpTask?.cancel()
         toolbarHelpTask = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(0.6)) } catch { return }
+            do { try await Task.sleep(for: .seconds(0.675)) } catch { return }
             guard let self, isPillHovered, !isHighlighted, let root = window?.contentView else { return }
             let tip = BrowserToolbarTooltip(name: toolbarHelp.0, shortcut: toolbarHelp.1)
             let anchor = convert(bounds, to: root)
@@ -60,7 +60,7 @@ final class SiteControlButton: NSButton {
             toolbarFill.cornerRadius = 6
             toolbarFill.frame = CGRect(x: (bounds.width - 32) / 2, y: (bounds.height - 24) / 2, width: 32, height: 24)
             toolbarFill.backgroundColor = toolbarForeground.cgColor
-            let target: Float = isHighlighted ? 0.096 : isPillHovered ? 0.073 : 0
+            let target: Float = isHighlighted ? 0.096 : isPillHovered ? 0.064 : 0
             let current = toolbarFill.presentation()?.opacity ?? toolbarFill.opacity
             let changed = toolbarFill.opacity != target
             toolbarFill.opacity = target
