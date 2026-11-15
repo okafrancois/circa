@@ -395,6 +395,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             + mediaPlayer.restingHeight)
         footer.apply(geometry)
         // The resting card's bottom edge meets the footer; hover grows the stack over the list.
+        mediaPlayer.availableHeight = max(124, footer.frame.minY - 80)
         let playerHeight = mediaPlayer.expandedHeight
         mediaPlayer.frame = NSRect(x: Metrics.paddingX, y: footer.frame.minY - playerHeight,
                                    width: max(0, bounds.width - 2 * Metrics.paddingX), height: playerHeight)

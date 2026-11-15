@@ -2120,3 +2120,20 @@
 "Receive nightly builds" = "Receive nightly builds";
 
 "New features first, with less stability. Turning this off keeps your build until a newer stable release." = "New features first, with less stability. Turning this off keeps your build until a newer stable release.";
+
+// Sidebar media utilities
+"Playback position" = "Playback position";
+"Seeking unavailable" = "Seeking unavailable";
+"Live" = "Live";
+"No timeline" = "No timeline";
+"Mute tab" = "Mute tab";
+"Unmute tab" = "Unmute tab";
+"Enter Picture in Picture" = "Enter Picture in Picture";
+"Exit Picture in Picture" = "Exit Picture in Picture";
+"Picture in Picture unavailable for this media" = "Picture in Picture unavailable for this media";
+"PiP failed" = "PiP failed";
+"Volume unavailable" = "Volume unavailable";
+"Per-tab volume is unavailable" = "Per-tab volume is unavailable";
+"The page refused Picture in Picture. Try again." = "The page refused Picture in Picture. Try again.";
+"Picture in Picture did not respond. Try again." = "Picture in Picture did not respond. Try again.";
+"The media page could not be reached. Try again." = "The media page could not be reached. Try again.";

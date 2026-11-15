@@ -39,6 +39,7 @@ public struct BrowserTabMediaSession: Sendable, Equatable {
     public var actions: Set<BrowserMediaAction>
     public var position: Double?
     public var duration: Double?
+    public var playbackRate: Double?
     /// Nil when the engine cannot observe the value, never false by default.
     public var isAudible: Bool?
     public var isAudioMuted: Bool?
@@ -65,6 +66,7 @@ public struct BrowserTabMediaSession: Sendable, Equatable {
         self.actions = actions
         position = native.position
         duration = native.duration
+        playbackRate = native.playbackRate
         isAudible = audio?.isAudible ?? audio?.isAudioPlaying
         isAudioMuted = audio?.isAudioMuted
     }

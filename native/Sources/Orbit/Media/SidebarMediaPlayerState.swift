@@ -24,6 +24,9 @@ final class SidebarMediaPlayerState {
     /// Picture-in-Picture observation per tab, keyed by the observed surface.
     var lifecycleObservers: [TabOccurrenceID: (surface: ObjectIdentifier, task: Task<Void, Never>)] = [:]
 
+    var pipTasks: [TabOccurrenceID: Task<Void, Never>] = [:]
+    var pipQueryTimes: [TabOccurrenceID: Date] = [:]
+
     /// Call before performing a play or pause from the card.
     func willPerform(_ action: BrowserMediaAction, on id: TabOccurrenceID) {
         switch action {
@@ -70,6 +73,9 @@ final class SidebarMediaPlayerState {
     func cancelObservers() {
         for observer in lifecycleObservers.values { observer.task.cancel() }
         lifecycleObservers.removeAll()
+        for task in pipTasks.values { task.cancel() }
+        pipTasks.removeAll()
+        pipQueryTimes.removeAll()
     }
 
     /// Playing: pause glyph. Paused from the card: play glyph. Paused by the page (or ended):

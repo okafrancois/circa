@@ -18,6 +18,31 @@ extension BrowserWindowController {
         player.onNext = { [weak self] id in
             self?.submitInput { $0.performBackgroundMediaAction(.next, on: id) }
         }
+        player.onReveal = { [weak self] in self?.refreshManualPiPCapabilities(force: true) }
+        player.onSeek = { [weak self] id, seconds in
+            self?.submitInput { owner in _ = owner.backgroundMedia.perform(.seek, on: id, seconds: seconds) }
+        }
+        player.onMute = { [weak self] id in
+            self?.submitInput { owner in
+                guard let muted = owner.backgroundMedia.session(for: id)?.isAudioMuted,
+                      let surface = owner.session.surface(for: id) else { return }
+                do { try surface.setAudioMuted(!muted) } catch { return }
+                Task { [weak owner, weak surface] in
+                    guard let surface else { return }
+                    let audio = await surface.requestMediaState()
+                    guard let owner, owner.session.surface(for: id) === surface else { return }
+                    owner.backgroundMedia.updateAudio(audio, for: id)
+                }
+            }
+        }
+        player.onPiP = { [weak self] id in
+            guard let self, let adapter = session.surface(for: id)?.manualPictureInPicture else { return }
+            mediaPlayerState.pipTasks[id]?.cancel()
+            mediaPlayerState.pipTasks[id] = Task { [weak self] in
+                await adapter.toggle()
+                self?.mediaPlayerState.pipTasks[id] = nil
+            }
+        }
         player.onClose = { [weak self] id in self?.submitInput { $0.closeBackgroundMedia(id) } }
     }
 
@@ -34,6 +59,7 @@ extension BrowserWindowController {
         }
         let entries = backgroundMedia.sessions
         observePictureInPicture(entries.map(\.occurrenceID))
+        refreshManualPiPCapabilities()
         let shown = mediaPlayerState.shown(entries.map { ($0.occurrenceID, $0.session) },
             visible: session.visibleOccurrenceIDs,
             pictureInPicture: { [session] id in session.surface(for: id)?.pagePerformance?.lifecycle()?.pictureInPicture == true })
@@ -41,14 +67,43 @@ extension BrowserWindowController {
         let items = shown.compactMap { id -> SidebarMediaPlayerItem? in
             guard let entry = byID[id] else { return nil }
             let presentation = mediaPresentation(id, tabID: entry.tabID)
-            return SidebarMediaPlayerState.item(id: id, session: entry.session, title: presentation.title,
+            var item = SidebarMediaPlayerState.item(id: id, session: entry.session, title: presentation.title,
                 favicon: presentation.favicon, pausedFromPlayer: mediaPlayerState.pausedFromPlayer.contains(id))
+            item.trackIdentity = [entry.session.title, entry.session.artist, entry.session.album].joined(separator: "\u{0}")
+            item.position = entry.session.position
+            item.duration = entry.session.duration
+            item.playbackRate = entry.session.playback == .playing ? entry.session.playbackRate : nil
+            item.canSeek = entry.session.actions.contains(.seek)
+            item.isMuted = entry.session.isAudioMuted
+            item.pipFailure = session.surface(for: id)?.manualPictureInPicture?.failure ?? .rejected
+            item.pip = session.surface(for: id)?.manualPictureInPicture?.state ?? .unavailable
+            return item
         }
         // The window resolves a theme change's appearance only once its colour transition ends;
         // the card takes the destination Space's light or dark style at once.
         let appearance = OrbitAppearance.windowAppearance(for: windowShell.theme.mode)
         if sidebar.mediaPlayer.appearance != appearance { sidebar.mediaPlayer.appearance = appearance }
         sidebar.mediaPlayer.apply(items)
+    }
+
+    func refreshManualPiPCapabilities(force: Bool = false) {
+        let ids = Set(backgroundMedia.sessions.map(\.occurrenceID))
+        for id in Array(mediaPlayerState.pipTasks.keys) where !ids.contains(id) {
+            mediaPlayerState.pipTasks.removeValue(forKey: id)?.cancel()
+            mediaPlayerState.pipQueryTimes.removeValue(forKey: id)
+        }
+        for id in ids {
+            guard let adapter = session.surface(for: id)?.manualPictureInPicture else { continue }
+            adapter.onChange = { [weak self] in self?.renderSidebarMediaPlayer() }
+            adapter.acknowledge(active: session.surface(for: id)?.pagePerformance?.lifecycle()?.pictureInPicture == true)
+            guard mediaPlayerState.pipTasks[id] == nil,
+                  force || Date().timeIntervalSince(mediaPlayerState.pipQueryTimes[id] ?? .distantPast) > 1 else { continue }
+            mediaPlayerState.pipQueryTimes[id] = Date()
+            mediaPlayerState.pipTasks[id] = Task { [weak self] in
+                await adapter.refresh()
+                self?.mediaPlayerState.pipTasks[id] = nil
+            }
+        }
     }
 
     /// The tab's sidebar title and icon while its Space is shown; the last known ones otherwise.

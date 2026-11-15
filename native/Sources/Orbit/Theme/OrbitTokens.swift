@@ -824,8 +824,8 @@ extension OrbitTokens {
     /// Geometry is in points at a 1100 × 800 window; colours are measured on that card.
     public enum MediaPlayer {
         public static let collapsedHeight: CGFloat = 33
-        /// Collapsed controls row plus the hover title row.
-        public static let expandedHeight: CGFloat = 66
+        /// Timeline and utilities above the existing title and transport rows.
+        public static let expandedHeight: CGFloat = 124
         /// Vertical gap between expanded cards of a stack.
         public static let stackGap: CGFloat = 5
         /// The second card of a resting stack peeks this far above the front card.

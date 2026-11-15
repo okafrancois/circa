@@ -783,6 +783,18 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     /// Executes a DevTools protocol method on this browser. Native-side only; pages never see it.
+    public lazy var manualPictureInPicture: BrowserManualPiP? = BrowserManualPiP(
+        transport: { [weak self] method, parameters in
+            guard let self else { return (false, Data()) }
+            return await self.devToolsCall(method, params: parameters, timeout: .seconds(2))
+        }, generation: { [weak self] in
+            guard let self, !self.isDisposed, self.webContent == nil else { return nil }
+            return self.documentGeneration
+        }, exit: { [weak self] in
+            guard let self, !self.isDisposed else { return }
+            ACREndPictureInPicture(self.token)
+        })
+
     public func devToolsCall(_ method: String, params: String = "", timeout: Duration = .seconds(8), wakesPage: Bool = true) async -> (Bool, Data) {
         // Page-reading features (assistant, translation, link previews, archives) never read the
         // hidden Chromium document while WebKit content is shown.

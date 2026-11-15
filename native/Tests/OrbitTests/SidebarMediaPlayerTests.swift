@@ -21,14 +21,14 @@ private func item(_ id: TabOccurrenceID = TabOccurrenceID(), title: String = "Tr
 struct SidebarMediaPlayerTests {
     typealias Layout = SidebarMediaPlayerLayout
 
-    @Test("A single card rests 33 pt high on the footer and grows upward to 66 pt")
+    @Test("A single card rests 33 pt high on the footer and grows upward to 124 pt")
     func singleCardGeometry() {
         #expect(Layout.restingHeight(count: 0) == 0 && Layout.restingHeight(count: 1) == 33)
-        #expect(Layout.expandedHeight(count: 1) == 66)
+        #expect(Layout.expandedHeight(count: 1) == 124)
         let rest = Layout.cards(count: 1, width: 174, progress: 0)[0]
-        #expect(rest.frame == CGRect(x: 0, y: 33, width: 174, height: 33) && rest.scale == 1 && rest.titleOpacity == 0)
+        #expect(rest.frame == CGRect(x: 0, y: 91, width: 174, height: 33) && rest.scale == 1 && rest.titleOpacity == 0)
         let open = Layout.cards(count: 1, width: 174, progress: 1)[0]
-        #expect(open.frame == CGRect(x: 0, y: 0, width: 174, height: 66) && open.titleOpacity == 1)
+        #expect(open.frame == CGRect(x: 0, y: 0, width: 174, height: 124) && open.titleOpacity == 1)
         // The title row's opacity is the square of the geometry progress.
         #expect(Layout.cards(count: 1, width: 174, progress: 0.5)[0].titleOpacity == 0.25)
         #expect([0, 1, 2, 3, 4].map { Layout.controlCenterX($0, width: 174) } == [22, 54.5, 87, 119.5, 152])
@@ -36,14 +36,14 @@ struct SidebarMediaPlayerTests {
 
     @Test("Two players rest as a deck with a 7 pt peek and expand into two full cards, newest on top")
     func stackGeometry() {
-        #expect(Layout.restingHeight(count: 2) == 40 && Layout.expandedHeight(count: 2) == 137)
+        #expect(Layout.restingHeight(count: 2) == 40 && Layout.expandedHeight(count: 2) == 253)
         let rest = Layout.cards(count: 2, width: 174, progress: 0)
-        #expect(rest[0].frame == CGRect(x: 0, y: 104, width: 174, height: 33))
-        #expect(rest[1].frame.minX == 6 && rest[1].frame.width == 162 && rest[1].frame.minY == 97)
+        #expect(rest[0].frame == CGRect(x: 0, y: 220, width: 174, height: 33))
+        #expect(rest[1].frame.minX == 6 && rest[1].frame.width == 162 && rest[1].frame.minY == 213)
         #expect(abs(rest[1].scale - 162.0 / 174.0) < 0.0001 && rest[1].opacity == OrbitTokens.MediaPlayer.stackDimmedOpacity)
         let open = Layout.cards(count: 2, width: 174, progress: 1)
-        #expect(open[0].frame == CGRect(x: 0, y: 71, width: 174, height: 66))
-        #expect(open[1].frame == CGRect(x: 0, y: 0, width: 174, height: 66) && open[1].scale == 1 && open[1].opacity == 1)
+        #expect(open[0].frame == CGRect(x: 0, y: 129, width: 174, height: 124))
+        #expect(open[1].frame == CGRect(x: 0, y: 0, width: 174, height: 124) && open[1].scale == 1 && open[1].opacity == 1)
         // A third card waits hidden behind the peeking one.
         #expect(Layout.cards(count: 3, width: 174, progress: 0)[2].opacity == 0)
     }
@@ -105,7 +105,7 @@ struct SidebarMediaPlayerTests {
         #expect(relayouts == 1 && !view.isHidden && view.restingHeight == 40)
         let front = try #require(view.card(for: old)), back = try #require(view.card(for: new))
         #expect(view.subviews.last === front)
-        #expect(front.frame == CGRect(x: 0, y: 104, width: 174, height: 33))
+        #expect(front.frame == CGRect(x: 0, y: 220, width: 174, height: 33))
         #expect(back.alphaValue == OrbitTokens.MediaPlayer.stackDimmedOpacity)
         let card = front.titleView
         #expect(card.alphaValue == 0)
@@ -114,7 +114,7 @@ struct SidebarMediaPlayerTests {
         #expect(view.hitTest(NSPoint(x: 90, y: 10)) != nil)
         view.setHovered(true)
         #expect(view.progress == 1 && front.titleView.alphaValue == 1)
-        #expect(front.frame == CGRect(x: 0, y: 71, width: 174, height: 66) && back.frame.minY == 0)
+        #expect(front.frame == CGRect(x: 0, y: 129, width: 174, height: 124) && back.frame.minY == 0)
         view.apply([])
         #expect(view.isHidden && !view.isHovered && view.progress == 0 && relayouts == 2)
     }
@@ -151,5 +151,70 @@ struct SidebarMediaPlayerTests {
             #expect(OrbitGlyph.configuration(of: button.glyph)?.pointSize == 14.5)
         }
         #expect(OrbitGlyph.configuration(of: card.toggleButton.glyph)?.pointSize == 14)
+    }
+}
+
+@MainActor
+@Suite struct SidebarMediaAdditionsTests {
+    @Test func seekMappingAndThrottle() {
+        var seek = SidebarMediaSeekState(duration: 248, position: 102, offered: true)
+        seek.update(fraction: 0.5, now: 0)
+        #expect(seek.displayed == 124)
+        seek.position = 106
+        seek.update(fraction: 0.8, now: 0.01)
+        #expect(seek.displayed == 124)
+        seek.update(fraction: 2, now: 0.02, force: true)
+        #expect(seek.finish(cancel: false) == 248)
+        #expect(seek.displayed == 106)
+        seek.update(fraction: -1, now: 1)
+        #expect(seek.preview == 0 && seek.finish(cancel: true) == nil)
+        #expect(SidebarMediaSeekState.time(nil) == "—")
+        #expect(SidebarMediaSeekState.time(248) == "4:08")
+    }
+    @Test func interpolationRespectsPlaybackAndMotion() {
+        var seek = SidebarMediaSeekState(duration: 248, position: 102, offered: true)
+        seek.playbackRate = 2
+        let now = ProcessInfo.processInfo.systemUptime
+        #expect(abs((seek.currentPosition(now: now + 2, interpolate: true) ?? 0) - 106) < 0.1)
+        #expect(seek.currentPosition(now: now + 2, interpolate: false) == 102)
+        seek.update(fraction: 0.5, now: now)
+        #expect(seek.currentPosition(now: now + 2, interpolate: true) == 124)
+        _ = seek.finish(cancel: true)
+        seek.playbackRate = nil
+        #expect(seek.currentPosition(now: now + 2, interpolate: true) == 102)
+    }
+    @Test func capabilityTruth() {
+        for duration: Double? in [nil, 0, -1, .infinity, .nan] {
+            let seek = SidebarMediaSeekState(duration: duration, position: 10, offered: true)
+            #expect(!seek.canSeek && seek.finiteDuration == nil)
+        }
+        #expect(!SidebarMediaSeekState(duration: 100, position: nil, offered: true).canSeek)
+        #expect(!SidebarMediaSeekState(duration: 100, position: 10, offered: false).canSeek)
+        let card = SidebarMediaPlayerCard()
+        var model = item()
+        model.isMuted = true
+        card.apply(model)
+        #expect(card.muteButton.isEnabled && !card.volumeButton.isEnabled)
+        #expect(card.muteButton.symbol == "speaker.slash.fill" && !card.pipButton.isEnabled)
+        model.isMuted = false; model.pip = .ready
+        card.apply(model)
+        #expect(card.pipButton.isEnabled && card.muteButton.symbol == "speaker.wave.2.fill")
+        model.pip = .requesting
+        card.apply(model)
+        #expect(!card.pipButton.isEnabled)
+        model.pip = .failed
+        card.apply(model)
+        #expect(card.pipButton.isEnabled && card.audioStatus.stringValue == uiText("PiP failed"))
+    }
+    @Test func constrainedDeckAndRows() {
+        let frames = SidebarMediaPlayerLayout.cards(count: 2, width: 174, progress: 1, availableHeight: 200, focusedIndex: 1)
+        #expect(SidebarMediaPlayerLayout.expandedHeight(count: 2, availableHeight: 200) == 195)
+        #expect(frames[0].height == 66 && frames[1].height == 124)
+        let card = SidebarMediaPlayerCard()
+        card.place(SidebarMediaPlayerLayout.cards(count: 1, width: 174, progress: 1)[0])
+        #expect(card.timeline.frame == CGRect(x: 12, y: 0, width: 150, height: 30))
+        #expect(card.muteButton.frame == CGRect(x: 12, y: 30, width: 24, height: 28))
+        #expect(card.pipButton.frame == CGRect(x: 138, y: 30, width: 24, height: 28))
+        #expect(card.toggleButton.frame.midY == 107.5 && card.closeButton.frame.midY == 74.75)
     }
 }
