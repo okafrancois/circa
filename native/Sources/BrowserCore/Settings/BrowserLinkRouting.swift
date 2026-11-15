@@ -25,10 +25,22 @@ public struct BrowserLinkRoute: Identifiable, Codable, Equatable, Sendable {
     public func matches(_ url: URL) -> Bool {
         guard isValid, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
         switch match {
-        case .contains: return url.absoluteString.contains(value)
+        case .contains: return Self.routableAddress(of: url)?.contains(value) == true
         case .equals: return url.absoluteString == value
         case .host: return url.host?.caseInsensitiveCompare(value) == .orderedSame
         }
+    }
+}
+
+extension BrowserLinkRoute {
+    /// Scheme, host, port and path only. Credentials, query and fragment are chosen by whoever
+    /// wrote the link, so `https://evil.example/?next=github.com` must not reach a github route.
+    static func routableAddress(of url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(),
+              let host = components.percentEncodedHost?.lowercased(), !host.isEmpty else { return nil }
+        let port = components.port.map { ":\($0)" } ?? ""
+        return "\(scheme)://\(host)\(port)\(components.percentEncodedPath)"
     }
 }
 

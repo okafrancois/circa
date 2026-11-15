@@ -96,25 +96,14 @@ enum BrowserNavigationPolicy {
 
     /// Source documents may wrap one absolute HTTP(S) URL only. A file grant never authorizes
     /// a source wrapper, and nested wrappers must not inherit the inner document's permissions.
-    static func allowsViewSource(_ url: URL) -> Bool {
-        guard url.scheme?.lowercased() == "view-source",
-              let document = URL(string: String(url.absoluteString.dropFirst("view-source:".count))) else { return false }
-        return ["http", "https"].contains(document.scheme?.lowercased() ?? "")
-            && document.host?.isEmpty == false
-    }
+    static func allowsViewSource(_ url: URL) -> Bool { BrowserNavigableURL.isViewSourceOfWebDocument(url) }
 
     /// A Chrome extension document with a stable ID or an MV3 dynamic UUID, without credentials
     /// or port. Only an engine claiming `extensionDocuments` renders it; that engine's extension
     /// system decides access (installed and enabled, web-accessible resources, profile). The shell
     /// grants nothing more than not cancelling it, and never routes or downloads it.
-    static func isExtensionDocument(_ url: URL) -> Bool {
-        guard url.scheme?.lowercased() == "chrome-extension", let host = url.host,
-              url.user == nil, url.password == nil, url.port == nil else { return false }
-        let stableID = host.utf8.count == 32
-            && host.utf8.allSatisfy { (UInt8(ascii: "a")...UInt8(ascii: "p")).contains($0) }
-        let dynamicID = UUID(uuidString: host).map { $0.uuidString.lowercased() == host } ?? false
-        return stableID || dynamicID
-    }
+    static func isExtensionDocument(_ url: URL) -> Bool { BrowserNavigableURL.isExtensionDocument(url) }
+
     static func action<Surface: BrowserEngineSurface>(_ action: BrowserNavigationAction, surface: Surface,
         held: Bool, routesEnabled: Bool, hooks: BrowserSurfaceEventHooks<Surface>,
         extensionDocuments: Bool = false) -> BrowserNavigationActionPolicy {

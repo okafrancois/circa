@@ -19,6 +19,25 @@ struct BrowserLinkRoutingTests {
         #expect(!BrowserLinkRoute(value: "example.org", spaceID: space).matches(URL(string: "file:///example.org")!))
     }
 
+    @Test("Contains rules see scheme, host, port and path only, never credentials, query or fragment")
+    func containsIgnoresAttackerControlledParts() {
+        let space = SpaceID()
+        let github = BrowserLinkRoute(value: "github.com", spaceID: space)
+        for text in ["https://evil.example/?x=github.com", "https://evil.example/#github.com",
+                     "https://github.com@evil.example/", "https://github.com:secret@evil.example/path",
+                     "https://evil.example/login?next=https://github.com/"] {
+            #expect(!github.matches(URL(string: text)!), "\(text)")
+        }
+        #expect(github.matches(URL(string: "https://github.com/org/repo?tab=readme#top")!))
+        #expect(github.matches(URL(string: "https://gist.github.com/")!))
+        #expect(BrowserLinkRoute(value: "https://github.com/org", spaceID: space).matches(URL(string: "https://github.com/org/repo")!))
+        #expect(BrowserLinkRoute(value: "localhost:3000/app", spaceID: space).matches(URL(string: "http://localhost:3000/app/x")!))
+        #expect(!BrowserLinkRoute(value: "tab=readme", spaceID: space).matches(URL(string: "https://github.com/org?tab=readme")!))
+        var routing = BrowserLinkRouting()
+        routing.rules = [github]
+        #expect(routing.destination(for: URL(string: "https://evil.example/?x=github.com")!, availableSpaces: [space]) == .quickWindow)
+    }
+
     @Test("First available matching route wins and a missing destination falls back")
     func precedence() {
         let a = SpaceID(), b = SpaceID()

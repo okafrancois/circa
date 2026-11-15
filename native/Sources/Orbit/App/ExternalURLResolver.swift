@@ -7,7 +7,7 @@ enum ExternalURLResolver {
         guard url.isFileURL else {
             guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
                   let host = url.host, !host.isEmpty else { return nil }
-            return url
+            return withoutCredentials(url)
         }
         guard url.host == nil || url.host == "" || url.host?.lowercased() == "localhost" else { return nil }
         let kind = url.pathExtension.lowercased()
@@ -39,6 +39,17 @@ enum ExternalURLResolver {
         guard let destination, let resolved = URL(string: destination),
               let scheme = resolved.scheme?.lowercased(), ["http", "https"].contains(scheme),
               resolved.host != nil else { return nil }
-        return resolved
+        return withoutCredentials(resolved)
+    }
+
+    /// Another application can hand over `https://user:password@host/`. The credentials would
+    /// be sent to the site and hide the real host behind a familiar name, so drop them.
+    static func withoutCredentials(_ url: URL) -> URL? {
+        guard url.user != nil || url.password != nil else { return url }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        components.user = nil
+        components.password = nil
+        guard let stripped = components.url, stripped.host?.isEmpty == false else { return nil }
+        return stripped
     }
 }

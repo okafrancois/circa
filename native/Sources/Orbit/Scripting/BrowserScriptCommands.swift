@@ -96,6 +96,14 @@ final class CircaSetScriptCommand: NSSetCommand {
         guard !tabs.isEmpty else { throw BrowserScriptError.unavailable }
         guard let value = BrowserScriptingController.decodedScriptValue(evaluatedArguments?["Value"]) as? String,
               let url = URL(string: value), url.scheme != nil else { throw BrowserScriptError.invalidURL }
+        // A `javascript:` URL is script execution: same gates as "execute javascript", checked
+        // for every receiver before any tab is selected or changed.
+        if BrowserScriptingController.script(fromJavaScriptURL: url) != nil {
+            for tab in tabs {
+                try tab.window?.scripting?.validateNavigation(url, allowsScript: true)
+                guard tab.window?.canReadPrivateContent == true else { throw BrowserScriptError.privateContent }
+            }
+        }
         for tab in tabs { _ = try await tab.action(.navigate(url)) }
         return nil
     }
