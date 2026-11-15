@@ -9,6 +9,44 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.73.0-nightly.8/</id>
+    <title>0.73.0-nightly.8 — Live Calendar shows real event lengths and reminds you before meetings.</title>
+    <link href="https://circabrowser.com/changelog/0.73.0-nightly.8/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Live Calendar shows real event lengths and reminds you before meetings.
+
+1 new
+
+## New
+
+- Live Calendar now shows real event lengths, and three minutes before a meeting a reminder appears under your Favorites with a Join button (Google Meet, Zoom, Teams). Join only opens on click.
+
+## Known limits
+
+- Regular recurring events show their start time only and have no Join button.
+- Live Calendar shows only the primary calendar.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.73.0-nightly.8" data-version="0.73.0-nightly.8" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.73.0-nightly.8" aria-label="Link to version 0.73.0-nightly.8"&gt;0.73.0-nightly.8&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Live Calendar shows real event lengths and reminds you before meetings.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 new&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Live Calendar now shows real event lengths, and three minutes before a meeting a reminder appears under your Favorites with a Join button (Google Meet, Zoom, Teams). Join only opens on click.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Regular recurring events show their start time only and have no Join button.&lt;/li&gt;
+    &lt;li&gt;Live Calendar shows only the primary calendar.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.73.0-nightly.8/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.73.0-nightly.7/</id>
     <title>0.73.0-nightly.7 — Live Calendar works with any Google Calendar Favorite.</title>
     <link href="https://circabrowser.com/changelog/0.73.0-nightly.7/" />
