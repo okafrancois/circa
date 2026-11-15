@@ -34,7 +34,13 @@ private final class DownloadFileActionProbe: BrowserDownloadTransfer {
     func invalidate() {}
 }
 
+/// Paced transfers stop at a gate the test opens, never at a timer: this hidden, prohibited
+/// test process hosts the server, and App Nap or background throttling stretches its timers
+/// (a 32-step paced stream took several times longer under a background task policy).
 private final class DownloadFixtureServer: @unchecked Sendable {
+    /// Keeps this hidden test process out of App Nap while WebKit download fixtures run.
+    nonisolated(unsafe) private static let activity = ProcessInfo.processInfo.beginActivity(
+        options: .userInitiatedAllowingIdleSystemSleep, reason: "Synthetic WebKit download fixtures")
     static let payload = Data((0..<524_288).map { UInt8(($0 * 31 + 17) % 251) })
     private let listener: NWListener
     private let queue = DispatchQueue(label: "Orbit.NativeDownloads.HTTP")
@@ -46,12 +52,23 @@ private final class DownloadFixtureServer: @unchecked Sendable {
     private var gatedStreams: [(NWConnection, Int)] = []
     private var gatedBytesSent = 0
 
+    private var connections: [ObjectIdentifier: NWConnection] = [:]
+
     init() throws {
+        _ = Self.activity
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
         listener = try NWListener(using: parameters, on: .any)
         listener.newConnectionHandler = { [weak self] connection in
             guard let self else { connection.cancel(); return }
+            lock.withLock { connections[ObjectIdentifier(connection)] = connection }
+            connection.stateUpdateHandler = { [weak self] state in
+                switch state {
+                case .cancelled, .failed:
+                    self?.lock.withLock { _ = self?.connections.removeValue(forKey: ObjectIdentifier(connection)) }
+                default: break
+                }
+            }
             connection.start(queue: queue)
             receive(connection, buffer: Data())
         }
@@ -70,7 +87,19 @@ private final class DownloadFixtureServer: @unchecked Sendable {
         }
     }
 
-    func stop() { listener.cancel() }
+    func stop() {
+        listener.cancel()
+        let open = lock.withLock { () -> [NWConnection] in
+            defer { connections.removeAll(); gatedStreams.removeAll() }
+            return Array(connections.values)
+        }
+        open.forEach { $0.cancel() }
+    }
+
+    /// Server-side view for stall diagnostics.
+    var streamState: String {
+        lock.withLock { "server gate=\(isGateOpen ? "open" : "closed"), parked=\(gatedStreams.count), gated bytes=\(gatedBytesSent), open connections=\(connections.count)" }
+    }
     var observedRangeRequest: Bool { lock.withLock { requestHeaders.contains { $0.lowercased().contains("\r\nrange: bytes=") } } }
     func rangeRequestsHaveCookie(_ expected: String, excluding other: String) -> Bool {
         lock.withLock {
@@ -86,7 +115,8 @@ private final class DownloadFixtureServer: @unchecked Sendable {
         }
     }
 
-    /// Bytes `/gated` has handed to the network; it holds the rest until `openGate()`.
+    /// Bytes a paced stream (`/slow`, `/gated`, a resumed `/interrupt`) has handed to the
+    /// network; it holds the rest until `openGate()`.
     var gatedBytes: Int { lock.withLock { gatedBytesSent } }
 
     func openGate() {
@@ -97,7 +127,7 @@ private final class DownloadFixtureServer: @unchecked Sendable {
             return parked
         }
         for (connection, offset) in parked {
-            queue.async { [self] in stream(connection, offset: offset, slow: false, drop: false, gated: false) }
+            queue.async { [self] in stream(connection, offset: offset, drop: false, gated: false) }
         }
     }
 
@@ -168,7 +198,10 @@ private final class DownloadFixtureServer: @unchecked Sendable {
             if path == "/interrupt", offset == 0, !interrupted { interrupted = true; return true }
             return false
         }
-        stream(connection, offset: offset, slow: path != "/file" && path != "/gated", drop: drop, gated: path == "/gated")
+        // `/slow` and `/gated` pause after their first chunk; an `/interrupt` first attempt
+        // streams to its drop point, and its resumed attempt pauses before any byte.
+        let gated = path == "/slow" || path == "/gated" || (path == "/interrupt" && offset > 0)
+        stream(connection, offset: offset, drop: drop, gated: gated)
     }
 
     private func sendHeaders(_ connection: NWConnection, status: String, length: Int, type: String, extra: String) {
@@ -176,10 +209,11 @@ private final class DownloadFixtureServer: @unchecked Sendable {
         connection.send(content: Data(value.utf8), completion: .contentProcessed { _ in })
     }
 
-    private func stream(_ connection: NWConnection, offset: Int, slow: Bool, drop: Bool, gated: Bool = false) {
+    private func stream(_ connection: NWConnection, offset: Int, drop: Bool, gated: Bool, start: Int? = nil) {
         if drop && offset >= 131_072 { connection.cancel(); return }
         guard offset < Self.payload.count else { connection.cancel(); return }
-        if gated && offset >= 16_384 {
+        let start = start ?? offset
+        if gated && (offset >= 16_384 || start > 0) {
             let parked: Bool = lock.withLock {
                 gatedBytesSent = offset
                 guard !isGateOpen else { return false }
@@ -191,9 +225,7 @@ private final class DownloadFixtureServer: @unchecked Sendable {
         let end = min(offset + 16_384, Self.payload.count)
         connection.send(content: Self.payload.subdata(in: offset..<end), completion: .contentProcessed { [weak self] error in
             guard let self, error == nil else { connection.cancel(); return }
-            queue.asyncAfter(deadline: .now() + (slow ? 0.04 : 0)) { [weak self] in
-                self?.stream(connection, offset: end, slow: slow, drop: drop, gated: gated)
-            }
+            queue.async { [weak self] in self?.stream(connection, offset: end, drop: drop, gated: gated, start: start) }
         })
     }
 }
@@ -718,8 +750,10 @@ struct NativeDownloadTests {
         ) { other.webView.title == "Synthetic Downloads" }
         _ = try await other.webView.evaluateJavaScript("document.cookie='download_profile=synthetic-b; path=/';")
         try environment.downloads.coordinator.perform(.resume, in: interrupted.context)
+        // The resumed attempt pauses before its first byte until the gate opens.
+        server.openGate()
         try await waitForNativeState("environment.downloads.coordinator.snapshot(for: interrupted.key)?.state == .complete",
-            observed: { nativeDownloadState(environment.downloads.coordinator.snapshot(for: interrupted.key)) }
+            observed: { nativeDownloadState(environment.downloads.coordinator.snapshot(for: interrupted.key)) + ", " + server.streamState }
         ) { environment.downloads.coordinator.snapshot(for: interrupted.key)?.state == .complete }
         let complete = try #require(environment.downloads.coordinator.snapshot(for: interrupted.key))
         #expect(complete.owner.profileID == profile)
@@ -750,8 +784,10 @@ struct NativeDownloadTests {
         controller.window?.close()
         await controller.session.waitForPendingCommands()
         #expect(controller.session.isClosed)
+        // The transfer was held mid-stream while its source window retired; let it finish now.
+        server.openGate()
         try await waitForNativeState("environment.downloads.coordinator.snapshot(for: active.key)?.state == .complete",
-            observed: { nativeDownloadState(environment.downloads.coordinator.snapshot(for: active.key)) }
+            observed: { nativeDownloadState(environment.downloads.coordinator.snapshot(for: active.key)) + ", " + server.streamState }
         ) { environment.downloads.coordinator.snapshot(for: active.key)?.state == .complete }
         let complete = try #require(environment.downloads.coordinator.snapshot(for: active.key))
         #expect(complete.owner == active.owner)
@@ -791,7 +827,7 @@ struct NativeDownloadTests {
         #expect(server.gatedBytes < DownloadFixtureServer.payload.count)
         server.openGate()
         try await waitForNativeState("environment.downloads.coordinator.snapshot(for: active.key)?.state == .complete",
-            observed: { nativeDownloadState(environment.downloads.coordinator.snapshot(for: active.key)) + ", " + nativeWebKitNetworkingState(store) }
+            observed: { nativeDownloadState(environment.downloads.coordinator.snapshot(for: active.key)) + ", " + nativeWebKitNetworkingState(store) + ", " + server.streamState }
         ) { environment.downloads.coordinator.snapshot(for: active.key)?.state == .complete }
         let complete = try #require(environment.downloads.coordinator.snapshot(for: active.key))
         #expect(complete.owner == active.owner)
