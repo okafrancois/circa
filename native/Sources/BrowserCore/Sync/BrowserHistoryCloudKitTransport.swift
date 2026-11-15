@@ -11,6 +11,10 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
         var dirty: Set<String> = []
         var deleting: Set<String> = []
         var systemFields: [String: Data] = [:]
+        /// Records deleted remotely (by a retraction here or elsewhere), with their natural expiry.
+        /// A local store may still list one until it applies the matching tombstone; it is never
+        /// uploaded again. Optional so caches written by earlier builds still decode.
+        var retired: [String: Date]?
     }
     private struct EngineCheckpoint: Codable {
         var stateDigest: Data
@@ -105,11 +109,13 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
             state.deleting.insert(id)
             state.records.removeValue(forKey: id); state.dirty.remove(id)
         }
+        retract(records, cutoff: cutoff, now: now)
         var pending: [CKSyncEngine.PendingRecordZoneChange] = state.deleting.map {
             .deleteRecord(.init(recordName: $0, zoneID: zone))
         }
         for record in records where record.expires >= cutoff {
             let id = record.id.uuidString
+            guard state.retired?[id] == nil else { continue }
             if let old = state.records[id] {
                 guard old == record else { throw BrowserSyncError.invalidRecord }
             } else {
@@ -128,6 +134,33 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
         lastInput = records; lastExchange = now; exchangedRevision = remoteRevision
         return Array(state.records.values)
     }
+
+    /// The history store dropped these batches because they carried deleted history: delete the
+    /// records remotely and from this cache file, once. Expired retirement entries are forgotten.
+    func retract(_ records: [BrowserHistorySyncBatch], cutoff: Date, now: Date) {
+        var retired = state.retired ?? [:]
+        let before = retired
+        retired = retired.filter { $0.value >= cutoff }
+        for notice in records where notice.isRetraction {
+            let id = notice.id.uuidString
+            guard retired[id] == nil else { continue }
+            if let record = state.records[id], record.profileID != notice.profileID { continue }
+            retired[id] = state.records[id]?.expires ?? now.addingTimeInterval(BrowserHistorySyncSchema.retention)
+            state.deleting.insert(id)
+            state.records.removeValue(forKey: id); state.dirty.remove(id)
+        }
+        if retired != before { state.retired = retired }
+    }
+
+    /// A record deleted remotely is never uploaded again by this Mac.
+    func remoteDeletion(_ id: String) {
+        guard let record = state.records.removeValue(forKey: id) else { return }
+        remoteRevision += 1
+        state.retired = (state.retired ?? [:]).merging([id: record.expires]) { $1 }
+    }
+
+    var cachedRecordIDs: Set<String> { Set(state.records.keys) }
+    var pendingDeletions: Set<String> { state.deleting }
 
     public func nextFetchChangesOptions(_ context: CKSyncEngine.FetchChangesContext,
                                         syncEngine: CKSyncEngine) async -> CKSyncEngine.FetchChangesOptions {
@@ -166,6 +199,8 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
         guard record.recordID.zoneID == zone, record.recordType == BrowserHistorySyncSchema.recordType,
               let bytes = record["payload"] as? Data, bytes.count <= BrowserHistorySyncSchema.maximumBytes else { throw BrowserSyncError.invalidRecord }
         let incoming = try JSONDecoder().decode(BrowserHistorySyncBatch.self, from: bytes)
+        // A retracted record fetched again before its deletion lands stays out of the cache.
+        guard state.retired?[incoming.id.uuidString] == nil else { return }
         if state.records[incoming.id.uuidString] != incoming {
             validations += 1
             try incoming.validate(encodedSize: bytes.count)
@@ -197,7 +232,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
                 // Physical pruning removes expired transport cache only, never local visits.
                 for deletion in event.deletions where deletion.recordID.zoneID == zone {
                     let id = deletion.recordID.recordName
-                    if state.records[id] != nil { state.records.removeValue(forKey: id); remoteRevision += 1 }
+                    remoteDeletion(id)
                     if state.systemFields[id] != nil { state.systemFields.removeValue(forKey: id) }
                 }
                 try persist()
@@ -213,6 +248,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
                 }
                 for id in event.deletedRecordIDs {
                     if state.deleting.contains(id.recordName) { state.deleting.remove(id.recordName) }
+                    if state.records[id.recordName] != nil { state.records.removeValue(forKey: id.recordName) }
                     if state.systemFields[id.recordName] != nil { state.systemFields.removeValue(forKey: id.recordName) }
                 }
                 for failed in event.failedRecordDeletes.values where failed.code != .unknownItem { throw failed }

@@ -30,6 +30,7 @@ struct BrowserHistoryFaviconTests {
     // that differs from its visit. No user data or external fixture is involved.
     private func legacy(_ db: HistoryDatabase, profile: ProfileID, count: Int, malformed: Bool = false, inlineEvents: Bool = true) throws {
         try db.execute("DROP TABLE favicons")
+        try db.discardJournalPurgeSchemaForLegacyFixture()
         try db.execute("UPDATE identity SET version=7")
         try db.execute("PRAGMA user_version=7")
         try db.transaction {
@@ -67,7 +68,8 @@ struct BrowserHistoryFaviconTests {
         let migrated = try HistoryDatabase(url: file, profileID: profile)
         #expect(try migrated.scalarInt("SELECT count(*) FROM favicons") == 1)
         #expect(try migrated.scalarInt("SELECT count(*) FROM visits WHERE payload LIKE '%data:image%'") == 0)
-        #expect(try migrated.scalarInt("SELECT count(*) FROM historySyncEvents WHERE payload LIKE '%data:image%'") == 1025)
+        // The version-nine journal cleanup drops the event of the visit deleted outside the store.
+        #expect(try migrated.scalarInt("SELECT count(*) FROM historySyncEvents WHERE payload LIKE '%data:image%'") == 1024)
         let stored = URL(string: try migrated.scalarText("SELECT favicon FROM pages LIMIT 1"))!
         #expect(try migrated.resolveFavicon(stored) == icon)
         try migrated.close()
