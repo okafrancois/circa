@@ -82,7 +82,7 @@ enum OrbitGmailProbe {
             checks["profileCookieFeed"] = inbox?.unreadCount == 3 && inbox?.messages.count == 3
             checks["decodedText"] = inbox?.messages.first?.subject == "One & Two" && inbox?.messages.first?.summary.hasPrefix("Plain <safe> text") == true
             guard let tile = owner.favorites.grid.tiles.first(where: { $0.item.tab.id == id }) else { return ["missingTile": true] }
-            checks["badgeCount"] = tile.item.gmailUnreadCount == 3 && tile.item.showsGmailBadge
+            checks["badgeCount"] = tile.item.unreadCount == 3 && tile.item.showsUnreadBadge
             let selected = owner.session.organization?.selectedTab?.id
             let responder = window.firstResponder
             guard owns(), let hover = NSEvent.enterExitEvent(with: .mouseEntered, location: tile.convert(.zero, to: nil), modifierFlags: [],
@@ -131,7 +131,7 @@ enum OrbitGmailProbe {
                 await wait { settings.document.profile(profile).hiddenGmailBadges.contains(id) }
                 owner.favorites.render()
                 checks["badgeSettingSaved"] = settings.document.profile(profile).hiddenGmailBadges.contains(id)
-                checks["badgeHidden"] = owner.favorites.grid.tiles.first(where: { $0.item.tab.id == id })?.item.showsGmailBadge == false
+                checks["badgeHidden"] = owner.favorites.grid.tiles.first(where: { $0.item.tab.id == id })?.item.showsUnreadBadge == false
             }
             surface.navigate(to: base.appendingPathComponent("seed"))
             await wait { !surface.navigationState.isLoading && surface.navigationState.committedURL?.path == "/seed" }

@@ -83,6 +83,68 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct NativeFavoritesTests {
+    @Test("Live title events update the retained Favorite badge and closing clears cached counts")
+    func liveTitleBadges() async throws {
+        let h = try await FavoritesHarness(); defer { h.close() }
+        let id = try await h.add("https://inbox.example.test/")
+        let window = h.window
+        let surface = try #require(window.session.selectedSurface)
+        let tile = try #require(window.favorites.grid.tiles.first)
+        for (title, count) in [("Inbox", nil), ("(3) Inbox", 3), ("(12) Inbox", 12), ("Inbox", nil)] {
+            surface.pageTitle = title
+            try await Task.sleep(for: .milliseconds(60))
+            await h.settle()
+            #expect(window.favorites.grid.tiles.first === tile)
+            #expect(tile.item.unreadCount == count)
+        }
+        surface.pageTitle = "(99+) Inbox"
+        try await Task.sleep(for: .milliseconds(60))
+        await h.settle()
+        #expect(tile.item.unreadCount == 99)
+        surface.isSuspended = true
+        surface.onChange?()
+        try await Task.sleep(for: .milliseconds(60))
+        await h.settle()
+        #expect(tile.item.unreadCount == nil)
+        surface.isSuspended = false
+        surface.onChange?()
+        try await Task.sleep(for: .milliseconds(60))
+        await h.settle()
+        #expect(tile.item.unreadCount == 99)
+        window.session.closeTabs([id])
+        await h.settle()
+        #expect(!tile.item.tab.isLoadedInThisWindow)
+        #expect(tile.item.unreadCount == nil)
+    }
+
+    @Test("Pinned title metadata updates its existing dot without adding badges to Today")
+    func pinnedTitleBadges() async throws {
+        let h = try await FavoritesHarness(); defer { h.close() }
+        let id = try await h.add("https://inbox.example.test/")
+        let window = h.window
+        let surface = try #require(window.session.selectedSurface)
+        surface.media = .init(playback: .paused, isAudible: false, isAudioMuted: false)
+        window.siteControls.refreshMedia(surface)
+        window.session.moveItems([.tab(id)], to: .init(.pinned(h.spaceID), position: .start))
+        await h.settle()
+        #expect(window.favorites.grid.items.isEmpty)
+        for (title, visible) in [("(3) Inbox", true), ("(12) Inbox", true), ("Inbox", false)] {
+            surface.pageTitle = title
+            try await Task.sleep(for: .milliseconds(60))
+            await h.settle()
+            let row = try #require(window.sidebar.page.list.tabRows.first { $0.item.id == id })
+            let dot = try #require(row.subviews.first { $0.identifier?.rawValue == "gmail-unread" })
+            #expect(dot.isHidden == !visible)
+        }
+        window.session.moveItems([.tab(id)], to: .init(.today(h.spaceID), position: .start))
+        await h.settle()
+        surface.pageTitle = "(3) Inbox"
+        try await Task.sleep(for: .milliseconds(60))
+        await h.settle()
+        let row = try #require(window.sidebar.page.list.tabRows.first { $0.item.id == id })
+        #expect(row.subviews.first { $0.identifier?.rawValue == "gmail-unread" }?.isHidden == true)
+    }
+
     @Test("Favorite tiles use measured height, gap and icon-only letter placeholders")
     func measuredGrid() {
         let profile = ProfileID()

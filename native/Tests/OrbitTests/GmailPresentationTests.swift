@@ -12,17 +12,17 @@ struct GmailPresentationTests {
             occurrenceID: nil, isLoadedInThisWindow: false, isSelected: false, isOpenInAnotherWindow: false), favicon: nil)
     }
 
-    @Test("The unread indicator is specific to mail and clears when a retained tile loses its inbox")
+    @Test("The unread indicator clears when a retained tile loses its count")
     func tileBadge() throws {
-        var item = item(); item.gmailUnreadCount = 3
+        var item = item(); item.unreadCount = 3
         let tile = FavoriteTileView(item: item)
         tile.frame = .init(x: 0, y: 0, width: 70, height: 47)
         tile.layoutSubtreeIfNeeded()
         let badge = try #require(tile.subviews.first { $0.identifier?.rawValue == "gmail-unread" })
         #expect(!badge.isHidden && badge.frame.size == NSSize(width: 6, height: 6))
-        item.showsGmailBadge = false; tile.update(item)
+        item.showsUnreadBadge = false; tile.update(item)
         #expect(badge.isHidden)
-        item.showsGmailBadge = true; item.gmailUnreadCount = nil; tile.update(item)
+        item.showsUnreadBadge = true; item.unreadCount = nil; tile.update(item)
         #expect(badge.isHidden)
     }
 

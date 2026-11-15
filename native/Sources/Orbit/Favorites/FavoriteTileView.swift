@@ -20,8 +20,8 @@ struct FavoriteTileItem: Equatable {
     var isLoading = false
     var isAudible: Bool?
     var isAudioMuted: Bool?
-    var gmailUnreadCount: Int?
-    var showsGmailBadge = true
+    var unreadCount: Int?
+    var showsUnreadBadge = true
 
     var title: String { tab.title ?? tab.pinnedURL?.host ?? tab.url.host ?? uiText("Favorite") }
     var placeholder: String {
@@ -65,7 +65,7 @@ final class FavoriteTileView: NSView {
         letter.layer?.cornerRadius = 4
         letter.layer?.masksToBounds = true
         // Generic audio/loading/address glyphs stay in accessibility and the context menu.
-        // The service-specific unread indicator is enabled independently.
+        // The unread indicator is enabled independently.
         unread.wantsLayer = true
         unread.identifier = .init("gmail-unread")
         unread.layer?.cornerRadius = 3
@@ -91,7 +91,7 @@ final class FavoriteTileView: NSView {
             favicon.contentTintColor = presentation?.image.isTemplate == true ? OrbitTokens.Color.Text.primary : nil
         }
         self.item = item
-        unread.isHidden = !item.showsGmailBadge || (item.gmailUnreadCount ?? 0) == 0
+        unread.isHidden = !item.showsUnreadBadge || (item.unreadCount ?? 0) == 0
         favicon.isHidden = item.favicon == nil
         letter.stringValue = item.placeholder
         letter.layer?.backgroundColor = OrbitTokens.Color.Text.secondary.withAlphaComponent(0.18).cgColor
@@ -107,7 +107,7 @@ final class FavoriteTileView: NSView {
         if item.isAudioMuted == true { states.append(uiText("Muted")) }
         else if item.isAudible == true { states.append(uiText("Playing Audio")) }
         if !item.tab.isLoadedInThisWindow { states.append(uiText("Not Loaded")) }
-        if let count = item.gmailUnreadCount { states.append(String(format: uiText("Unread: %d"), count)) }
+        if let count = item.unreadCount { states.append(String(format: uiText("Unread: %d"), count)) }
         setAccessibilityValue(states.joined(separator: ", "))
         setAccessibilityHelp(item.tab.isAwayFromPinnedURL ? uiText("Use the menu to reset the favorite to its original URL.") : nil)
         toolTip = item.title

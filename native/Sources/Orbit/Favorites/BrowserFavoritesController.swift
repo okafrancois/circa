@@ -194,24 +194,45 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             let surface = surfacesByTab[tab.id]?.value
             let media = surface.flatMap { owner.siteControls.mediaStates[ObjectIdentifier($0)] }
             let icon = icons.image(for: tab, surface: surface, isOwned: { [weak owner] in owner?.owns($0) == true })
-            let account = BrowserGmailAccount(url: tab.pinnedURL ?? tab.url)
-            let count = account.flatMap { gmail.states[$0]?.inbox?.unreadCount }
-            let badges = snapshot.flatMap { owner.settingsPreferences?.runtime.document.profile($0.profileID).hiddenGmailBadges } ?? []
+            let badge = unreadBadge(for: tab)
             return FavoriteTileItem(tab: tab, favicon: icon, isLoading: surface?.navigationState.isLoading == true,
                                     isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted,
-                                    gmailUnreadCount: count, showsGmailBadge: !badges.contains(tab.id))
+                                    unreadCount: badge.count, showsUnreadBadge: badge.showsBadge)
         }
         grid.commandsEnabled = !owner.isPreparingForTermination && !session.isClosed
         grid.minimumTileWidth = owner.sidebar.favoriteMinimumTileWidth
         owner.sidebar.favoriteCount = items.count
         grid.accent = owner.sidebar.currentThemeAccent
         grid.render(items, profileID: snapshot?.profileID)
-        let hidden = snapshot.flatMap { owner.settingsPreferences?.runtime.document.profile($0.profileID).hiddenGmailBadges } ?? []
-        for row in owner.sidebar.page.list.tabRows {
-            let account = owner.session.organizationTab(row.item.id).flatMap { $0.section.keepsPinnedURL ? BrowserGmailAccount(url: $0.pinnedURL ?? $0.url) : nil }
-            row.setGmailUnread(count: account.flatMap { gmail.states[$0]?.inbox?.unreadCount }, showsBadge: !hidden.contains(row.item.id))
-        }
+        updatePinnedBadges()
         gmailPreview.reconcile()
+    }
+
+    private func unreadBadge(for tab: BrowserOrganizationTabItem) -> FavoriteUnreadBadge {
+        guard let owner else {
+            return FavoriteUnreadBadge(tab: tab, liveTitle: nil, gmailCount: nil, isPrivateWindow: true, hidden: [])
+        }
+        let surface = tab.occurrenceID.flatMap { owner.session.surface(for: $0) }
+        let liveTitle = surface.flatMap { owner.owns($0) && !$0.isDisposed && !$0.isSuspended ? $0.navigationState.title : nil }
+        let account = BrowserGmailAccount(url: tab.pinnedURL ?? tab.url)
+        let hidden = owner.session.organization.map {
+            owner.settingsPreferences?.runtime.document.profile($0.profileID).hiddenGmailBadges ?? []
+        } ?? []
+        return FavoriteUnreadBadge(tab: tab, liveTitle: liveTitle,
+            gmailCount: account.flatMap { gmail.states[$0]?.inbox?.unreadCount },
+            isPrivateWindow: owner.isPrivateWindow, hidden: hidden)
+    }
+
+    private func updatePinnedBadges(_ ids: Set<TabID>? = nil) {
+        guard let owner else { return }
+        for row in owner.sidebar.page.list.tabRows where ids?.contains(row.item.id) != false {
+            guard let tab = owner.session.organizationTab(row.item.id) else {
+                row.setGmailUnread(count: nil, showsBadge: true)
+                continue
+            }
+            let badge = unreadBadge(for: tab)
+            row.setGmailUnread(count: badge.count, showsBadge: badge.showsBadge)
+        }
     }
 
     func applyMetadata(_ ids: Set<TabID>) {
@@ -220,13 +241,15 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             guard ids.contains(item.tab.id), let tab = owner.session.organizationTab(item.tab.id) else { return nil }
             let surface = tab.occurrenceID.flatMap { owner.session.surface(for: $0) }
             let media = surface.flatMap { owner.siteControls.mediaStates[ObjectIdentifier($0)] }
+            let badge = unreadBadge(for: tab)
             return FavoriteTileItem(tab: tab,
                 favicon: icons.image(for: tab, surface: surface, isOwned: { [weak owner] in owner?.owns($0) == true }),
                 isLoading: surface?.navigationState.isLoading == true,
                 isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted,
-                gmailUnreadCount: item.gmailUnreadCount, showsGmailBadge: item.showsGmailBadge)
+                unreadCount: badge.count, showsUnreadBadge: badge.showsBadge)
         }
         grid.applySelection(items)
+        updatePinnedBadges(ids)
     }
 
     func applySelection(_ ids: Set<TabID>) {
@@ -235,7 +258,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             guard ids.contains(item.tab.id), let tab = owner.session.organizationTab(item.tab.id) else { return nil }
             return FavoriteTileItem(tab: tab, favicon: item.favicon, isLoading: item.isLoading,
                 isAudible: item.isAudible, isAudioMuted: item.isAudioMuted,
-                gmailUnreadCount: item.gmailUnreadCount, showsGmailBadge: item.showsGmailBadge)
+                unreadCount: item.unreadCount, showsUnreadBadge: item.showsUnreadBadge)
         }
         grid.applySelection(items)
     }
@@ -297,7 +320,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         controller.menu.addItem(original[0])
         controller.menu.addItem(owner.tabShareMenu(for: tab))
         controller.menu.addItem(.separator())
-        if let badge = gmailBadgeMenu(for: id) {
+        if let badge = unreadBadgeMenu(for: id) {
             controller.retainedOwners.append(badge)
             controller.menu.addItem(badge.item)
             controller.menu.addItem(.separator())
@@ -326,17 +349,17 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         return controller.menu
     }
 
-    func gmailBadgeMenu(for id: TabID) -> GmailBadgeMenu? {
+    func unreadBadgeMenu(for id: TabID) -> GmailBadgeMenu? {
         guard let owner, !owner.isPrivateWindow, let snapshot = owner.session.organization,
               let tab = snapshot.tab(id), tab.section.keepsPinnedURL,
-              let account = BrowserGmailAccount(url: tab.pinnedURL ?? tab.url),
               let runtime = owner.settingsPreferences?.runtime else { return nil }
+        let pinnedURL = tab.pinnedURL ?? tab.url
         return GmailBadgeMenu(tab: id, profile: snapshot.profileID, runtime: runtime,
             permitted: { [weak owner] in
                 guard let owner, owner.acceptsCommands, !owner.session.isClosed,
                       let current = owner.session.organization, current.profileID == snapshot.profileID,
                       current.spaceID == snapshot.spaceID, let tab = current.tab(id), tab.section.keepsPinnedURL else { return false }
-                return BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) == account
+                return !owner.isPrivateWindow && (tab.pinnedURL ?? tab.url) == pinnedURL
             }, changed: { [weak self] in self?.render() },
             failed: { [weak owner] in owner?.session.onError?($0) })
     }
