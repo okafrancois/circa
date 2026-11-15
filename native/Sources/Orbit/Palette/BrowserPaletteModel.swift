@@ -110,7 +110,7 @@ enum BrowserPaletteRanking {
             text = title + " " + (result.url.map(BrowserSuggestionText.searchableURL) ?? "")
             words = title.split { !$0.isLetter && !$0.isNumber }
             canonical = result.url.map(canonicalURL)
-            var value = BrowserSuggestionText.fold(result.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.host } ?? "")
+            var value = result.url.map(BrowserHostDisplay.asciiHost) ?? ""
             if value.hasPrefix("www.") { value = String(value.dropFirst(4)) }
             host = value
         }
@@ -324,7 +324,8 @@ enum BrowserPaletteRanking {
         }
         if BrowserSuggestionText.fold(result.title) == text { return true }
         guard text.count >= 3, !text.contains(where: \.isWhitespace), let url = result.url else { return false }
-        var host = BrowserSuggestionText.fold(URLComponents(url: url, resolvingAgainstBaseURL: false)?.host ?? "")
+        // Match on the ASCII host: a diacritic or lookalike host is never the typed site.
+        var host = BrowserHostDisplay.asciiHost(url)
         if host.hasPrefix("www.") { host = String(host.dropFirst(4)) }
         var term = text
         if let range = term.range(of: "://") { term = String(term[range.upperBound...]) }

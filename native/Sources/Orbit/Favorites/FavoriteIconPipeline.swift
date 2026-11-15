@@ -1,18 +1,16 @@
 import AppKit
 import BrowserCore
 import BrowserEngine
-import ImageIO
 
 /// Prefers the owned Chromium surface, with a profile-local persistent cache for dormant tiles.
 @MainActor
 final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
     typealias Resolver = @MainActor (Surface, URL) async -> NSImage?
     /// Injected resolvers must capture UI owners weakly and honor task cancellation.
+    /// Only engine-decoded pixels are shown; a page-declared `data:` URL is never decoded.
     var resolve: Resolver = { surface, url in
-        if let image = surface.navigationState.faviconImage, image.sourceURL == url {
-            return await image.nativeImage()
-        }
-        return inlineImage(url)
+        guard let image = surface.navigationState.faviconImage, image.sourceURL == url else { return nil }
+        return await image.nativeImage()
     }
     var onChange: (() -> Void)?
     var onTabChange: ((TabID) -> Void)?
@@ -150,23 +148,4 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
         for id in Array(cachedIcons.keys) where !ids.contains(id) { cachedIcons.removeValue(forKey: id)?.task?.cancel() }
     }
     func clear() { retain([]) }
-
-    static func inlineImage(_ url: URL) -> NSImage? {
-        guard url.scheme == "data", url.absoluteString.utf8.count <= 262_144,
-              let comma = url.absoluteString.firstIndex(of: ",") else { return nil }
-        let header = url.absoluteString[..<comma].lowercased()
-        guard header.hasPrefix("data:image/"), header.hasSuffix(";base64"),
-              let data = Data(base64Encoded: String(url.absoluteString[url.absoluteString.index(after: comma)...])),
-              data.count <= 131_072,
-              let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
-              CGImageSourceGetCount(source) == 1,
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              width > 0, height > 0, width <= 512, height <= 512,
-              let image = BrowserIconRaster.image(data: data),
-              image.size.width > 0, image.size.height > 0,
-              image.size.width <= 512, image.size.height <= 512 else { return nil }
-        return image
-    }
 }

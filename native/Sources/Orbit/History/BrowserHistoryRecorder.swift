@@ -134,10 +134,11 @@ final class BrowserHistoryRecorder {
         }
     }
 
-    private static func encodeFavicon(_ image: BrowserFaviconImage?, fallback: URL?) async -> URL? {
+    static func encodeFavicon(_ image: BrowserFaviconImage?, fallback: URL?) async -> URL? {
         await Task.detached(priority: .utility) {
             if let image { return BrowserHistoryFavicon.reference(png: image.png) }
-            return fallback.flatMap { BrowserHistoryFavicon.accepts($0) ? $0 : nil }
+            // A page-declared data URL is never stored: only engine pixels or a never-fetched web URL.
+            return fallback.flatMap { ["http", "https"].contains($0.scheme?.lowercased() ?? "") && BrowserHistoryFavicon.accepts($0) ? $0 : nil }
         }.value
     }
 

@@ -599,7 +599,7 @@ extension BrowserSiteControls {
                     return extensionContextMenu?(item, surface)
                 }
                 if let encoded = item.iconPNGBase64, encoded.count < 512 * 1024,
-                   let data = Data(base64Encoded: encoded), let image = NSImage(data: data) {
+                   let data = Data(base64Encoded: encoded), let image = BrowserIconRaster.image(data: data, pixels: 32, size: 16) {
                     image.size = NSSize(width: 16, height: 16); tile.image = image
                 } else { tile.image = OrbitGlyph.symbol("puzzlepiece.extension", pointSize: 16) }
                 tile.isEnabled = original?.isEnabled == true

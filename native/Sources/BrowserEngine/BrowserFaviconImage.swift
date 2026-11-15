@@ -12,13 +12,9 @@ public struct BrowserFaviconImage: Equatable, Sendable {
     public static let maximumDimension = 128
 
     public init?(sourceURL: URL, png: Data) {
-        guard Self.allowsSourceURL(sourceURL), png.count <= Self.maximumBytes, png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]),
-              let source = CGImageSourceCreateWithData(png as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
-              CGImageSourceGetCount(source) == 1,
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              width > 0, height > 0, width <= Self.maximumDimension, height <= Self.maximumDimension else { return nil }
+        guard Self.allowsSourceURL(sourceURL),
+              BrowserUntrustedImage.source(png, allowing: [.png], maximumBytes: Self.maximumBytes, maximumFrames: 1,
+                                           maximumDimension: Self.maximumDimension) != nil else { return nil }
         self.sourceURL = sourceURL
         self.png = png
         contentHash = SHA256.hash(data: png).map { String(format: "%02x", $0) }.joined()
@@ -51,11 +47,9 @@ private actor FaviconDecoder {
     static let shared = FaviconDecoder()
     func decode(_ data: Data) -> DecodedFavicon? {
         guard !Task.isCancelled,
-              let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: 64,
-                kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
+              let image = BrowserUntrustedImage.thumbnail(data, allowing: [.png], maximumBytes: BrowserFaviconImage.maximumBytes,
+                                                          maximumPixelSize: 64, maximumFrames: 1,
+                                                          maximumDimension: BrowserFaviconImage.maximumDimension) else { return nil }
         return DecodedFavicon(image: image)
     }
 }

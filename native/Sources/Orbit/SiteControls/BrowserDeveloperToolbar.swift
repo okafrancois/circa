@@ -252,7 +252,8 @@ final class BrowserDeveloperToolbar: NSView {
             badges[item.id]?.text = item.actionState?.badgeText ?? item.actionBadgeText
             badges[item.id]?.backgroundARGB = item.actionState?.badgeBackgroundColor
             button.isEnabled = item.actionState?.isEnabled != false
-            if let encoded = item.actionState?.iconPNGBase64 ?? item.iconPNGBase64, let data = Data(base64Encoded: encoded), let image = NSImage(data: data) {
+            if let encoded = item.actionState?.iconPNGBase64 ?? item.iconPNGBase64, encoded.count < 512 * 1024,
+               let data = Data(base64Encoded: encoded), let image = BrowserIconRaster.image(data: data, pixels: 28, size: 14) {
                 image.size = NSSize(width: 14, height: 14); button.image = image
             }
         }

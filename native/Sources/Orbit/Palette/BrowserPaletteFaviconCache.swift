@@ -5,7 +5,7 @@ import ImageIO
 
 private struct PaletteDecodedImage: @unchecked Sendable { let image: CGImage }
 
-/// Decodes bounded inline engine images on a utility task. No URL loading or shared-profile
+/// Decodes bounded engine PNG references through `BrowserUntrustedImage` on a utility task. No URL loading or shared-profile
 /// image request is permitted here; image objects are cached on the main actor after decoding.
 @MainActor
 final class BrowserPaletteFaviconCache {
@@ -30,9 +30,11 @@ final class BrowserPaletteFaviconCache {
         await notificationTask?.value
     }
 
+    /// Accepts profile-local history addresses and the PNG references built from engine pixels.
+    /// Page-declared favicon URLs are never decoded here: rows without engine pixels keep the
+    /// placeholder.
     func image(for url: URL, resolve: (@MainActor () async -> URL?)? = nil) -> NSImage? {
-        guard BrowserHistoryFavicon.isStoredReference(url) ||
-              (url.scheme == "data" && url.absoluteString.utf8.count <= 262_144) else { return nil }
+        guard BrowserHistoryFavicon.isStoredReference(url) || BrowserHistoryFavicon.png(url) != nil else { return nil }
         return cached(key: url.absoluteString) {
             if BrowserHistoryFavicon.isStoredReference(url) { return await resolve?() }
             return url
@@ -78,20 +80,9 @@ final class BrowserPaletteFaviconCache {
     }
 
     private nonisolated static func decode(_ url: URL, pixels: Int) -> PaletteDecodedImage? {
-        let text = url.absoluteString
-        guard let comma = text.firstIndex(of: ",") else { return nil }
-        let header = text[..<comma].lowercased()
-        guard header.hasPrefix("data:image/"), header.hasSuffix(";base64"),
-              let data = Data(base64Encoded: String(text[text.index(after: comma)...])), data.count <= 131_072,
-              let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              (1...512).contains(width), (1...512).contains(height),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceShouldCacheImmediately: true,
-                kCGImageSourceThumbnailMaxPixelSize: pixels
-              ] as CFDictionary) else { return nil }
+        guard let png = BrowserHistoryFavicon.png(url),
+              let image = BrowserUntrustedImage.thumbnail(png, allowing: [.png], maximumBytes: BrowserFaviconImage.maximumBytes,
+                                                          maximumPixelSize: pixels, maximumFrames: 1, maximumDimension: 512) else { return nil }
         return PaletteDecodedImage(image: image)
     }
 }

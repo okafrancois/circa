@@ -658,6 +658,8 @@ enum OrbitPerformanceProbe {
                     result["nativePerformance"] = await OrbitEnginePerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "media-session" {
                     result["mediaSession"] = await OrbitMediaSessionProbe.run(owner, command: command)
+                } else if name == "sec-image-idn" {
+                    result["secImageIDN"] = await OrbitSecImageIDNProbe.run(owner, command: command)
                 } else if name == "media-player" {
                     application.confirmQuit = { .quit }
                     result["mediaPlayer"] = await OrbitMediaPlayerProbe.run(owner, command: command, root: root, store: environment.store)
