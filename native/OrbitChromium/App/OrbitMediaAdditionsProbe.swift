@@ -71,6 +71,12 @@ enum OrbitMediaAdditionsProbe {
             button.performClick(nil)
             return true
         }
+        // Manual PiP is validated alone: automatic PiP stays off in this synthetic root only.
+        if let settings = owner.settingsPreferences?.runtime {
+            try? await settings.store.setAutomaticPictureInPicture(false)
+            await settings.refresh()
+            checks["automaticPiPOff"] = settings.document.automaticPictureInPicture == false
+        }
         guard let (_, blankID) = await open("blank"), let (video, id) = await open("video") else { return ["loaded": false] }
         _ = await OrbitPerformanceProbe.evaluate(video, "(()=>{startMedia();return {}})()")
         guard await wait(4, { owner.backgroundMedia.session(for: id)?.playback == .playing }) else { return ["playing": false] }
@@ -105,65 +111,95 @@ enum OrbitMediaAdditionsProbe {
             checks["seekBefore"] = before; checks["seekAfter"] = result
         }
         saveProgress()
+        func pageState(_ surface: ChromiumSurface) async -> [String: Any] {
+            await OrbitPerformanceProbe.evaluate(surface, "({time:media.currentTime,paused:media.paused,muted:media.muted})") ?? [:]
+        }
+        func item(_ id: TabOccurrenceID) -> SidebarMediaPlayerItem? { player.items.first { $0.id == id } }
+        // Mute from the card: the card stays, muted, with an unmute toggle while playback goes on.
         mark("mute"); checks["muteClick"] = click(card.muteButton)
-        checks["muted"] = await wait { player.items.first(where: { $0.id == id })?.isMuted == true }
+        checks["muted"] = await wait { item(id)?.isMuted == true }
+        let mutedAt = await pageState(video)
+        await pause(1.2)
+        let mutedLater = await pageState(video)
+        checks["cardStaysMuted"] = player.card(for: id) != nil && item(id)?.isMuted == true
+        checks["unmuteOffered"] = card.muteButton.isEnabled && card.muteButton.symbol == "speaker.slash.fill" && card.muteButton.accessibilityValue() as? Int == 1
+        checks["playsWhileMuted"] = mutedLater["paused"] as? Bool == false &&
+            ((mutedLater["time"] as? Double ?? 0) - (mutedAt["time"] as? Double ?? 0)) > 0.8
+        checks["mutedStatus"] = card.audioStatus.stringValue
+        hover(player.card(for: id)); await pause(0.1)
         capture("muted"); saveProgress()
-        _ = click(card.muteButton)
-        await pause(0.25)
+        mark("unmute"); checks["unmuteClick"] = click(card.muteButton)
+        checks["unmuted"] = await wait { item(id)?.isMuted == false && item(id)?.canToggle == true }
+        checks["cardAfterUnmute"] = player.card(for: id) != nil
+        saveProgress()
+        // Manual PiP: eligibility, entry, engine acknowledgement, exit through the existing route.
         owner.refreshManualPiPCapabilities(force: true)
         checks["pipEligible"] = await wait { card.pipButton.isEnabled }
         mark("pip-request"); checks["pipClick"] = click(card.pipButton)
-        checks["pipActive"] = await wait { video.pagePerformance?.lifecycle()?.pictureInPicture == true }
-        mark("pip-active"); capture("pip-active"); saveProgress()
-        _ = await wait(2, { NSApp.windows.contains { candidate in
-            candidate !== window && candidate.isVisible && candidate.frame.width >= 150 && candidate.frame.height >= 100 &&
-            candidate.styleMask.contains(.fullSizeContentView) && !candidate.styleMask.contains(.titled) && candidate.level == .floating
-        } })
-        do {
-            let numbers = NSApp.windows.filter { candidate in
-                candidate !== window && candidate.isVisible && candidate.frame.width >= 150 && candidate.frame.height >= 100 &&
-                candidate.styleMask.contains(.fullSizeContentView) && !candidate.styleMask.contains(.titled) && candidate.level == .floating && owns(candidate.windowNumber)
-            }.map(\.windowNumber)
-            for (index, number) in numbers.enumerated() { capture("pip-window-\(index)", number: number) }
-            checks["pipWindows"] = numbers
-            if let number = numbers.first, owns(number) {
-                try? JSONSerialization.data(withJSONObject: ["pid": getpid(), "window": number, "wall": Date().timeIntervalSince1970])
-                    .write(to: root.appendingPathComponent("pip-ready.json"))
-                _ = await wait(3, { FileManager.default.fileExists(atPath: root.appendingPathComponent("pip-go").path) })
-            }
-        }
-        await pause(0.7)
-        // Selection must preserve manual ownership, then the existing exit route returns inline.
+        checks["pipActive"] = await wait(4) { video.pagePerformance?.lifecycle()?.pictureInPicture == true }
+        checks["cardHiddenInPiP"] = await wait(2) { player.card(for: id) == nil }
+        mark("pip-active")
+        let pipWindows: [NSWindow] = await {
+            _ = await wait(2, { NSApp.windows.contains { $0 !== window && $0.isVisible && $0.frame.width >= 150 && $0.level == .floating && !$0.styleMask.contains(.titled) } })
+            return NSApp.windows.filter { $0 !== window && $0.isVisible && $0.frame.width >= 150 && $0.level == .floating && !$0.styleMask.contains(.titled) && owns($0.windowNumber) }
+        }()
+        await pause(0.3)
+        capture("pip-active")
+        for (index, pip) in pipWindows.enumerated() { capture("pip-window-\(index)", number: pip.windowNumber) }
+        checks["pipWindows"] = pipWindows.map { ["window": $0.windowNumber, "x": $0.frame.minX, "y": $0.frame.minY, "width": $0.frame.width, "height": $0.frame.height] }
+        saveProgress()
+        await pause(1.0)
+        // Manual ownership: returning to the tab keeps PiP; the existing exit route ends it.
         owner.session.selectOccurrence(id)
         await owner.session.waitForQueuedCommands()
-        await pause(0.25)
+        await pause(0.6)
         checks["manualSurvivesSelection"] = video.pagePerformance?.lifecycle()?.pictureInPicture == true
-        video.manualPictureInPicture?.acknowledge(active: true)
+        mark("pip-exit")
+        video.manualPictureInPicture?.acknowledge(active: video.pagePerformance?.lifecycle()?.pictureInPicture == true)
         await video.manualPictureInPicture?.toggle()
         checks["pipExited"] = await wait { video.pagePerformance?.lifecycle()?.pictureInPicture != true }
         owner.session.selectOccurrence(blankID)
         await owner.session.waitForQueuedCommands()
         checks["cardRestored"] = await wait { player.card(for: id) != nil }
+        saveProgress()
         // Live style: a real MediaStream has no finite duration or seek range.
-        guard let (live, liveID) = await open("live") else { return checks }
-        _ = await OrbitPerformanceProbe.evaluate(live, "(()=>{startMedia();return {}})()")
-        _ = await wait { owner.backgroundMedia.session(for: liveID)?.playback == .playing }
-        owner.session.selectOccurrence(blankID)
-        await owner.session.waitForQueuedCommands()
-        _ = await wait { player.card(for: liveID) != nil }
-        hover(player.card(for: liveID)); await pause(0.4)
-        checks["liveNoTimeline"] = player.card(for: liveID).map { $0.timeline.seek.finiteDuration == nil } ?? false
-        capture("live")
-        // Audio-only remains controllable, with PiP truthfully unavailable.
+        if let (live, liveID) = await open("live") {
+            _ = await OrbitPerformanceProbe.evaluate(live, "(()=>{startMedia();return {}})()")
+            _ = await wait { owner.backgroundMedia.session(for: liveID)?.playback == .playing }
+            owner.session.selectOccurrence(blankID)
+            await owner.session.waitForQueuedCommands()
+            _ = await wait { player.card(for: liveID) != nil }
+            hover(player.card(for: liveID)); await pause(0.45)
+            checks["liveNoTimeline"] = player.card(for: liveID).map { $0.timeline.seek.finiteDuration == nil } ?? false
+            mark("live"); capture("live")
+            // × stops the media and removes the card; the tab stays.
+            checks["closeClick"] = click(player.card(for: liveID)?.closeButton)
+            checks["closeRemovesCard"] = await wait { player.card(for: liveID) == nil }
+            checks["closePausesPage"] = await wait(2) { owner.backgroundMedia.session(for: liveID)?.playback != .playing }
+            checks["closeKeepsTab"] = owner.session.tabID(for: liveID) != nil
+        }
+        // Two players: the deck expands both cards; a tab muted from its sidebar speaker keeps its card.
         guard let (audio, audioID) = await open("audio") else { return checks }
         _ = await OrbitPerformanceProbe.evaluate(audio, "(()=>{startMedia();return {}})()")
         _ = await wait { owner.backgroundMedia.session(for: audioID)?.playback == .playing }
         owner.session.selectOccurrence(blankID)
         await owner.session.waitForQueuedCommands()
-        _ = await wait { player.card(for: audioID) != nil }
-        hover(player.card(for: audioID)); await pause(0.4)
+        _ = await wait { player.card(for: audioID) != nil && player.card(for: id) != nil }
+        hover(player.card(for: audioID)); await pause(0.5)
+        checks["deckCards"] = player.items.count
+        checks["deckHeights"] = [id, audioID].compactMap { player.card(for: $0)?.bounds.height }
         checks["audioOnlyPiPUnavailable"] = player.card(for: audioID)?.pipButton.isEnabled == false
-        capture("audio-deck")
+        mark("deck"); capture("deck-expanded")
+        if let tab = owner.session.tabID(for: audioID) {
+            owner.sidebar.onToggleTabAudio?(tab)
+            checks["elsewhereMuted"] = await wait { item(audioID)?.isMuted == true }
+            await pause(0.8)
+            checks["elsewhereCardStays"] = player.card(for: audioID) != nil && item(audioID)?.isMuted == true
+            let audioState = await OrbitPerformanceProbe.evaluate(audio, "({paused:media.paused})") ?? [:]
+            checks["elsewherePlays"] = audioState["paused"] as? Bool == false
+            owner.sidebar.onToggleTabAudio?(tab)
+            _ = await wait { item(audioID)?.isMuted == false }
+        }
         saveProgress()
         checks["marks"] = marks
         checks["window"] = metadata

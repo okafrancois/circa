@@ -859,6 +859,14 @@ public final class ChromiumSurface: BrowserEngineSurface {
                                  isAudioMuted: muted < 0 ? nil : muted == 1, isAudioPlaying: audio)
     }
 
+    public func tabAudioMuted() -> Bool? {
+        guard !isDisposed else { return nil }
+        if let webContent { return webContent.isAudioMuted }
+        guard isBrowserCreated else { return pendingMute }
+        let muted = ACRIsAudioMuted(token)
+        return muted < 0 ? nil : muted == 1
+    }
+
     public func setAudioMuted(_ muted: Bool) throws {
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         if let webContent { webContent.setAudioMuted(muted); onChange?(); return }

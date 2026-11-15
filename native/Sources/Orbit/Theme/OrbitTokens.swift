@@ -845,6 +845,8 @@ extension OrbitTokens {
         /// Previous/next draw larger than play/pause: ≈13×11 pt of ink on screen.
         public static let trackSkipGlyphSize: CGFloat = 14.5
         public static let closeGlyphSize: CGFloat = 13.5
+        /// Mute and Picture in Picture in the expanded utility row: ≈10.5×8 pt speaker ink.
+        public static let utilityGlyphSize: CGFloat = 10
         public static let faviconSize: CGFloat = 16
         public static let hoverSquare: CGFloat = 24
         /// Expansion and collapse share AppKit's default curve over 0.25 s; the title row's

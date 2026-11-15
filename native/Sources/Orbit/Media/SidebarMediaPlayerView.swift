@@ -324,8 +324,8 @@ final class SidebarMediaPlayerCard: NSView {
     /// Per-tab volume needs an engine API that does not exist yet: the control stays disabled.
     let volumeButton = SidebarMediaPlayerButton(symbol: "speaker.wave.3.fill", pointSize: Tokens.glyphSize, label: uiText("Adjust Tab Volume"))
     let timeline = SidebarMediaTimeline()
-    let muteButton = SidebarMediaPlayerButton(symbol: "speaker.wave.2.fill", pointSize: 14, label: uiText("Mute tab"))
-    let pipButton = SidebarMediaPlayerButton(symbol: "rectangle.on.rectangle", pointSize: 14, label: uiText("Enter Picture in Picture"))
+    let muteButton = SidebarMediaPlayerButton(symbol: "speaker.wave.2.fill", pointSize: Tokens.utilityGlyphSize, label: uiText("Mute tab"))
+    let pipButton = SidebarMediaPlayerButton(symbol: "rectangle.on.rectangle", pointSize: Tokens.utilityGlyphSize, label: uiText("Enter Picture in Picture"))
     let audioStatus = NSTextField(labelWithString: "")
     private let additions = SidebarMediaPlayerPlate()
     private let seekTooltip = OrbitFrostView(radius: 6)
@@ -440,9 +440,11 @@ final class SidebarMediaPlayerCard: NSView {
             next.pip == .failed ? failureHelp : pipButton.label
         pipButton.toolTip = pipHelp
         pipButton.setAccessibilityHelp(pipHelp)
-        // Future per-tab volume control replaces this status slot without changing geometry.
+        // Future per-tab volume control replaces this status slot without changing geometry;
+        // until then the slot names the tab's audio and its help explains the missing volume.
         let status = next.pip == .failed ? uiText("PiP failed") :
-            next.isMuted == true ? uiText("Muted") : uiText("Volume unavailable")
+            next.isMuted == true ? uiText("Muted") : uiText("Tab audio")
+        audioStatus.textColor = next.pip == .failed ? .systemRed : .secondaryLabelColor
         if audioStatus.stringValue != status {
             audioStatus.stringValue = status
             if !OrbitMotionPreferences.prefersReducedMotion {

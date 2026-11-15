@@ -15,6 +15,15 @@ public protocol BrowserMediaSessionControlling: AnyObject {
     /// Throws `unsupportedOperation` without a native media session. False means the session
     /// refused the action (no session, or the action is not currently offered).
     @discardableResult func performMediaSessionAction(_ action: BrowserMediaAction, seconds: Double) throws -> Bool
+    /// The tab's mute flag as the engine holds it now; nil when unknown.
+    func tabAudioMuted() -> Bool?
+    /// Identifies the current document; it changes on navigation. Nil when unknown.
+    var mediaDocumentIdentity: UInt64? { get }
+}
+
+public extension BrowserMediaSessionControlling {
+    func tabAudioMuted() -> Bool? { nil }
+    var mediaDocumentIdentity: UInt64? { nil }
 }
 
 /// Stable native MediaSessionAction and session-state values (Chromium mojom).
@@ -125,6 +134,10 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
         var observing = false
         var generation: UInt64
         var order: UInt64?
+        /// The last controllable session of the current document, kept while the tab is muted:
+        /// the engine leaves a muted tab's players out of its media session though they play on.
+        var lastSession: BrowserTabMediaSession?
+        var lastDocument: UInt64?
     }
 
     private var tracked: [TabOccurrenceID: Tracked] = [:]
@@ -217,7 +230,7 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
     private func publish() {
         var entries: [(UInt64, Entry)] = []
         for (id, item) in tracked {
-            guard let native = item.native, let session = BrowserTabMediaSession(native, audio: item.audio) else {
+            guard let session = derivedSession(id, item) else {
                 if item.order != nil { tracked[id]?.order = nil }
                 continue
             }
@@ -233,5 +246,35 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
         guard next != published else { return }
         published = next
         onChange?()
+    }
+
+    /// The native session, or the last playing one of the same document while the tab stays
+    /// muted and its media keeps playing. A kept session offers no actions: the engine cannot
+    /// act on players outside its session.
+    private func derivedSession(_ id: TabOccurrenceID, _ item: Tracked) -> BrowserTabMediaSession? {
+        var audio = item.audio
+        let muted = item.source?.tabAudioMuted() ?? audio?.isAudioMuted
+        if let muted, audio?.isAudioMuted != muted {
+            var updated = audio ?? BrowserMediaState()
+            updated.isAudioMuted = muted
+            audio = updated
+        }
+        let document = item.source?.mediaDocumentIdentity
+        if let native = item.native, let session = BrowserTabMediaSession(native, audio: audio) {
+            let playing = session.playback == .playing
+            tracked[id]?.lastSession = playing ? session : nil
+            tracked[id]?.lastDocument = playing ? document : nil
+            return session
+        }
+        guard muted == true, audio?.playback != .paused, var kept = item.lastSession,
+              item.lastDocument == document else {
+            tracked[id]?.lastSession = nil
+            tracked[id]?.lastDocument = nil
+            return nil
+        }
+        kept.actions = []
+        kept.isAudioMuted = true
+        kept.isAudible = audio?.isAudible ?? audio?.isAudioPlaying ?? kept.isAudible
+        return kept
     }
 }

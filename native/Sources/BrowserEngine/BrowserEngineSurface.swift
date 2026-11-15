@@ -318,6 +318,7 @@ public extension BrowserEngineSurface {
         guard let services = nativePageServices else { throw BrowserEngineError.unsupportedOperation }
         return services.mediaAction(action, seconds: seconds)
     }
+    var mediaDocumentIdentity: UInt64? { documentGeneration }
     func activationPaintBarrier() -> Task<Bool, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}

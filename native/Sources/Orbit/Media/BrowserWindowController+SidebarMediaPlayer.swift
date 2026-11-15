@@ -24,15 +24,11 @@ extension BrowserWindowController {
         }
         player.onMute = { [weak self] id in
             self?.submitInput { owner in
-                guard let muted = owner.backgroundMedia.session(for: id)?.isAudioMuted,
-                      let surface = owner.session.surface(for: id) else { return }
-                do { try surface.setAudioMuted(!muted) } catch { return }
-                Task { [weak owner, weak surface] in
-                    guard let surface else { return }
-                    let audio = await surface.requestMediaState()
-                    guard let owner, owner.session.surface(for: id) === surface else { return }
-                    owner.backgroundMedia.updateAudio(audio, for: id)
-                }
+                guard let surface = owner.session.surface(for: id), owner.owns(surface),
+                      let muted = surface.tabAudioMuted() ?? owner.backgroundMedia.session(for: id)?.isAudioMuted else { return }
+                do { try surface.setAudioMuted(!muted) } catch { NSSound.beep(); return }
+                // The tab row's speaker and the card both follow the engine's media refresh.
+                owner.siteControls.refreshMedia(surface)
             }
         }
         player.onPiP = { [weak self] id in

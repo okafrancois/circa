@@ -196,15 +196,31 @@ struct SidebarMediaPlayerTests {
         card.apply(model)
         #expect(card.muteButton.isEnabled && !card.volumeButton.isEnabled)
         #expect(card.muteButton.symbol == "speaker.slash.fill" && !card.pipButton.isEnabled)
+        #expect(card.audioStatus.stringValue == uiText("Muted") && card.muteButton.label == uiText("Unmute tab"))
         model.isMuted = false; model.pip = .ready
         card.apply(model)
         #expect(card.pipButton.isEnabled && card.muteButton.symbol == "speaker.wave.2.fill")
+        #expect(card.audioStatus.stringValue == uiText("Tab audio"))
+        for button in [card.muteButton, card.pipButton] {
+            #expect(OrbitGlyph.configuration(of: button.glyph)?.pointSize == OrbitTokens.MediaPlayer.utilityGlyphSize)
+        }
         model.pip = .requesting
         card.apply(model)
         #expect(!card.pipButton.isEnabled)
         model.pip = .failed
         card.apply(model)
         #expect(card.pipButton.isEnabled && card.audioStatus.stringValue == uiText("PiP failed"))
+    }
+    @Test func mutedSessionKeptByTheModelStaysWithUnavailableTransport() {
+        var kept = media(playing: true, actions: [0, 1, 2, 3, 8])
+        kept.actions = []
+        kept.isAudioMuted = true
+        let id = TabOccurrenceID()
+        let mapped = SidebarMediaPlayerState.item(id: id, session: kept, title: "Track", favicon: nil, pausedFromPlayer: false)
+        #expect(mapped.toggle == .pause && !mapped.canToggle && !mapped.canGoBack && !mapped.canGoForward)
+        let state = SidebarMediaPlayerState()
+        #expect(state.shown([(id, kept)], visible: [], pictureInPicture: { _ in false }) == [id])
+        #expect(state.shown([(id, kept)], visible: [id], pictureInPicture: { _ in false }).isEmpty)
     }
     @Test func constrainedDeckAndRows() {
         let frames = SidebarMediaPlayerLayout.cards(count: 2, width: 174, progress: 1, availableHeight: 200, focusedIndex: 1)
