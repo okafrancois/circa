@@ -5,6 +5,12 @@ import os
 
 /// Optical-size resources for interface glyphs. User-selected Space symbols use SpaceIconImages.
 enum OrbitIcon {
+    /// Compact filled settings mark; retain the native symbol's open centre and rounded teeth.
+    static func calendarSettingsImage() -> NSImage? {
+        NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+    }
+
     enum Variant: String { case template, color }
     private struct Catalog: Decodable, Sendable {
         var template: [String]

@@ -8,6 +8,16 @@ import SwiftUI
 @Suite("Interface icon resources", .serialized)
 @MainActor
 struct OrbitIconTests {
+    @Test("Calendar settings glyph retains a transparent centre at its compact size")
+    func calendarSettingsCounter() throws {
+        let image = try #require(OrbitIcon.calendarSettingsImage())
+        #expect(OrbitIcon.inkBounds(of: image) != nil)
+        let data = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: data))
+        let centre = try #require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2))
+        #expect(centre.alphaComponent < 0.05)
+    }
+
     @Test("Rendered size selects the matching optical master, including export rounding")
     func opticalSizes() throws {
         for (pointSize, master): (CGFloat, Int) in [(10, 16), (17, 16), (18, 20), (20, 20), (21, 20), (22, 24), (48, 24)] {
