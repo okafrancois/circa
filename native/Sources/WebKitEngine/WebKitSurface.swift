@@ -151,6 +151,7 @@ public final class WebKitSurface: BrowserEngineSurface {
     // MARK: Navigation
 
     public func navigate(to url: URL) {
+        guard BrowserNavigableURL.admits(url, engine: "webkit") else { return }
         let navigation = url.isFileURL
             ? webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
             : webView.load(URLRequest(url: url))

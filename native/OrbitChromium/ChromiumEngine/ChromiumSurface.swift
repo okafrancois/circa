@@ -410,7 +410,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     public func navigate(to url: URL) {
-        guard !isDisposed else { return }
+        guard !isDisposed, BrowserNavigableURL.admits(url, engine: "chromium") else { return }
         if routeNavigationToWebKit(url) { return }
         setPageFrozen(false)
         endPictureInPicture()

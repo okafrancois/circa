@@ -116,7 +116,16 @@ struct BrowserScriptingTests {
         await #expect(throws: BrowserScriptError.javaScriptDisabled) { try await scripting.execute("1+1", in: tab) }
         #expect(received.isEmpty)
         #expect(throws: BrowserScriptError.javaScriptDisabled) { try scripting.validateNavigation(URL(string: "javascript:1+1")!) }
+        #expect(throws: BrowserScriptError.invalidURL) { try scripting.validateNavigation(URL(string: "chrome://crash")!) }
+        #expect(throws: BrowserScriptError.invalidURL) { try scripting.validateNavigation(URL(string: "chrome://kill")!) }
+        try scripting.validateNavigation(URL(string: "https://automation.test/")!)
+        try scripting.validateNavigation(URL(string: "chrome://settings/")!)
         scripting.allowsJavaScript = { true }
+        // Setting an existing tab's URL may run script; a new tab or any other path may not.
+        try scripting.validateNavigation(URL(string: "javascript:1+1")!, allowsScript: true)
+        #expect(throws: BrowserScriptError.invalidURL) { try scripting.validateNavigation(URL(string: "javascript:1+1")!) }
+        #expect(BrowserScriptingController.script(fromJavaScriptURL: URL(string: "javascript:document.title%20=%20'a'")!) == "document.title = 'a'")
+        #expect(BrowserScriptingController.script(fromJavaScriptURL: URL(string: "https://automation.test/")!) == nil)
         #expect(try await scripting.execute("1+1", in: tab) == "2")
         #expect(received == ["1+1"])
     }
@@ -610,6 +619,15 @@ struct BrowserScriptingTests {
         fixture.app.scripting.allowsJavaScript = { true }
         #expect(try await fixture.result("CrSu", "ExJa", direct: created, script).stringValue == "")
         #expect(fixture.headless.executions == 1)
+        let javascriptURL = NSAppleEventDescriptor(string: "javascript:" + (BrowserEngineConformance.typedKeysScript
+            .addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""))
+        _ = try await fixture.result("core", "setd", direct: ScriptEvent.property("URL ", of: created), ["data": javascriptURL], expectsResult: false)
+        #expect(try await fixture.result("core", "getd", direct: ScriptEvent.property("URL ", of: created)).stringValue == "about:blank#changed")
+        #expect(session.snapshot?.tabs.allSatisfy { $0.url.scheme != "javascript" } == true)
+        let crash = try await fixture.reply("core", "setd", direct: ScriptEvent.property("URL ", of: created),
+                                            ["data": NSAppleEventDescriptor(string: "chrome://crash")])
+        #expect(crash.paramDescriptor(forKeyword: keyErrorNumber)?.int32Value == -1700)
+        #expect(try await fixture.result("core", "getd", direct: ScriptEvent.property("URL ", of: created)).stringValue == "about:blank#changed")
 
         let missing = try await fixture.reply("core", "getd", direct: ScriptEvent.property("URL ", of: ScriptEvent.uniqueID("tAbB", "missing", of: window1)))
         #expect(missing.paramDescriptor(forKeyword: keyErrorNumber) != nil || missing.paramDescriptor(forKeyword: keyDirectObject)?.typeCodeValue == ScriptEvent.code("msng"))
@@ -645,6 +663,16 @@ struct BrowserScriptingTests {
         let refused = try await fixture.reply("CrSu", "ExJa", direct: tab, ["JvSc": NSAppleEventDescriptor(string: "1")])
         #expect(refused.paramDescriptor(forKeyword: keyErrorNumber)?.int32Value == -1743)
         #expect(fixture.headless.executions == 0)
+        // A javascript: URL is script execution and passes the same private-window gate.
+        let javascriptURL = NSAppleEventDescriptor(string: "javascript:" + (BrowserEngineConformance.typedKeysScript
+            .addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""))
+        for target in [nil, fixture.headless.sessions[0].id] {
+            fixture.app.scripting.targetWindowID = target
+            let viaURL = try await fixture.reply("core", "setd", direct: ScriptEvent.property("URL ", of: tab), ["data": javascriptURL])
+            #expect(viaURL.paramDescriptor(forKeyword: keyErrorNumber)?.int32Value == -1743)
+        }
+        #expect(session.selectedSurface?.currentURL?.absoluteString == "about:blank#private")
+        #expect(session.snapshot?.tabs.allSatisfy { $0.url.scheme != "javascript" } == true)
         #expect(fixture.violations.isEmpty, "Reply contract violations: \(fixture.violations)")
     }
 

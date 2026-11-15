@@ -71,6 +71,13 @@ extension BrowserScriptingController {
                     }
                     session.activateSpace(record.id); session.selectTab(id); await session.waitForPendingCommands()
                     guard let surface = session.selectedSurface, session.organization?.selectedTab?.id == id else { throw BrowserScriptError.unavailable }
+                    let evaluate: (String) async throws -> String? = { script in
+                        guard self?.allowsJavaScript() == true else { throw BrowserScriptError.javaScriptDisabled }
+                        guard window?.canReadPrivateContent == true else { throw BrowserScriptError.privateContent }
+                        // Engines expose script evaluation as a separate service object.
+                        guard let evaluator = environment.engine.conformanceProbe else { throw BrowserScriptError.unsupported }
+                        return try await evaluator.evaluateScript(script, in: surface)
+                    }
                     switch action {
                     case .select: window?.focus()
                     case .close: break
@@ -80,17 +87,17 @@ extension BrowserScriptingController {
                     case .stop: surface.stopLoading()
                     case .navigate(let url):
                         guard let self else { throw BrowserScriptError.unavailable }
-                        try validateNavigation(url)
-                        surface.navigate(to: url); session.updateDestination(for: surface, to: url)
-                        if url.scheme?.lowercased() != "javascript" {
-                            await Self.awaitCommit(of: url) { surface.navigationState.committedURL }
+                        try validateNavigation(url, allowsScript: true)
+                        if let script = Self.script(fromJavaScriptURL: url) {
+                            // Never loaded as an address: it would run without the private-window
+                            // gate and be recorded as the tab's URL for restore.
+                            _ = try await evaluate(script)
+                            return nil
                         }
+                        surface.navigate(to: url); session.updateDestination(for: surface, to: url)
+                        await Self.awaitCommit(of: url) { surface.navigationState.committedURL }
                     case .javascript(let script):
-                        guard self?.allowsJavaScript() == true else { throw BrowserScriptError.javaScriptDisabled }
-                        guard window?.canReadPrivateContent == true else { throw BrowserScriptError.privateContent }
-                        // Engines expose script evaluation as a separate service object.
-                        guard let evaluator = environment.engine.conformanceProbe else { throw BrowserScriptError.unsupported }
-                        return try await evaluator.evaluateScript(script, in: surface)
+                        return try await evaluate(script)
                     }
                     await session.waitForPendingCommands()
                     return nil

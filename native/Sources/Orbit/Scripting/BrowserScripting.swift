@@ -93,9 +93,25 @@ final class BrowserScriptingController {
         return explicitWindow(in: specifier.container)
     }
 
-    func validateNavigation(_ url: Foundation.URL) throws {
+    /// `javascript:` is accepted only when setting an existing tab's URL (`allowsScript`), and runs
+    /// through the engine's script evaluation service under the same gates as "execute javascript".
+    /// Other addresses must pass the engine's shell allowlist, so scripts cannot reach debug pages.
+    func validateNavigation(_ url: Foundation.URL, allowsScript: Bool = false) throws {
         guard url.scheme != nil else { throw BrowserScriptError.invalidURL }
-        if url.scheme?.lowercased() == "javascript", !allowsJavaScript() { throw BrowserScriptError.javaScriptDisabled }
+        if Self.script(fromJavaScriptURL: url) != nil {
+            guard allowsJavaScript() else { throw BrowserScriptError.javaScriptDisabled }
+            guard allowsScript else { throw BrowserScriptError.invalidURL }
+            return
+        }
+        guard BrowserNavigableURL.isShellNavigable(url) else { throw BrowserScriptError.invalidURL }
+    }
+
+    /// The script carried by a `javascript:` URL, percent-decoded like an engine would; nil for
+    /// any other scheme.
+    static func script(fromJavaScriptURL url: Foundation.URL) -> String? {
+        guard url.scheme?.lowercased() == "javascript" else { return nil }
+        let body = String(url.absoluteString.drop { $0 != ":" }.dropFirst())
+        return body.removingPercentEncoding ?? body
     }
 
     func execute(_ script: String, in tab: CircaScriptTab) async throws -> String? {

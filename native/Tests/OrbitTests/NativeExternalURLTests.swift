@@ -122,6 +122,21 @@ struct NativeExternalURLTests {
         #expect(ExternalURLResolver.resolve(URL(fileURLWithPath: "/nonexistent/synthetic.html")) == nil)
     }
 
+    @Test("External opens drop embedded credentials and keep the rest of the address")
+    func externalCredentials() throws {
+        #expect(ExternalURLResolver.resolve(URL(string: "https://user:secret@synthetic.invalid/path?q=1#f")!)
+                == URL(string: "https://synthetic.invalid/path?q=1#f"))
+        #expect(ExternalURLResolver.resolve(URL(string: "https://trusted.invalid@other.invalid/")!)
+                == URL(string: "https://other.invalid/"))
+        #expect(ExternalURLResolver.resolve(URL(string: "http://synthetic.invalid:8080/")!) == URL(string: "http://synthetic.invalid:8080/"))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let shortcut = directory.appendingPathComponent("synthetic.url")
+        try "[InternetShortcut]\nURL=https://user:secret@synthetic.invalid/shortcut".write(to: shortcut, atomically: true, encoding: .utf8)
+        #expect(ExternalURLResolver.resolve(shortcut) == URL(string: "https://synthetic.invalid/shortcut"))
+    }
+
     @Test("Internet shortcut documents resolve only bounded HTTP and HTTPS destinations")
     func shortcutDocuments() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

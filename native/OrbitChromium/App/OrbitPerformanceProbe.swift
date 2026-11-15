@@ -34,7 +34,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitMediaSessionProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input", "io.github.okatech.orbit.test.update"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitNavigationGuardProbe.bundleID, OrbitMediaSessionProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input", "io.github.okatech.orbit.test.update"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 let origin = Bundle.main.bundleIdentifier == OrbitCommandGapsProbe.bundleID
@@ -662,6 +662,9 @@ enum OrbitPerformanceProbe {
                 } else if name == "history-library" {
                     if Bundle.main.bundleIdentifier == OrbitHistoryLibraryProbe.bundleID { application.confirmQuit = { .quit } }
                     result["historyLibrary"] = await OrbitHistoryLibraryProbe.run(owner, environment: environment, command: command, root: root)
+                } else if name == "nav-scheme-guard" {
+                    if Bundle.main.bundleIdentifier == OrbitNavigationGuardProbe.bundleID { application.confirmQuit = { .quit } }
+                    result["navigationGuard"] = await OrbitNavigationGuardProbe.run(owner, environment: environment, command: command)
                 } else if name == "navigation-history" {
                     result["navigationHistory"] = await OrbitNavigationHistoryProbe.run(owner, command: command, root: root)
                 } else if name == "content-blocking" {
