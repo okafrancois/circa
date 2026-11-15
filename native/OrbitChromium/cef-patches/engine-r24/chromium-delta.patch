@@ -1,0 +1,531 @@
+--- a/chrome/browser/extensions/chrome_browser_context_lifetime_tracker.cc
++++ b/chrome/browser/extensions/chrome_browser_context_lifetime_tracker.cc
+@@ -5,8 +5,10 @@
+ #include "chrome/browser/extensions/chrome_browser_context_lifetime_tracker.h"
+ 
+ #include <utility>
++#include <vector>
+ 
+ #include "base/memory/raw_ref.h"
++#include "base/scoped_multi_source_observation.h"
+ #include "base/scoped_observation.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_observer.h"
+@@ -20,9 +22,14 @@
+     : public ProfileObserver {
+  public:
+   ProfileWatcher(Profile& profile, BrowserContextLifetimeObserver& observer)
+-      : observer_(observer) {
++      : observer_(observer),
++        every_otr_profile_(observer.ObservesEveryOffTheRecordContext()) {
+     profile_observation_.Observe(&profile);
+-    if (profile.HasPrimaryOTRProfile()) {
++    if (every_otr_profile_) {
++      for (Profile* otr_profile : profile.GetAllOffTheRecordProfiles()) {
++        ObserveOffTheRecordProfile(*otr_profile);
++      }
++    } else if (profile.HasPrimaryOTRProfile()) {
+       ObserveOffTheRecordProfile(
+           *profile.GetPrimaryOTRProfile(/*create_if_needed=*/false));
+     }
+@@ -39,8 +46,10 @@
+     // TODO(crbug.com/417228685): Clank allows for multiple OTR profiles,
+     // unlike desktop Chrome. Extensions APIs may have built-in assumptions
+     // that there will only be one OTR profile. We need to determine how this
+-    // will be handled in Desktop Android.
+-    if (!off_the_record->IsPrimaryOTRProfile()) {
++    // will be handled in Desktop Android. Observers that handle several
++    // off-the-record profiles opt in through
++    // ObservesEveryOffTheRecordContext().
++    if (!every_otr_profile_ && !off_the_record->IsPrimaryOTRProfile()) {
+       return;
+     }
+     ObserveOffTheRecordProfile(*off_the_record);
+@@ -49,18 +58,20 @@
+   void OnProfileWillBeDestroyed(Profile* profile) override {
+     if (profile_observation_.IsObservingSource(profile)) {
+       // The original profile sends this notification before it destroys its
+-      // OTR profiles, so report the OTR profile's destruction first: the
++      // OTR profiles, so report the OTR profiles' destruction first: the
+       // observer must not receive anything after
+       // OnPrimaryBrowserContextDestroyed().
+-      if (otr_profile_observation_.IsObserving()) {
+-        Profile* otr_profile = otr_profile_observation_.GetSource();
+-        otr_profile_observation_.Reset();
++      std::vector<raw_ptr<Profile>> otr_profiles;
++      otr_profiles.swap(otr_profiles_);
++      otr_profile_observations_.RemoveAllObservations();
++      for (Profile* otr_profile : otr_profiles) {
+         observer_->OnRelatedOffTheRecordBrowserContextDestroyed(*otr_profile);
+       }
+       profile_observation_.Reset();
+       observer_->OnPrimaryBrowserContextDestroyed(*profile);
+-    } else if (otr_profile_observation_.IsObservingSource(profile)) {
+-      otr_profile_observation_.Reset();
++    } else if (otr_profile_observations_.IsObservingSource(profile)) {
++      otr_profile_observations_.RemoveObservation(profile);
++      std::erase(otr_profiles_, profile);
+       observer_->OnRelatedOffTheRecordBrowserContextDestroyed(*profile);
+     }
+   }
+@@ -72,17 +83,20 @@
+     // created from another observer's OnOffTheRecordProfileCreated(), it
+     // has already picked up `otr_profile` in its constructor and must not
+     // observe it (or notify `observer_`) a second time.
+-    if (otr_profile_observation_.IsObservingSource(&otr_profile)) {
++    if (otr_profile_observations_.IsObservingSource(&otr_profile)) {
+       return;
+     }
+-    otr_profile_observation_.Observe(&otr_profile);
++    otr_profile_observations_.AddObservation(&otr_profile);
++    otr_profiles_.push_back(&otr_profile);
+     observer_->OnRelatedOffTheRecordBrowserContextCreated(otr_profile);
+   }
+ 
+   const raw_ref<BrowserContextLifetimeObserver> observer_;
++  const bool every_otr_profile_;
+   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
+-  base::ScopedObservation<Profile, ProfileObserver> otr_profile_observation_{
+-      this};
++  base::ScopedMultiSourceObservation<Profile, ProfileObserver>
++      otr_profile_observations_{this};
++  std::vector<raw_ptr<Profile>> otr_profiles_;
+ };
+ 
+ // static
+--- a/chrome/browser/extensions/component_loader.cc
++++ b/chrome/browser/extensions/component_loader.cc
+@@ -18,6 +18,7 @@
+ #include "base/logging.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/path_service.h"
++#include "base/threading/thread_restrictions.h"
+ #include "base/time/time.h"
+ #include "base/trace_event/trace_event.h"
+ #include "base/values.h"
+@@ -698,6 +699,35 @@
+ }
+ #endif
+ 
++namespace {
++
++// Set only by the embedding browser process, never by a caller it serves.
++constexpr char kEmbedderComponentExtensionSwitch[] =
++    "orbit-component-extension";
++
++void AddEmbedderComponentExtension(ComponentLoader* loader) {
++  // An embedder's built-in extension, unpacked in a directory the browser
++  // process names on its own command line. Loaded as a component of every
++  // regular profile: not user-manageable, hidden from the extensions page and
++  // allowed in that profile's off-the-record contexts.
++  const base::CommandLine* command_line =
++      base::CommandLine::ForCurrentProcess();
++  if (!command_line->HasSwitch(kEmbedderComponentExtensionSwitch)) {
++    return;
++  }
++  const base::FilePath path =
++      command_line->GetSwitchValuePath(kEmbedderComponentExtensionSwitch);
++  if (path.empty() || !path.IsAbsolute()) {
++    return;
++  }
++  // Reads one small manifest, as for a component loaded by path (the same
++  // scope the embedder uses for its own profile creation).
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  loader->AddOrReplace(path);
++}
++
++}  // namespace
++
+ void ComponentLoader::AddDefaultComponentExtensions(
+     bool skip_session_components) {
+   // Do not add component extensions that have background pages here -- add them
+@@ -727,6 +757,7 @@
+ #endif  // BUILDFLAG(ENABLE_PDF)
+   }
+ 
++  AddEmbedderComponentExtension(this);
+   AddDefaultComponentExtensionsWithBackgroundPages(skip_session_components);
+ }
+ 
+--- a/content/browser/media/audio_output_stream_broker.cc
++++ b/content/browser/media/audio_output_stream_broker.cc
+@@ -4,9 +4,12 @@
+ 
+ #include "content/browser/media/audio_output_stream_broker.h"
+ 
++#include <map>
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
++#include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
+ #include "base/time/time.h"
+ #include "base/trace_event/trace_event.h"
+ #include "content/browser/browser_main_loop.h"
+@@ -14,6 +17,8 @@
+ #include "content/browser/media/media_internals.h"
+ #include "content/browser/renderer_host/media/media_stream_manager.h"
+ #include "content/browser/renderer_host/media/preferred_audio_output_device_manager.h"
++#include "content/public/browser/browser_task_traits.h"
++#include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/content_browser_client.h"
+ #include "content/public/browser/media_observer.h"
+ #include "content/public/common/content_client.h"
+@@ -21,6 +26,7 @@
+ #include "media/audio/audio_logging.h"
+ #include "media/mojo/mojom/audio_data_pipe.mojom.h"
+ #include "media/mojo/mojom/audio_output_stream.mojom.h"
++#include "mojo/public/cpp/bindings/receiver.h"
+ #include "third_party/perfetto/include/perfetto/tracing/track.h"
+ 
+ namespace content {
+@@ -67,8 +73,124 @@
+   return perfetto::NamedTrack::FromPointer("AudioOutputStreamBroker", broker);
+ }
+ 
++// Orbit: a local output volume per audio group (one per WebContents). Every
++// stream handed to a renderer goes through a proxy that scales the renderer's
++// own volume by its group's. IO thread only.
++class GroupVolumeStream;
++struct GroupVolumes {
++  std::map<base::UnguessableToken, double> volumes;
++  std::multimap<base::UnguessableToken, base::WeakPtr<GroupVolumeStream>> streams;
++};
++GroupVolumes& GetGroupVolumes() {
++  static base::NoDestructor<GroupVolumes> volumes;
++  return *volumes;
++}
++
++// Owned by its renderer binding; destroyed when either side disconnects.
++class GroupVolumeStream final : public media::mojom::AudioOutputStream {
++ public:
++  static mojo::PendingRemote<media::mojom::AudioOutputStream> Wrap(
++      const base::UnguessableToken& group,
++      mojo::PendingRemote<media::mojom::AudioOutputStream> stream) {
++    return (new GroupVolumeStream(group, std::move(stream)))->Bind();
++  }
++
++  GroupVolumeStream(const GroupVolumeStream&) = delete;
++  GroupVolumeStream& operator=(const GroupVolumeStream&) = delete;
++
++  void SetScale(double scale) {
++    scale_ = scale;
++    target_->SetVolume(volume_ * scale_);
++  }
++
++  // media::mojom::AudioOutputStream:
++  void Play() override { target_->Play(); }
++  void Pause() override { target_->Pause(); }
++  void Flush() override { target_->Flush(); }
++  void SetVolume(double volume) override {
++    volume_ = volume;
++    target_->SetVolume(volume_ * scale_);
++  }
++
++ private:
++  GroupVolumeStream(const base::UnguessableToken& group,
++                    mojo::PendingRemote<media::mojom::AudioOutputStream> stream)
++      : group_(group), target_(std::move(stream)) {
++    auto& volumes = GetGroupVolumes();
++    const auto found = volumes.volumes.find(group_);
++    if (found != volumes.volumes.end()) {
++      scale_ = found->second;
++      target_->SetVolume(scale_);  // The renderer's volume starts at 1.
++    }
++    volumes.streams.emplace(group_, weak_factory_.GetWeakPtr());
++    target_.set_disconnect_with_reason_handler(base::BindOnce(
++        &GroupVolumeStream::OnTargetDisconnected, base::Unretained(this)));
++  }
++
++  ~GroupVolumeStream() override {
++    auto& streams = GetGroupVolumes().streams;
++    auto [begin, end] = streams.equal_range(group_);
++    for (auto it = begin; it != end; ++it) {
++      if (it->second.get() == this) {
++        streams.erase(it);
++        break;
++      }
++    }
++  }
++
++  mojo::PendingRemote<media::mojom::AudioOutputStream> Bind() {
++    auto remote = receiver_.BindNewPipeAndPassRemote();
++    receiver_.set_disconnect_handler(base::BindOnce(
++        &GroupVolumeStream::Destroy, base::Unretained(this)));
++    return remote;
++  }
++
++  void OnTargetDisconnected(uint32_t reason, const std::string& description) {
++    receiver_.ResetWithReason(reason, description);
++    Destroy();
++  }
++
++  void Destroy() { delete this; }
++
++  const base::UnguessableToken group_;
++  mojo::Remote<media::mojom::AudioOutputStream> target_;
++  mojo::Receiver<media::mojom::AudioOutputStream> receiver_{this};
++  double volume_ = 1.0;
++  double scale_ = 1.0;
++  base::WeakPtrFactory<GroupVolumeStream> weak_factory_{this};
++};
++
+ }  // namespace
+ 
++// Orbit: sets the local output volume of an audio group in [0, 1] (1 restores
++// it), as heard and as captured from the tab. Any thread. Declared by the
++// embedder, which owns the only caller.
++CONTENT_EXPORT void OrbitSetAudioGroupVolume(const base::UnguessableToken& group,
++                                             double volume);
++CONTENT_EXPORT void OrbitSetAudioGroupVolume(const base::UnguessableToken& group,
++                                             double volume) {
++  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
++    GetIOThreadTaskRunner({})->PostTask(
++        FROM_HERE, base::BindOnce(&OrbitSetAudioGroupVolume, group, volume));
++    return;
++  }
++  if (!(volume >= 0.0 && volume <= 1.0)) {
++    return;
++  }
++  auto& volumes = GetGroupVolumes();
++  if (volume == 1.0) {
++    volumes.volumes.erase(group);
++  } else {
++    volumes.volumes[group] = volume;
++  }
++  auto [begin, end] = volumes.streams.equal_range(group);
++  for (auto it = begin; it != end; ++it) {
++    if (it->second) {
++      it->second->SetScale(volume);
++    }
++  }
++}
++
+ AudioOutputStreamBroker::AudioOutputStreamBroker(
+     int render_process_id,
+     int render_frame_id,
+@@ -237,7 +359,8 @@
+     return;
+   }
+ 
+-  client_->Created(std::move(stream), std::move(data_pipe));
++  client_->Created(GroupVolumeStream::Wrap(group_id_, std::move(stream)),
++                   std::move(data_pipe));
+ }
+ 
+ void AudioOutputStreamBroker::ObserverBindingLost(
+--- a/extensions/browser/api/cookies/cookies_api.cc
++++ b/extensions/browser/api/cookies/cookies_api.cc
+@@ -132,11 +132,27 @@
+     : router_(router), otr_(otr) {}
+ CookiesEventRouter::CookieChangeListener::~CookieChangeListener() = default;
+ 
++CookiesEventRouter::CookieChangeListener::CookieChangeListener(
++    CookiesEventRouter* router,
++    content::BrowserContext* off_the_record_context)
++    : router_(router), otr_(true),
++      off_the_record_context_(off_the_record_context) {}
++
+ void CookiesEventRouter::CookieChangeListener::OnCookieChange(
+     const net::CookieChangeInfo& change) {
++  if (off_the_record_context_) {
++    router_->DispatchCookieChange(off_the_record_context_, change);
++    return;
++  }
+   router_->OnCookieChange(otr_, change);
+ }
+ 
++CookiesEventRouter::OffTheRecordBinding::OffTheRecordBinding(
++    CookiesEventRouter* router,
++    content::BrowserContext* context)
++    : listener(router, context) {}
++CookiesEventRouter::OffTheRecordBinding::~OffTheRecordBinding() = default;
++
+ CookiesEventRouter::CookiesEventRouter(content::BrowserContext* context)
+     : browser_context_(context),
+       browser_context_lifetime_tracker_(
+@@ -156,6 +172,22 @@
+ void CookiesEventRouter::OnCookieChange(bool otr,
+                                         const net::CookieChangeInfo& change) {
+   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
++  content::BrowserContext* context =
++      otr ? (client->HasOffTheRecordContext(browser_context_)
++                 ? client->GetOffTheRecordContext(browser_context_)
++                 : nullptr)
++          : client->GetOriginalContext(browser_context_);
++  // TODO(407373848): OTR profile must exist when the cookie change event
++  // arrived.
++  CHECK(context);
++  DispatchCookieChange(context, change);
++}
++
++void CookiesEventRouter::DispatchCookieChange(
++    content::BrowserContext* context,
++    const net::CookieChangeInfo& change) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+   // There is no way to represent non-serializable
+   // partition keys in JS so return to prevent a crash.
+   if (change.cookie.IsPartitioned() &&
+@@ -171,16 +203,6 @@
+                change.cause !=
+                    net::CookieChangeCause::INSERTED_NO_VALUE_CHANGE_OVERWRITE);
+ 
+-  ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
+-  content::BrowserContext* context =
+-      otr ? (client->HasOffTheRecordContext(browser_context_)
+-                 ? client->GetOffTheRecordContext(browser_context_)
+-                 : nullptr)
+-          : client->GetOriginalContext(browser_context_);
+-  // TODO(407373848): OTR profile must exist when the cookie change event
+-  // arrived.
+-  CHECK(context);
+-
+   api::cookies::Cookie cookie = cookies_helpers::CreateCookie(
+       change.cookie, cookies_helpers::GetStoreIdFromBrowserContext(context));
+   dict.Set(kCookieKey, cookie.ToValue());
+@@ -225,8 +247,52 @@
+                 cookies_helpers::GetURLFromCanonicalCookie(change.cookie));
+ }
+ 
++bool CookiesEventRouter::ObservesEveryOffTheRecordContext() const {
++  return true;
++}
++
++bool CookiesEventRouter::IsPrimaryOffTheRecordContext(
++    content::BrowserContext& context) const {
++  ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
++  content::BrowserContext* original_context =
++      client->GetOriginalContext(browser_context_);
++  return client->HasOffTheRecordContext(original_context) &&
++         client->GetOffTheRecordContext(original_context) == &context;
++}
++
++void CookiesEventRouter::BindOffTheRecordContext(
++    content::BrowserContext* context) {
++  auto found = other_otr_bindings_.find(context);
++  if (found == other_otr_bindings_.end()) {
++    return;
++  }
++  mojo::Receiver<network::mojom::CookieChangeListener>* receiver =
++      &found->second->receiver;
++  receiver->reset();
++  network::mojom::CookieManager* cookie_manager =
++      context->GetDefaultStoragePartition()
++          ->GetCookieManagerForBrowserProcess();
++  if (!cookie_manager) {
++    return;
++  }
++  cookie_manager->AddGlobalChangeListener(receiver->BindNewPipeAndPassRemote());
++  // The binding is owned by this router and erased with its context, so a
++  // disconnect can only refer to a live entry.
++  receiver->set_disconnect_handler(
++      base::BindOnce(&CookiesEventRouter::BindOffTheRecordContext,
++                     base::Unretained(this), context));
++}
++
+ void CookiesEventRouter::OnRelatedOffTheRecordBrowserContextCreated(
+     content::BrowserContext& off_the_record_context) {
++  if (!IsPrimaryOffTheRecordContext(off_the_record_context)) {
++    if (!other_otr_bindings_.contains(&off_the_record_context)) {
++      other_otr_bindings_[&off_the_record_context] =
++          std::make_unique<OffTheRecordBinding>(this, &off_the_record_context);
++      BindOffTheRecordContext(&off_the_record_context);
++    }
++    return;
++  }
+   // Start listening for cookie changes there. The OTR receiver may already
+   // be bound if MaybeStartListening() raced this callback (e.g. the
+   // off-the-record context already existed when StartObserving() was
+@@ -238,6 +304,9 @@
+ 
+ void CookiesEventRouter::OnRelatedOffTheRecordBrowserContextDestroyed(
+     content::BrowserContext& off_the_record_context) {
++  if (other_otr_bindings_.erase(&off_the_record_context)) {
++    return;
++  }
+   otr_receiver_.reset();
+ }
+ 
+--- a/extensions/browser/api/cookies/cookies_api.h
++++ b/extensions/browser/api/cookies/cookies_api.h
+@@ -8,6 +8,7 @@
+ #ifndef EXTENSIONS_BROWSER_API_COOKIES_COOKIES_API_H_
+ #define EXTENSIONS_BROWSER_API_COOKIES_COOKIES_API_H_
+ 
++#include <map>
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -49,6 +50,7 @@
+       content::BrowserContext& off_the_record_context) override;
+   void OnRelatedOffTheRecordBrowserContextDestroyed(
+       content::BrowserContext& off_the_record_context) override;
++  bool ObservesEveryOffTheRecordContext() const override;
+ 
+  private:
+   FRIEND_TEST_ALL_PREFIXES(ExtensionApiTest, OTRReceiverMojoConnectionError);
+@@ -61,6 +63,9 @@
+   class CookieChangeListener : public network::mojom::CookieChangeListener {
+    public:
+     CookieChangeListener(CookiesEventRouter* router, bool otr);
++    // Listens to one off-the-record context other than the primary one.
++    CookieChangeListener(CookiesEventRouter* router,
++                         content::BrowserContext* off_the_record_context);
+ 
+     CookieChangeListener(const CookieChangeListener&) = delete;
+     CookieChangeListener& operator=(const CookieChangeListener&) = delete;
+@@ -73,6 +78,16 @@
+    private:
+     raw_ptr<CookiesEventRouter> router_;
+     bool otr_;
++    raw_ptr<content::BrowserContext> off_the_record_context_ = nullptr;
++  };
++
++  // A non-primary off-the-record context's listener and binding.
++  struct OffTheRecordBinding {
++    OffTheRecordBinding(CookiesEventRouter* router,
++                        content::BrowserContext* context);
++    ~OffTheRecordBinding();
++    CookieChangeListener listener;
++    mojo::Receiver<network::mojom::CookieChangeListener> receiver{&listener};
+   };
+ 
+   void MaybeStartListening();
+@@ -82,6 +97,10 @@
+   void OnConnectionError(
+       mojo::Receiver<network::mojom::CookieChangeListener>* receiver);
+   void OnCookieChange(bool otr, const net::CookieChangeInfo& change);
++  void DispatchCookieChange(content::BrowserContext* context,
++                            const net::CookieChangeInfo& change);
++  bool IsPrimaryOffTheRecordContext(content::BrowserContext& context) const;
++  void BindOffTheRecordContext(content::BrowserContext* context);
+ 
+   // This method dispatches events to the extension message service.
+   void DispatchEvent(content::BrowserContext* context,
+@@ -105,6 +124,11 @@
+   CookieChangeListener otr_listener_{this, true};
+   mojo::Receiver<network::mojom::CookieChangeListener> otr_receiver_{
+       &otr_listener_};
++
++  // Other off-the-record contexts of the original context (an embedder may
++  // create several), each with its own binding.
++  std::map<content::BrowserContext*, std::unique_ptr<OffTheRecordBinding>>
++      other_otr_bindings_;
+ };
+ 
+ // Implements the cookies.get() extension function.
+--- a/extensions/browser/browser_context_lifetime_observer.h
++++ b/extensions/browser/browser_context_lifetime_observer.h
+@@ -33,6 +33,11 @@
+   virtual void OnPrimaryBrowserContextDestroyed(
+       content::BrowserContext& primary_context) {}
+ 
++  // An embedder may create several off-the-record contexts for one primary
++  // context. By default only its primary off-the-record context is reported;
++  // an observer that returns true is told about every one of them.
++  virtual bool ObservesEveryOffTheRecordContext() const { return false; }
++
+  protected:
+   virtual ~BrowserContextLifetimeObserver() = default;
+ };

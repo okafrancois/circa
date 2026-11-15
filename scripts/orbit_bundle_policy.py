@@ -54,8 +54,11 @@ BUILD_SUFFIXES = {'.d', '.o', '.a', '.swiftmodule', '.swiftdoc', '.swiftsourcein
 
 
 # Built-in content blocking (native/OrbitChromium/ContentBlocker and native/ThirdParty/easylist).
-CONTENT_BLOCKER_FILES = {('manifest.json',), ('background.js',), ('rulesets', 'easylist.json'),
-                         ('rulesets', 'easyprivacy.json'), ('rulesets', 'LICENSE.md')}
+CONTENT_BLOCKER_FILES = {('manifest.json',), ('rulesets', 'easylist.json'), ('rulesets', 'easyprivacy.json'),
+                         ('rulesets', 'LICENSE.md')}
+# Products before engine r24 also ship the extension's former worker; they remain valid predecessors
+# (update qualification re-signs them as fixtures).
+LEGACY_CONTENT_BLOCKER_FILES = {('background.js',)}
 
 def helper_bundle_identifier(bundle_id, suffix='', synthetic=False):
     """Keep synthetic helper crash reports outside the product's identifier namespace."""
@@ -124,7 +127,7 @@ def validate_bundle_contents(bundle, own_icon_catalog=False):
             if tail[0] == 'ContentBlocker':
                 resource = tail[1:]
                 directory = resource in {(), ('rulesets',)}
-                allowed = directory or resource in CONTENT_BLOCKER_FILES
+                allowed = directory or resource in CONTENT_BLOCKER_FILES or resource in LEGACY_CONTENT_BLOCKER_FILES
                 if entry.is_symlink() or (directory and not entry.is_dir()) or (not directory and not entry.is_file()):
                     raise RuntimeError('Invalid content blocker resource type refused: ' + str(relative))
             if tail[0] in {'en.lproj', 'fr.lproj'}:

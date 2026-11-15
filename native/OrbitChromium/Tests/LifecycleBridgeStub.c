@@ -439,3 +439,14 @@ int32_t ACRTraceBegin(uint64_t token, const char* categories, orbit_trace_callba
 int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t cb, void* context) { return 0; }
 int32_t ACRExtensionOptionsOpen(uint64_t token, const char* id) { return 0; }
 int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* id, int32_t allowed) { return 0; }
+const char* ACRContentBlockingExtensionID(void) { return "ohenphhpjnbnlpodjanpadehdopomjnc"; }
+int32_t ACRContentBlockingAvailable(void) { return 0; }
+int32_t ACRContentBlockingConfigure(uint64_t profile, int32_t enabled, const char* hosts, orbit_status_callback_t done, void* context) { return 0; }
+int32_t ACRContentBlockingPrivateAvailable(void) { return 0; }
+int32_t ACRContentBlockingConfigurePrivate(int32_t enabled, const char* hosts, orbit_status_callback_t done, void* context) { return 0; }
+int32_t ACRContentBlockingEndPrivateSession(void) { return 0; }
+int32_t ACRAudioVolumeAvailable(void) { return 0; }
+int32_t ACRSetAudioVolume(uint64_t token, double volume) { return 0; }
+int32_t ACRAudioVolume(uint64_t token, double* volume) { return 0; }
+int32_t ACRDetachedExtensionActionsAvailable(void) { return 0; }
+int32_t ACRPerformDetachedExtensionAction(uint64_t token, const char* id) { return 0; }

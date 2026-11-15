@@ -164,11 +164,17 @@
 
 ## Content blocking rulesets
 - The bundled extension is a read-only source. Before CEF starts, the bridge stages its
-  five payload/license files under `<engine root>/ContentBlocking/v1-<SHA256>/`, publishing
+  four payload/license files under `<engine root>/ContentBlocking/v1-<SHA256>/`, publishing
   the complete directory by atomic rename. Chromium generates and validates its indexes
   there. Existing versions preserve their indexes; a change to any shipped byte selects a
   new version. The manifest key, extension ID and per-profile/private settings stay unchanged.
   Staging failure stops startup rather than loading from the signed bundle.
+- From r24 (side API v19) the engine loads the staged copy as a component extension of every
+  regular profile (`--orbit-component-extension`, set by the bridge only): it is absent from the
+  extensions page and user management, and allowed in that profile's private contexts. The shell
+  configures it in the browser process (`content_blocking_configure`): rulesets on or off and the
+  excepted sites, persistent per profile and memory-only for private windows. The extension has
+  no worker and no cookie channel. Engines before r24 leave the blocker unavailable.
 - The built-in blocker ships declarativeNetRequest rulesets generated from EasyList and
   EasyPrivacy at the commit pinned in `release/content-blocking.json`. The data lives in
   `native/ThirdParty/easylist/` under its own license; the list texts are never committed.

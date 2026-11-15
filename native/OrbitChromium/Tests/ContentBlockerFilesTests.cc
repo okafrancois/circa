@@ -29,15 +29,15 @@ int main() {
   assert(fs::exists(fs::path(first) / "_metadata/generated_indexed_rulesets/_ruleset1"));
   assert(orbit_bridge::StageContentBlocker(*other, source.string()) != first);
   // A same-manifest-version resource change still gets a new, complete atomic version.
-  put(source / "background.js", "changed code");
+  put(source / "rulesets/LICENSE.md", "changed license");
   auto second = orbit_bridge::StageContentBlocker(*root, source.string());
   assert(!second.empty() && second != first);
-  assert(fs::exists(fs::path(first) / "background.js"));
+  assert(fs::exists(fs::path(first) / "rulesets/LICENSE.md"));
   assert(!fs::exists(fs::path(second) / "_metadata"));
   for (auto file : orbit_bridge::content_blocker::files) assert(fs::is_regular_file(fs::path(second) / file));
   // Refuse corrupt cached code and symlinks, never overwrite foreign data or use the bundle.
-  fs::remove(fs::path(second) / "background.js");
-  fs::create_symlink(source / "background.js", fs::path(second) / "background.js");
+  fs::remove(fs::path(second) / "rulesets/LICENSE.md");
+  fs::create_symlink(source / "rulesets/LICENSE.md", fs::path(second) / "rulesets/LICENSE.md");
   assert(orbit_bridge::StageContentBlocker(*root, source.string()).empty());
   fs::remove_all(work / "other/ContentBlocking");
   fs::create_directory_symlink(source, work / "other/ContentBlocking");

@@ -1,0 +1,674 @@
+--- a/libcef/browser/chrome/chrome_browser_context.cc
++++ b/libcef/browser/chrome/chrome_browser_context.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
+ #include "chrome/browser/profiles/off_the_record_profile_impl.h"
+ #include "chrome/common/pref_names.h"
++#include "extensions/browser/service_worker/service_worker_task_queue.h"
+ 
+ namespace {
+ 
+@@ -193,6 +194,11 @@
+       if (otr_profile) {
+         otr_profile->Init();
+         parent_profile->NotifyOffTheRecordProfileCreated(otr_profile);
++        // Orbit: create the context's extension service worker task queue
++        // now, which activates the split-mode extensions allowed there, so
++        // their workers start with the context instead of waiting for its
++        // first renderer.
++        extensions::ServiceWorkerTaskQueue::Get(otr_profile);
+       }
+ 
+       if (!profile_->IsOffTheRecord()) {
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -27,7 +27,7 @@
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 18u
++#define ORBIT_CEF_API_VERSION 19u
+ 
+ // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
+ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+@@ -42,6 +42,9 @@
+ // 5 loading. Flags bit0 requests focus. Views are owned by the embedder.
+ typedef void (*orbit_devtools_changed_t)(void*, int32_t state, uint32_t flags);
+ 
++// v19. UI-thread completion of an accepted operation: 1 applied, -1 failed.
++typedef void (*orbit_status_callback_t)(void*, int32_t status);
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t transition_type;
+@@ -382,6 +385,31 @@
+   int32_t (*devtools_state)(int32_t);
+   int32_t (*devtools_layout)(int32_t);
+   int32_t (*devtools_focus)(int32_t);
++
++  // Version 19. Native user action only, for the shell's exact published
++  // selection; no anchor or visibility requirement (a selected page-less
++  // source qualifies). A popup opens in an engine-owned titled window whose
++  // content is the popup's size, its top-left 40 pt right and 10 pt below the
++  // source window's. It follows content-size changes and closes on
++  // window.close(), Escape, its close button, extension_cancel, or when the
++  // source tab, source window, extension or profile goes away. Statuses as
++  // extension_action: 1 accepted, 0 refused, -2 side panel requested.
++  int32_t (*extension_action_detached)(int32_t browser_id, const char* extension_id,
++                                       uint64_t invocation, uint64_t surface_token,
++                                       uint64_t profile_token, uint64_t selection_epoch);
++  // Version 19. Output volume of a tab in [0, 1], independent of mute; it
++  // scales everything the tab plays, tab capture included. Get reports 1 until set.
++  int32_t (*tab_volume_set)(int32_t browser_id, double volume);
++  int32_t (*tab_volume_get)(int32_t browser_id, double* volume);
++  // Version 19. Built-in content blocking: the embedder component extension
++  // of a loaded regular profile (never loads one). otr 0 configures the
++  // profile (rules persist); otr 1 its off-the-record contexts (exception
++  // rules stay in memory). hosts: '|'-separated lowercase host names whose
++  // pages are never filtered, ignored while disabled. Returns 1 when accepted,
++  // then calls back (when not NULL) once on UI; 0 when refused, without one.
++  int32_t (*content_blocking_configure)(const char* profile_path, int32_t otr, int32_t enabled,
++                                        const char* hosts, orbit_status_callback_t callback,
++                                        void* context);
+ 
+ } orbit_cef_api_t;
+ 
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -34,6 +34,10 @@
+ // Private additive extension services; no public CEF API change.
+ #include "cef/libcef/browser/orbit/orbit_extensions.inc"
+ #include "cef/libcef/browser/orbit/orbit_password_store.inc"
++// Side API v19: detached action popups, tab volume, built-in content blocking.
++#include "cef/libcef/browser/orbit/orbit_detached_popup.inc"
++#include "cef/libcef/browser/orbit/orbit_tab_volume.inc"
++#include "cef/libcef/browser/orbit/orbit_content_blocking.inc"
+ 
+ // Lifecycle helpers are shared by capture, activation and suspension.
+ // clang-format off
+@@ -189,6 +193,7 @@
+     for (int i = 0; i < browser->tab_strip_model()->count(); ++i)
+       orbit::HidePasswordPrompt(browser->tab_strip_model()->GetWebContentsAt(i));
+   }
++  DetachedExtensionWindowDestroyed(window_token);
+   return orbit::WindowDestroyed(window_token);
+ }
+ 
+@@ -580,7 +585,7 @@
+ }();
+ const orbit_cef_api_t kApiV18 = [] {
+   auto api = kApiV17;
+-  api.struct_size = sizeof(orbit_cef_api_t);
++  api.struct_size = offsetof(orbit_cef_api_t, extension_action_detached);
+   api.version = 18u;
+   api.devtools_set_host = &orbit::DevToolsSetHost;
+   api.devtools_show = &orbit::DevToolsShow;
+@@ -590,6 +595,16 @@
+   api.devtools_focus = &orbit::DevToolsFocus;
+   return api;
+ }();
++const orbit_cef_api_t kApiV19 = [] {
++  auto api = kApiV18;
++  api.struct_size = sizeof(orbit_cef_api_t);
++  api.version = 19u;
++  api.extension_action_detached = &ExtensionActionDetached;
++  api.tab_volume_set = &TabVolumeSet;
++  api.tab_volume_get = &TabVolumeGet;
++  api.content_blocking_configure = &ContentBlockingConfigure;
++  return api;
++}();
+ }  // namespace
+ 
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -642,6 +657,8 @@
+       return &kApiV17;
+     case 18u:
+       return &kApiV18;
++    case 19u:
++      return &kApiV19;
+     default:
+       return nullptr;
+   }
+--- a/libcef/browser/orbit/orbit_extensions.inc
++++ b/libcef/browser/orbit/orbit_extensions.inc
+@@ -364,8 +364,10 @@
+   base::ScopedObservation<extensions::ExtensionRegistry, extensions::ExtensionRegistryObserver> registry_{this};
+ };
+ 
++void DetachedExtensionCancel(uint64_t invocation);
+ void ExtensionCancel(uint64_t invocation) {
+   if (!OnValidUIThread()) return;
++  DetachedExtensionCancel(invocation);
+   auto found = GetExtensionInvocations().find(invocation);
+   if (found == GetExtensionInvocations().end()) return;
+   auto lease = found->second.lock();
+diff --git a/libcef/browser/orbit/orbit_content_blocking.inc b/libcef/browser/orbit/orbit_content_blocking.inc
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_content_blocking.inc
+@@ -0,0 +1,113 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++// Included inside orbit_cef_api.mm after orbit_extensions.inc.
++// Built-in content blocking (side API v19). The embedder's blocker is a
++// component extension of every regular profile (loaded from the directory on
++// the browser's own command line); this configures its declarativeNetRequest
++// state directly in the browser process: static rulesets on or off, and one
++// allow rule for the excepted sites, persistent for a profile and memory-only
++// (session rules) for its off-the-record contexts.
++#include "base/barrier_callback.h"
++#include "base/command_line.h"
++#include "base/strings/string_split.h"
++#include "base/threading/thread_restrictions.h"
++#include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
++#include "extensions/common/api/declarative_net_request.h"
++#include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
++
++namespace {
++constexpr char kContentBlockingComponentSwitch[] = "orbit-component-extension";
++// Rule IDs the blocker has ever used: 1 reserved (earlier configuration
++// channel), 2 the excepted sites.
++constexpr int kContentBlockingReservedRule = 1;
++constexpr int kContentBlockingAllowedSitesRule = 2;
++constexpr int kContentBlockingSitePriority = 1000;
++constexpr size_t kContentBlockingHostsLimit = 512 * 1024;
++
++const base::FilePath& ContentBlockingComponentPath() {
++  static base::NoDestructor<base::FilePath> path([] {
++    const auto value = base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++        kContentBlockingComponentSwitch);
++    if (value.empty() || !value.IsAbsolute()) return base::FilePath();
++    // The component loader keeps the canonical path; resolve it the same way once.
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    return base::MakeAbsoluteFilePath(value);
++  }());
++  return *path;
++}
++
++const extensions::Extension* ContentBlockingExtension(Profile* profile) {
++  const auto& path = ContentBlockingComponentPath();
++  auto* registry = profile ? extensions::ExtensionRegistry::Get(profile) : nullptr;
++  if (path.empty() || !registry) return nullptr;
++  auto find = [&](const extensions::ExtensionSet& set) -> const extensions::Extension* {
++    for (const auto& extension : set) {
++      if (extensions::Manifest::IsComponentLocation(extension->location()) && extension->path() == path)
++        return extension.get();
++    }
++    return nullptr;
++  };
++  if (const auto* enabled = find(registry->enabled_extensions())) return enabled;
++  // Earlier engines loaded the blocker unpacked and disabled it while blocking was off; a
++  // component keeps that preference. The component is never user-managed: enable it.
++  const auto* disabled = find(registry->disabled_extensions());
++  auto* registrar = extensions::ExtensionRegistrar::Get(profile);
++  if (!disabled || !registrar) return nullptr;
++  registrar->EnableExtension(disabled->id());
++  return find(registry->enabled_extensions());
++}
++
++bool ContentBlockingHost(std::string_view host) {
++  if (host.empty() || host.size() > 253 || host.front() == '.' || host.back() == '.' ||
++      host.find("..") != std::string_view::npos) return false;
++  for (const char c : host)
++    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-')) return false;
++  return true;
++}
++
++int32_t ContentBlockingConfigure(const char* path, int32_t otr, int32_t enabled, const char* hosts,
++                                 orbit_status_callback_t callback, void* context) {
++  if ((otr != 0 && otr != 1) || (enabled != 0 && enabled != 1) || !hosts) return 0;
++  Profile* profile = ExtensionProfile(path);
++  const extensions::Extension* extension = ContentBlockingExtension(profile);
++  auto* service = extension ? extensions::declarative_net_request::RulesMonitorService::Get(profile) : nullptr;
++  if (!service) return 0;
++  const std::string_view list(hosts);
++  if (list.size() > kContentBlockingHostsLimit) return 0;
++  std::vector<std::string> allowed;
++  for (const auto& host : base::SplitStringPiece(list, "|", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
++    if (!ContentBlockingHost(host)) return 0;
++    allowed.emplace_back(host);
++  }
++
++  namespace dnr = extensions::api::declarative_net_request;
++  std::vector<dnr::Rule> rules;
++  if (enabled && !allowed.empty()) {
++    dnr::Rule rule;
++    rule.id = kContentBlockingAllowedSitesRule;
++    rule.priority = kContentBlockingSitePriority;
++    rule.action.type = dnr::RuleActionType::kAllowAllRequests;
++    rule.condition.request_domains = std::move(allowed);
++    rule.condition.resource_types = std::vector<dnr::ResourceType>{dnr::ResourceType::kMainFrame};
++    rules.push_back(std::move(rule));
++  }
++  std::set<extensions::declarative_net_request::RulesetID> rulesets;
++  for (const auto& ruleset : extensions::declarative_net_request::DNRManifestData::GetRulesets(*extension))
++    rulesets.insert(ruleset.id);
++
++  // Three queued updates; the callback reports once all of them completed.
++  auto done = base::BarrierCallback<std::optional<std::string>>(3, base::BindOnce(
++      [](orbit_status_callback_t callback, void* context, std::vector<std::optional<std::string>> errors) {
++        const bool failed = std::ranges::any_of(errors, [](const auto& error) { return error.has_value(); });
++        if (callback) callback(context, failed ? -1 : 1);
++      }, callback, context));
++  const std::vector<int> owned_rules = {kContentBlockingReservedRule, kContentBlockingAllowedSitesRule};
++  service->UpdateEnabledStaticRulesets(*extension, enabled ? std::set<extensions::declarative_net_request::RulesetID>() : rulesets,
++                                       enabled ? rulesets : std::set<extensions::declarative_net_request::RulesetID>(), done);
++  // The rules live in one store; the other one is emptied.
++  std::vector<dnr::Rule> dynamic_rules, session_rules;
++  (otr ? session_rules : dynamic_rules) = std::move(rules);
++  service->UpdateDynamicRules(*extension, owned_rules, std::move(dynamic_rules), done);
++  service->UpdateSessionRules(*extension, owned_rules, std::move(session_rules), done);
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_detached_popup.inc b/libcef/browser/orbit/orbit_detached_popup.inc
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_detached_popup.inc
+@@ -0,0 +1,317 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++// Included inside orbit_cef_api.mm after orbit_extensions.inc.
++// Extension action popup in an engine-owned titled window (side API v19). The
++// popup is the genuine ExtensionViewHost of the action; only its container
++// differs from the anchored bubble: a small native window beside the source
++// window, without an anchor or a visibility requirement.
++#include "base/functional/function_ref.h"
++#include "base/memory/weak_ptr.h"
++#include "base/message_loop/message_pump_apple.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/ui/views/extensions/extension_view_views.h"
++#include "ui/views/layout/fill_layout.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/widget/widget_delegate.h"
++#include "ui/views/widget/widget_observer.h"
++#include "ui/views/window/non_client_view.h"
++
++namespace {
++// Placement relative to the source window's top-left corner, in points.
++constexpr gfx::Vector2d kDetachedPopupOffset(40, 10);
++
++class OrbitDetachedPopup;
++using DetachedPopupMap = std::map<uint64_t, std::unique_ptr<OrbitDetachedPopup>>;
++DetachedPopupMap& GetDetachedPopups() {
++  static base::NoDestructor<DetachedPopupMap> popups;
++  return *popups;
++}
++void EraseDetachedPopup(uint64_t invocation);
++
++// Reports the extension view's content-size changes to the window.
++class OrbitDetachedPopupContents final : public views::View {
++ public:
++  explicit OrbitDetachedPopupContents(base::RepeatingClosure changed) : changed_(std::move(changed)) {
++    SetLayoutManager(std::make_unique<views::FillLayout>());
++  }
++  void ChildPreferredSizeChanged(views::View*) override {
++    if (changed_) changed_.Run();
++  }
++  void Revoke() { changed_.Reset(); }
++
++ private:
++  base::RepeatingClosure changed_;
++};
++
++class OrbitDetachedPopup final : public views::WidgetDelegate,
++                                 public views::WidgetObserver,
++                                 public ExtensionViewViews::Container,
++                                 public content::WebContentsObserver,
++                                 public extensions::ExtensionRegistryObserver {
++ public:
++  OrbitDetachedPopup(uint64_t invocation, uint64_t window, Browser* browser,
++                     content::WebContents* source, std::unique_ptr<extensions::ExtensionViewHost> host,
++                     const std::u16string& title, const gfx::Point& top_left)
++      : invocation_(invocation), window_(window), browser_(browser), top_left_(top_left),
++        host_(std::move(host)), source_observer_(this, source) {
++    SetTitle(title);
++    SetShowTitle(true);
++    SetCanResize(false);
++    SetCanMaximize(false);
++    SetCanMinimize(false);
++    SetModalType(ui::mojom::ModalType::kNone);
++  }
++  ~OrbitDetachedPopup() override {
++    Revoke();
++    widget_observation_.Reset();
++    widget_.reset();
++  }
++
++  uint64_t window() const { return window_; }
++
++  bool Start() {
++    Profile* profile = browser_->GetProfile();
++    auto contents = std::make_unique<OrbitDetachedPopupContents>(base::BindRepeating(
++        &OrbitDetachedPopup::UpdateBounds, weak_factory_.GetWeakPtr()));
++    contents_ = contents.get();
++    extension_view_ = contents->AddChildView(std::make_unique<ExtensionViewViews>(profile, host_.get()));
++    extension_view_->SetContainer(this);
++    extension_view_->Init();
++    SetContentsView(std::move(contents));
++
++    views::Widget::InitParams params(views::Widget::InitParams::CLIENT_OWNS_WIDGET,
++                                     views::Widget::InitParams::TYPE_WINDOW);
++    params.delegate = this;
++    params.bounds = gfx::Rect(top_left_, ExtensionPopup::kMinSize);
++    params.name = "OrbitDetachedExtensionPopup";
++    widget_ = std::make_unique<views::Widget>();
++    widget_observation_.Observe(widget_.get());
++    widget_->Init(std::move(params));
++    if (revoked_) return false;
++
++    // window.close() and Escape (ExtensionViewHost) close the window.
++    host_->SetCloseHandler(base::BindOnce(
++        [](base::WeakPtr<OrbitDetachedPopup> popup, extensions::ExtensionHost*) {
++          if (popup) popup->Close();
++        }, weak_factory_.GetWeakPtr()));
++    registry_observation_.Observe(extensions::ExtensionRegistry::Get(host_->browser_context()));
++    browser_close_ = browser_->RegisterBrowserDidClose(base::BindRepeating(
++        [](base::WeakPtr<OrbitDetachedPopup> popup, BrowserWindowInterface*) {
++          if (popup) popup->Close();
++        }, weak_factory_.GetWeakPtr()));
++    if (host_->has_loaded_once()) Show();
++    else Observe(host_->host_contents());  // Shown once its document loaded.
++    return !revoked_;
++  }
++
++  // Revokes the popup at once; the native window closes after the current
++  // event, then this object is erased.
++  void Close() {
++    if (closing_) return;
++    closing_ = true;
++    Revoke();
++    if (!widget_ || widget_->IsClosed()) {
++      Finish();
++      return;
++    }
++    // On Mac, defer the close while a nested run loop handles an event.
++    if (base::message_pump_apple::IsHandlingSendEvent()) {
++      auto weak = weak_factory_.GetWeakPtr();
++      CFRunLoopPerformBlock(CFRunLoopGetCurrent(), kCFRunLoopDefaultMode, ^{
++        if (weak && weak->widget_) weak->widget_->Close();
++      });
++      return;
++    }
++    widget_->Close();
++  }
++
++  // ExtensionViewViews::Container:
++  gfx::Size GetMinBounds() override { return ExtensionPopup::kMinSize; }
++  gfx::Size GetMaxBounds() override { return ExtensionPopup::kMaxSize; }
++
++  // content::WebContentsObserver (popup contents):
++  void DocumentOnLoadCompletedInPrimaryMainFrame() override {
++    Observe(nullptr);
++    Show();
++  }
++
++  // views::WidgetObserver:
++  void OnWidgetDestroying(views::Widget*) override {
++    closing_ = true;
++    Revoke();
++  }
++  void OnWidgetDestroyed(views::Widget*) override {
++    widget_observation_.Reset();
++    Finish();
++  }
++
++  // extensions::ExtensionRegistryObserver:
++  void OnExtensionUnloaded(content::BrowserContext*, const extensions::Extension* extension,
++                           extensions::UnloadedExtensionReason) override {
++    if (host_ && extension->id() == host_->extension_id()) Close();
++  }
++  void OnShutdown(extensions::ExtensionRegistry*) override {
++    registry_observation_.Reset();
++    Close();
++  }
++
++ private:
++  class SourceObserver final : public content::WebContentsObserver {
++   public:
++    SourceObserver(OrbitDetachedPopup* owner, content::WebContents* source)
++        : content::WebContentsObserver(source), owner_(owner) {}
++    void WebContentsDestroyed() override {
++      Observe(nullptr);
++      owner_->Close();
++    }
++    void Stop() { Observe(nullptr); }
++
++   private:
++    const raw_ptr<OrbitDetachedPopup> owner_;
++  };
++
++  void Show() {
++    if (revoked_ || !widget_ || !host_) return;
++    UpdateBounds();
++    widget_->Show();
++    if (!revoked_ && host_) host_->host_contents()->Focus();
++  }
++
++  // Content size plus the native title bar; the top-left corner never moves.
++  void UpdateBounds() {
++    if (revoked_ || !widget_ || !extension_view_ || !widget_->non_client_view()) return;
++    gfx::Size size = extension_view_->GetPreferredSize();
++    size.SetToMax(ExtensionPopup::kMinSize);
++    size.SetToMin(ExtensionPopup::kMaxSize);
++    const gfx::Rect frame = widget_->non_client_view()->GetWindowBoundsForClientBounds(gfx::Rect(size));
++    widget_->SetBounds(gfx::Rect(top_left_, frame.size()));
++  }
++
++  // No popup, browser or source access after this; idempotent.
++  void Revoke() {
++    if (revoked_) return;
++    revoked_ = true;
++    Observe(nullptr);
++    source_observer_.Stop();
++    registry_observation_.Reset();
++    browser_close_ = {};
++    browser_ = nullptr;
++    if (contents_) contents_->Revoke();
++    if (contents_ && extension_view_) contents_->RemoveChildViewT(extension_view_.ExtractAsDangling());
++    extension_view_ = nullptr;
++    contents_ = nullptr;
++    // Destroy the contents after the observer stack and any nested native
++    // event loop have unwound.
++    if (host_) base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE, std::move(host_));
++  }
++
++  void Finish() {
++    if (finished_) return;
++    finished_ = true;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&EraseDetachedPopup, invocation_));
++  }
++
++  const uint64_t invocation_;
++  const uint64_t window_;
++  raw_ptr<Browser> browser_;
++  const gfx::Point top_left_;
++  std::unique_ptr<extensions::ExtensionViewHost> host_;
++  SourceObserver source_observer_;
++  std::unique_ptr<views::Widget> widget_;
++  raw_ptr<OrbitDetachedPopupContents> contents_ = nullptr;
++  raw_ptr<ExtensionViewViews> extension_view_ = nullptr;
++  bool revoked_ = false;
++  bool closing_ = false;
++  bool finished_ = false;
++  base::CallbackListSubscription browser_close_;
++  base::ScopedObservation<views::Widget, views::WidgetObserver> widget_observation_{this};
++  base::ScopedObservation<extensions::ExtensionRegistry, extensions::ExtensionRegistryObserver>
++      registry_observation_{this};
++  base::WeakPtrFactory<OrbitDetachedPopup> weak_factory_{this};
++};
++
++void EraseDetachedPopup(uint64_t invocation) {
++  // Moved out first: destruction may reach observers that look the map up.
++  auto found = GetDetachedPopups().find(invocation);
++  if (found == GetDetachedPopups().end()) return;
++  auto popup = std::move(found->second);
++  GetDetachedPopups().erase(found);
++}
++
++void CloseDetachedPopups(base::FunctionRef<bool(const OrbitDetachedPopup&)> matches) {
++  std::vector<uint64_t> invocations;
++  for (const auto& [invocation, popup] : GetDetachedPopups())
++    if (popup && matches(*popup)) invocations.push_back(invocation);
++  for (const uint64_t invocation : invocations) {
++    auto found = GetDetachedPopups().find(invocation);
++    if (found != GetDetachedPopups().end() && found->second) found->second->Close();
++  }
++}
++
++void DetachedExtensionCancel(uint64_t invocation) {
++  auto found = GetDetachedPopups().find(invocation);
++  if (found != GetDetachedPopups().end() && found->second) found->second->Close();
++}
++
++void DetachedExtensionWindowDestroyed(uint64_t window) {
++  CloseDetachedPopups([window](const OrbitDetachedPopup& popup) { return popup.window() == window; });
++}
++
++bool DetachedSelectionAuthorizes(uint64_t window, int32_t browser, uint64_t surface,
++                                 uint64_t profile, uint64_t epoch) {
++  if (!surface || !profile || !epoch || !orbit::GetWindowGeneration(window)) return false;
++  const auto found = GetExtensionSelections().find(window);
++  return found != GetExtensionSelections().end() && found->second.browser == browser &&
++      found->second.surface == surface && found->second.profile == profile && found->second.epoch == epoch;
++}
++
++int32_t ExtensionActionDetached(int32_t browser_id, const char* id, uint64_t invocation,
++                                uint64_t surface, uint64_t profile, uint64_t epoch) {
++  if (!OnValidUIThread() || !id || !invocation || GetDetachedPopups().contains(invocation) ||
++      GetExtensionInvocations().contains(invocation)) return 0;
++  auto* delegate = CefBrowserPlatformDelegateChromeHosted::FromBrowserId(browser_id);
++  auto host = GetChromeHost(browser_id);
++  if (!delegate || !host || !host->browser() || !host->GetWebContents()) return 0;
++  Browser* browser = host->browser();
++  content::WebContents* contents = host->GetWebContents();
++  const uint64_t window = delegate->window_token();
++  if (browser->GetProfile()->IsOffTheRecord() || browser->IsDeleteScheduled() ||
++      !DetachedSelectionAuthorizes(window, browser_id, surface, profile, epoch)) return 0;
++  auto* registry = extensions::ExtensionRegistry::Get(browser->GetProfile());
++  auto* manager = extensions::ExtensionActionManager::Get(browser->GetProfile());
++  scoped_refptr<const extensions::Extension> extension = registry ? registry->enabled_extensions().GetByID(id) : nullptr;
++  auto* action = extension && manager ? manager->GetExtensionAction(*extension) : nullptr;
++  auto* runner = extensions::ExtensionActionRunner::GetForWebContents(contents);
++  const int tab_id = extensions::ExtensionTabUtil::GetTabId(contents);
++  if (!action || !runner || !action->GetIsVisible(tab_id)) return 0;
++  // One detached popup per source window, as with the toolbar's popup.
++  CloseDetachedPopups([window](const OrbitDetachedPopup& popup) { return popup.window() == window; });
++  const auto result = runner->RunAction(extension.get(), /*grant_tab_permissions=*/true);
++  // The action can reenter embedder and extension code: recheck the authority.
++  host = GetChromeHost(browser_id);
++  if (!host || host->browser() != browser || host->GetWebContents() != contents ||
++      browser->IsDeleteScheduled() || !DetachedSelectionAuthorizes(window, browser_id, surface, profile, epoch))
++    return 0;
++  if (result != extensions::ExtensionAction::ShowAction::kShowPopup)
++    return result == extensions::ExtensionAction::ShowAction::kToggleSidePanel ? -2 : 1;
++  if (registry->enabled_extensions().GetByID(id) != extension.get()) return 0;
++  action = manager->GetExtensionAction(*extension);
++  if (!action || !action->HasPopup(tab_id)) return 0;
++  NSWindow* source_window = orbit::GetNativeWindow(window).GetNativeNSWindow();
++  if (!source_window) return 0;
++  auto popup_host = extensions::ExtensionViewHostFactory::CreatePopupHost(*extension, action->GetPopupUrl(tab_id), browser);
++  if (!popup_host) return 0;
++  const gfx::Point top_left = gfx::ScreenRectFromNSRect(source_window.frame).origin() + kDetachedPopupOffset;
++  auto popup = std::make_unique<OrbitDetachedPopup>(invocation, window, browser, contents, std::move(popup_host),
++                                                    base::UTF8ToUTF16(extension->name()), top_left);
++  OrbitDetachedPopup* started = popup.get();
++  GetDetachedPopups()[invocation] = std::move(popup);
++  if (!started->Start()) {
++    started->Close();
++    return 0;
++  }
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_tab_volume.inc b/libcef/browser/orbit/orbit_tab_volume.inc
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_tab_volume.inc
+@@ -0,0 +1,85 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++// Included inside orbit_cef_api.mm before its anonymous namespace.
++// Per-tab local output volume (side API v19). The browser's audio stream broker
++// scales every output stream of the tab's audio group (the renderer's own
++// volume times the group's), tab capture included.
++#include <cmath>
++#include "content/browser/media/forwarding_audio_stream_factory.h"
++#include "content/browser/web_contents/web_contents_impl.h"
++#include "content/public/browser/web_contents_observer.h"
++
++namespace content {
++// Defined with the audio output stream broker (Chromium delta of this engine).
++void OrbitSetAudioGroupVolume(const base::UnguessableToken& group, double volume);
++}  // namespace content
++
++namespace {
++CefRefPtr<ChromeBrowserHostImpl> GetChromeHost(int32_t browser_id);
++bool OnValidUIThread();
++
++class TabVolumes final {
++ public:
++  static TabVolumes& Get() {
++    static base::NoDestructor<TabVolumes> volumes;
++    return *volumes;
++  }
++
++  double VolumeOf(content::WebContents* contents) const {
++    const auto found = entries_.find(contents);
++    return found == entries_.end() ? 1.0 : found->second->volume;
++  }
++
++  void Set(content::WebContents* contents, double volume) {
++    auto found = entries_.find(contents);
++    if (volume == 1.0) {
++      if (found == entries_.end()) return;
++      const auto group = found->second->group;
++      entries_.erase(found);
++      content::OrbitSetAudioGroupVolume(group, 1.0);
++      return;
++    }
++    if (found == entries_.end()) {
++      auto* impl = static_cast<content::WebContentsImpl*>(contents);
++      found = entries_.emplace(contents, std::make_unique<Entry>(
++          contents, impl->GetAudioStreamFactory()->group_id())).first;
++    }
++    found->second->volume = volume;
++    content::OrbitSetAudioGroupVolume(found->second->group, volume);
++  }
++
++ private:
++  friend class base::NoDestructor<TabVolumes>;
++  struct Entry final : content::WebContentsObserver {
++    Entry(content::WebContents* contents, const base::UnguessableToken& group_id)
++        : content::WebContentsObserver(contents), group(group_id) {}
++    void WebContentsDestroyed() override {
++      // The group ends with its contents; forget its volume.
++      TabVolumes::Get().Set(web_contents(), 1.0);
++    }
++    const base::UnguessableToken group;
++    double volume = 1.0;
++  };
++
++  TabVolumes() = default;
++
++  std::map<content::WebContents*, std::unique_ptr<Entry>> entries_;
++};
++
++int32_t TabVolumeSet(int32_t browser_id, double volume) {
++  if (!OnValidUIThread() || !std::isfinite(volume) || volume < 0.0 || volume > 1.0) return 0;
++  auto host = GetChromeHost(browser_id);
++  auto* contents = host ? host->GetWebContents() : nullptr;
++  if (!contents) return 0;
++  TabVolumes::Get().Set(contents, volume);
++  return 1;
++}
++
++int32_t TabVolumeGet(int32_t browser_id, double* volume) {
++  if (!OnValidUIThread() || !volume) return 0;
++  auto host = GetChromeHost(browser_id);
++  auto* contents = host ? host->GetWebContents() : nullptr;
++  if (!contents) return 0;
++  *volume = TabVolumes::Get().VolumeOf(contents);
++  return 1;
++}
++}  // namespace

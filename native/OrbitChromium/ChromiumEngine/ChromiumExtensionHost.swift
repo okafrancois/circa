@@ -157,6 +157,22 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
         }
     }
 
+    var supportsDetachedActions: Bool { ACRDetachedExtensionActionsAvailable() == 1 }
+
+    func performDetachedAction(extensionID: String, on surface: any BrowserEngineSurface) throws {
+        try refuseInternal(extensionID)
+        guard supportsDetachedActions, let engine, let surface = surface as? ChromiumSurface,
+              surface.engine === engine, !surface.isDisposed, surface.isReady, surface.hostedWindowToken != 0 else {
+            throw BrowserEngineError.unsupportedOperation
+        }
+        // Publishes the exact selection the engine authorizes; the document may be hidden.
+        guard surface.activateTab() else { throw BrowserEngineError.unsupportedOperation }
+        _ = try profileToken(surface.profileID)
+        guard ACRPerformDetachedExtensionAction(surface.token, extensionID) == 1 else {
+            throw BrowserEngineError.unsupportedOperation
+        }
+    }
+
     func stopObserving(_ profileID: ProfileID? = nil) {
         changeHub.remove(in: profileID)
         let cancelled = observed.filter { profileID == nil || $0.key == profileID }

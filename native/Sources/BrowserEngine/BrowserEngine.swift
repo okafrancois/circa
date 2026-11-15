@@ -83,6 +83,9 @@ public struct BrowserEngineCapabilities: OptionSet, Sendable {
     /// web-accessible resources for frames a site embeds, profile). The shell then lets such
     /// navigations proceed instead of cancelling them as unknown schemes (EXT-OUTCOME-R1).
     public static let extensionDocuments = Self(rawValue: 1 << 23)
+    /// A tab's local output volume can be set between 0 and 1, independently of muting
+    /// (`setAudioVolume`).
+    public static let audioVolume = Self(rawValue: 1 << 28)
 }
 
 /// A tab the engine created by itself in a shell window (`setEngineTabAdoption`).

@@ -9,9 +9,8 @@
 
 namespace orbit_bridge {
 namespace content_blocker {
-inline constexpr std::array<const char*, 5> files = {
-    "manifest.json", "background.js", "rulesets/easylist.json",
-    "rulesets/easyprivacy.json", "rulesets/LICENSE.md"};
+inline constexpr std::array<const char*, 4> files = {
+    "manifest.json", "rulesets/easylist.json", "rulesets/easyprivacy.json", "rulesets/LICENSE.md"};
 
 // Both directory components and leaves must be real, private copies, never symlinks.
 inline int OpenFile(int directory, const char* name, int flags) {

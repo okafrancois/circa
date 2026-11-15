@@ -277,6 +277,12 @@ public protocol BrowserEngineSurface: BrowserFindSurface, BrowserMediaSessionCon
     func restoreAfterSuspension(_ state: BrowserSuspensionState) async
     /// Throws `unsupportedOperation` without `audioMuting`.
     func setAudioMuted(_ muted: Bool) throws
+    /// The tab's output volume in [0, 1], independent of muting; it also applies to tab capture.
+    /// Throws `unsupportedOperation` without `audioVolume`, for a value outside [0, 1], or
+    /// before the document exists.
+    func setAudioVolume(_ volume: Double) throws
+    /// The current volume (1 until set); nil without `audioVolume` or before the document exists.
+    var audioVolume: Double? { get }
     /// Selection lifecycle for the native video PiP window. The engine owns the session after
     /// entry, including its default behavior when the source tab becomes selected again.
     func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool)
@@ -306,6 +312,9 @@ public protocol BrowserEngineSurface: BrowserFindSurface, BrowserMediaSessionCon
 
 public extension BrowserEngineSurface {
     var documentView: NSView { hostView }
+
+    func setAudioVolume(_ volume: Double) throws { throw BrowserEngineError.unsupportedOperation }
+    var audioVolume: Double? { nil }
 
     var pagePerformance: (any BrowserPagePerformance)? { nil }
     var nativePageServices: (any BrowserNativePageServices)? { nil }

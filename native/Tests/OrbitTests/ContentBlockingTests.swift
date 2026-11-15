@@ -123,10 +123,10 @@ struct ContentBlockingTests {
         var persistent: [ProfileID: [String]] = [parent: ["kept.example.test"], other: []]
         let coordinator = BrowserContentBlockingCoordinator(blocker: fake, isEnabled: { enabled[$0] ?? false },
             exceptions: { persistent[$0] ?? [] })
-        // Nothing is configured before a private window; the engine is readied before its context.
+        // Nothing is configured before a private window.
         await coordinator.synchronizePrivate()
         #expect(fake.privateConfiguration == nil && !coordinator.blocksPrivately)
-        #expect(await coordinator.preparePrivateWindow() && fake.preparedPrivateWindows == 1)
+        #expect(coordinator.supportsPrivateWindows)
         let first = UUID(), second = UUID()
         await coordinator.openPrivateWindow(first, parent: parent)
         #expect(fake.privateConfiguration == .init(isEnabled: true, allowedHosts: ["kept.example.test"]))
@@ -236,8 +236,7 @@ struct ContentBlockingTests {
         let window = try await environment.makeWindow(id: windowID.rawValue)
         defer { window.window?.close() }
         #expect(window.siteControls.contentBlocking === environment.contentBlocking)
-        // No private window yet: launch only readies private filtering.
-        try await waitForNativeState("private filtering readied") { fake.preparedPrivateWindows == 1 }
+        // No private window yet: nothing is configured for private windows.
         #expect(fake.privateConfiguration == nil)
         try await environment.settings.updateProfile(profile) { $0.blocksAdsAndTrackers = false }
         try await waitForNativeState("Settings switch applied") { fake.configurations[profile] == .init(isEnabled: false) }

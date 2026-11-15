@@ -255,6 +255,17 @@ void OwnedUserDataDirIsBridgeOnly() {
   }
 }
 
+void ComponentExtensionIsBridgeOnly() {
+  const std::string name = orbit_bridge::kComponentExtensionSwitch;
+  for (const std::string& argument : {"--" + name + "=/private/tmp/extension", "-" + name + "=/private/tmp/x", "--" + name}) {
+    for (int product : {0, 1}) {
+      const auto filtered = orbit_bridge::FilterBrowserArguments({argument}, product, ExtensionOk);
+      Check(filtered.kept.empty() && filtered.dropped == 1 && !filtered.refused,
+            "the built-in component extension never comes from process or shell arguments");
+    }
+  }
+}
+
 void ExtensionUpdateSmokeIsConfined() {
   for (const char* port : {"1024", "65535", "32145"}) {
     const std::string flag = "--orbit-test-extension-updates=" + std::string(port);
@@ -359,6 +370,7 @@ int main() {
   ArgumentsAreAllowListed();
   ExtensionUpdateSmokeIsConfined();
   OwnedUserDataDirIsBridgeOnly();
+  ComponentExtensionIsBridgeOnly();
   AnchoredRootRemovesOnlyItsOwnChildren();
   if (failures) return EXIT_FAILURE;
   std::printf("BridgePolicyTests: PASS\n");

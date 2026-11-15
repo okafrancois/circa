@@ -92,14 +92,6 @@ final class BrowserContentBlockingCoordinator {
         return (!privateExceptions.contains(host), true)
     }
 
-    /// Readies the engine before a private window's context is created. False when private
-    /// windows cannot be filtered; the window then opens without blocking or its row.
-    func preparePrivateWindow() async -> Bool {
-        guard blocker.supportsPrivateWindows else { return false }
-        do { try await blocker.preparePrivateWindows(); return true }
-        catch { onError?(error); return false }
-    }
-
     /// Registers a private window before its first page, then applies the session's configuration
     /// to every open private context, the new one included.
     func openPrivateWindow(_ id: UUID, parent: ProfileID) async {

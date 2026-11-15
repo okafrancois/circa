@@ -3,37 +3,33 @@ import BrowserEngine
 import Foundation
 import OrbitChromiumBridge
 
-/// Built-in blocking through the app's bundled declarativeNetRequest extension. The extension is
-/// internal: `ChromiumExtensionHost` never lists or mutates it.
+/// Built-in blocking through the app's bundled declarativeNetRequest extension, which the engine
+/// loads as a component of every regular profile and configures in the browser process. The
+/// extension is internal: `ChromiumExtensionHost` never lists or mutates it.
 @MainActor
 public final class ChromiumContentBlocking: BrowserContentBlocking {
     public static let extensionID = String(cString: ACRContentBlockingExtensionID())
     private weak var engine: ChromiumBrowserEngine?
-    /// Wall-clock seeded so revisions keep increasing across launches.
-    private var revision = UInt64(Date().timeIntervalSince1970 * 1000)
+    /// The engine's last completion per profile and for private windows: 1 applied, -1 failed.
+    private var statuses: [ProfileID: Int32] = [:]
+    private var privateStatus: Int32?
     init(engine: ChromiumBrowserEngine) { self.engine = engine }
 
     public func configure(_ configuration: BrowserContentBlockingConfiguration, profileID: ProfileID,
-                   waitsForAcknowledgement: Bool) async throws {
+                          waitsForAcknowledgement: Bool) async throws {
         guard let engine else { throw BrowserEngineError.unsupportedOperation }
         await engine.profileReady(profileID)
         guard !engine.isShutDown, !engine.refusedProfiles.contains(profileID) else {
             throw BrowserEngineError.unsupportedOperation
         }
-        revision += 1
-        let current = revision
         let token = engine.profileToken(for: profileID)
-        guard ACRContentBlockingConfigure(token, configuration.isEnabled ? 1 : 0,
-                                          configuration.allowedHosts.joined(separator: "|"), current) == 1 else {
-            throw BrowserEngineError.unsupportedOperation
-        }
-        // Disabling also disables the extension synchronously; only enabling waits for its worker.
-        guard waitsForAcknowledgement, configuration.isEnabled else { return }
-        let deadline = ContinuousClock.now + .seconds(2)
-        while ContinuousClock.now < deadline, !engine.isShutDown {
-            if await acknowledgement(token: token) == "\(current).1" { return }
-            try await Task.sleep(for: .milliseconds(50))
-        }
+        let enabled: Int32 = configuration.isEnabled ? 1 : 0
+        let hosts = configuration.allowedHosts.joined(separator: "|")
+        // Disabling always waits, so that it is in effect when this returns.
+        let status = try await run(waits: waitsForAcknowledgement || !configuration.isEnabled) { [weak self] status in
+            self?.statuses[profileID] = status
+        } call: { ACRContentBlockingConfigure(token, enabled, hosts, $0, $1) }
+        if status == -1 { throw BrowserEngineError.unsupportedOperation }
     }
 
     public var supportsPrivateWindows: Bool {
@@ -41,90 +37,75 @@ public final class ChromiumContentBlocking: BrowserContentBlocking {
         return ACRContentBlockingPrivateAvailable() == 1
     }
 
-    /// The initial profile's copy of the extension runs one split-mode worker per private context;
-    /// it must be loaded with incognito access before the context exists. At launch the copy may
-    /// still be loading, so this retries (bounded) until it is in place.
-    public func preparePrivateWindows() async throws {
-        guard let engine else { throw BrowserEngineError.unsupportedOperation }
-        let deadline = ContinuousClock.now + .seconds(3)
-        while ACRContentBlockingPreparePrivate() != 1 {
-            guard ContinuousClock.now < deadline, !engine.isShutDown else { throw BrowserEngineError.unsupportedOperation }
-            try await Task.sleep(for: .milliseconds(25))
-        }
-    }
-
-    /// Writes the configuration to every open private context's own (memory-only) cookie store.
-    /// There is no synchronous off switch here: the shared copy keeps running for the open
-    /// contexts, so disabling also waits for the workers when asked.
+    /// Replaces the shared configuration of the private windows. Nothing of it reaches disk.
     public func configurePrivateWindows(_ configuration: BrowserContentBlockingConfiguration,
                                         waitsForAcknowledgement: Bool) async throws {
         guard let engine, !engine.isShutDown else { throw BrowserEngineError.unsupportedOperation }
-        revision += 1
-        let current = revision
-        let enabled = configuration.isEnabled ? 1 : 0
-        guard ACRContentBlockingConfigurePrivate(Int32(enabled), configuration.allowedHosts.joined(separator: "|"), current) == 1 else {
-            throw BrowserEngineError.unsupportedOperation
-        }
-        guard waitsForAcknowledgement else { return }
-        let deadline = ContinuousClock.now + .seconds(3)
-        var pending = Set(privateContexts())
-        while !pending.isEmpty, ContinuousClock.now < deadline, !engine.isShutDown {
-            for token in pending {
-                let value = await acknowledgement { ACRContentBlockingPrivateAcknowledgement(token, $0, $1) }
-                if value == "\(current).\(enabled)" { pending.remove(token) }
-            }
-            if !pending.isEmpty { try await Task.sleep(for: .milliseconds(25)) }
-        }
+        let enabled: Int32 = configuration.isEnabled ? 1 : 0
+        let hosts = configuration.allowedHosts.joined(separator: "|")
+        let status = try await run(waits: waitsForAcknowledgement) { [weak self] status in
+            self?.privateStatus = status
+        } call: { ACRContentBlockingConfigurePrivate(enabled, hosts, $0, $1) }
+        if status == -1 { throw BrowserEngineError.unsupportedOperation }
     }
 
     public func endPrivateWindowSession() {
         guard let engine, !engine.isShutDown else { return }
+        privateStatus = nil
         _ = ACRContentBlockingEndPrivateSession()
     }
 
-    private func privateContexts() -> [UInt64] {
-        var tokens = [UInt64](repeating: 0, count: 16)
-        let count = Int(ACRContentBlockingPrivateContextList(&tokens, Int32(tokens.count)))
-        if count > tokens.count {
-            tokens = [UInt64](repeating: 0, count: count)
-            _ = ACRContentBlockingPrivateContextList(&tokens, Int32(count))
+    /// The engine's last completion for the profile ("1" applied, "-1" failed), nil before any.
+    public func acknowledgement(profileID: ProfileID) -> String? { statuses[profileID].map(String.init) }
+
+    /// The private windows' last completion ("none" before any).
+    public func privateAcknowledgements() -> [String] { [privateStatus.map(String.init) ?? "none"] }
+
+    /// Starts one engine update. With `waits`, returns its status (nil after a short bound);
+    /// otherwise returns at once. `completed` records every status that arrives.
+    private func run(waits: Bool, completed: @escaping @MainActor (Int32) -> Void,
+                     call: (orbit_status_callback_t, UnsafeMutableRawPointer) -> Int32) async throws -> Int32? {
+        let box = ContentBlockingCompletion(completed)
+        let context = Unmanaged.passRetained(box).toOpaque()
+        let accepted = call({ context, status in
+            guard let context else { return }
+            let box = Unmanaged<ContentBlockingCompletion>.fromOpaque(context).takeRetainedValue()
+            MainActor.assumeIsolated { box.complete(status) }
+        }, context)
+        guard accepted == 1 else {
+            Unmanaged<ContentBlockingCompletion>.fromOpaque(context).release()
+            throw BrowserEngineError.unsupportedOperation
         }
-        return Array(tokens.prefix(max(0, count)))
-    }
-
-    /// The extension's last applied "<revision>.<enabled>", nil before any.
-    public func acknowledgement(profileID: ProfileID) async -> String? {
-        guard let engine else { return nil }
-        return await acknowledgement(token: engine.profileToken(for: profileID))
-    }
-
-    private func acknowledgement(token: UInt64) async -> String? {
-        await acknowledgement { ACRContentBlockingAcknowledgement(token, $0, $1) }
-    }
-
-    /// Each open private context's last applied "<revision>.<enabled>" ("none" before any).
-    public func privateAcknowledgements() async -> [String] {
-        var values: [String] = []
-        for token in privateContexts() {
-            values.append(await acknowledgement { ACRContentBlockingPrivateAcknowledgement(token, $0, $1) } ?? "none")
-        }
-        return values
-    }
-
-    private func acknowledgement(_ read: (orbit_content_blocking_ack_t, UnsafeMutableRawPointer) -> Int32) async -> String? {
-        await withCheckedContinuation { continuation in
-            let box = Unmanaged.passRetained(AcknowledgementBox(continuation))
-            let accepted = read({ context, value in
-                guard let context else { return }
-                let box = Unmanaged<AcknowledgementBox>.fromOpaque(context).takeRetainedValue()
-                box.continuation.resume(returning: value.map { String(cString: $0) })
-            }, box.toOpaque())
-            if accepted != 1 { box.takeRetainedValue().continuation.resume(returning: nil) }
-        }
+        guard waits else { return nil }
+        return await box.wait(for: .seconds(2))
     }
 }
 
-private final class AcknowledgementBox {
-    let continuation: CheckedContinuation<String?, Never>
-    init(_ continuation: CheckedContinuation<String?, Never>) { self.continuation = continuation }
+/// One engine completion, delivered on the main thread exactly once for an accepted call.
+@MainActor
+private final class ContentBlockingCompletion {
+    private let completed: @MainActor (Int32) -> Void
+    private var status: Int32?
+    private var continuation: CheckedContinuation<Int32?, Never>?
+    init(_ completed: @escaping @MainActor (Int32) -> Void) { self.completed = completed }
+
+    func complete(_ status: Int32) {
+        self.status = status
+        completed(status)
+        continuation?.resume(returning: status)
+        continuation = nil
+    }
+
+    func wait(for bound: Duration) async -> Int32? {
+        if let status { return status }
+        return await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: bound)
+                guard let self, let pending = self.continuation else { return }
+                self.continuation = nil
+                pending.resume(returning: nil)
+            }
+        }
+    }
 }

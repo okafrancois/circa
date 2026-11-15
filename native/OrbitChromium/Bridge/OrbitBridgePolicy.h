@@ -168,6 +168,10 @@ inline bool IsFeatureName(const std::string& name) {
 // readable in that directory alone; it is never admitted from process or shell arguments.
 constexpr char kOwnedUserDataDirSwitch[] = "orbit-owned-user-data-dir";
 
+// The staged built-in extension the engine loads as a component of every regular profile, set by
+// the bridge only; never admitted from process or shell arguments.
+constexpr char kComponentExtensionSwitch[] = "orbit-component-extension";
+
 struct ArgumentFilter {
   std::vector<std::string> kept;               // Normalized "--name[=value]".
   std::vector<std::string> disabled_features;  // Validated names, merged by the bridge.
