@@ -9,9 +9,15 @@ public struct BrowserCalendarWebAccount: Hashable, Sendable {
               let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
               !(parts.queryItems ?? []).contains(where: { ["authuser", "src"].contains($0.name) }) else { return nil }
         let path = url.pathComponents
-        guard path.count >= 5, path[1] == "calendar", path[2] == "u",
-              let slot = Int(path[3]), (0...99).contains(slot), String(slot) == path[3], path[4] == "r" else { return nil }
-        self.slot = slot
+        // A Favorite selects a slot, never an identity. The hidden canonical page still
+        // has to verify its signed-in account before and after reading the agenda.
+        if path.isEmpty || path == ["/"] || path == ["/", "calendar"] || (path.count >= 3 && path[1] == "calendar" && path[2] == "r") {
+            self.slot = 0
+        } else {
+            guard path.count >= 4, path[1] == "calendar", path[2] == "u",
+                  let slot = Int(path[3]), (0...99).contains(slot), String(slot) == path[3] else { return nil }
+            self.slot = slot
+        }
     }
     public var pageURL: URL { URL(string: "https://calendar.google.com/calendar/u/\(slot)/r")! }
 }

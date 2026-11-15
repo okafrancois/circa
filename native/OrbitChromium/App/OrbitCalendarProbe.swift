@@ -65,7 +65,7 @@ enum OrbitCalendarProbe {
             await wait { !surface.navigationState.isLoading && surface.navigationState.committedURL?.path == "/seed" }
             guard let id = owner.session.organization?.selectedTab?.id else { return ["missingTab": true] }
             owner.session.addToFavorites([id]); await settle()
-            owner.session.editPinnedURL(id, to: URL(string: "https://calendar.google.com/calendar/u/0/r")!); await settle()
+            owner.session.editPinnedURL(id, to: URL(string: "https://calendar.google.com/calendar/r")!); await settle()
             owner.favorites.render()
             let account = BrowserCalendarWebAccount(url: URL(string: "https://calendar.google.com/calendar/u/0/r")!)!
             owner.palette.dismiss()
@@ -74,6 +74,7 @@ enum OrbitCalendarProbe {
             owner.favorites.calendar.refresh(account)
             await wait({ owner.favorites.calendar.agendas[account] != nil }, seconds: 12)
             let agenda = owner.favorites.calendar.agendas[account]
+            checks["plainFavoriteBinding"] = owner.session.organization?.tab(id).map { owner.favorites.calendarPermitted($0, account) } == true
             checks["profileCookieAgenda"] = agenda?.events.count == 3
             checks["startOnlyFallback"] = agenda?.events.allSatisfy { $0.end == nil && $0.joinURL == nil } == true
             for path in ["notes", "tasks"] {
