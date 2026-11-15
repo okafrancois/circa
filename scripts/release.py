@@ -542,11 +542,16 @@ def publish_release(config, version, archive, dmg, appcast, deltas=(), stable_dm
     run('gh', 'release', 'upload', 'update-feed', '--repo', repo, '--clobber', appcast)
 
 
+def tag_commit(tag):
+    # GitHub only accepts a branch or commit SHA as the target of a new tag.
+    return subprocess.run(['git', 'rev-list', '-n', '1', tag], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
+
 def publish_nightly_download(config, tag, dmg):
     repo = config['repository']
     existing = subprocess.run(['gh', 'release', 'view', 'nightly', '--repo', repo], capture_output=True)
     if existing.returncode:
-        run('gh', 'release', 'create', 'nightly', '--repo', repo, '--target', tag,
+        run('gh', 'release', 'create', 'nightly', '--repo', repo, '--target', tag_commit(tag),
             '--prerelease', '--latest=false', '--title', 'Circa Nightly', '--notes', 'Latest nightly installer for testers.')
     else:
         run('gh', 'release', 'edit', 'nightly', '--repo', repo, '--draft=false', '--prerelease', '--latest=false')

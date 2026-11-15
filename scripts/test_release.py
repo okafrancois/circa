@@ -148,6 +148,7 @@ class ReleaseTests(unittest.TestCase):
                 dmg.write_bytes(b'test')
                 commands = []
                 with patch.object(release.subprocess, 'run', return_value=SimpleNamespace(returncode=1)), \
+                        patch.object(release, 'tag_commit', return_value='0123abc'), \
                         patch.object(release, 'run', side_effect=lambda *args, **kw: commands.append(list(map(str, args)))):
                     release.publish_release(self.config, '1.2.3-nightly.1', Path('app.zip'), dmg, Path('appcast.xml'),
                                             stable_dmg=Path('Circa.dmg'))
@@ -159,6 +160,8 @@ class ReleaseTests(unittest.TestCase):
                         self.assertIn('--prerelease', command)
                         self.assertIn('--latest=false', command)
                 self.assertTrue(any(command[2:4] == ['upload', 'nightly'] for command in commands))
+                create = next(command for command in commands if command[2:4] == ['create', 'nightly'])
+                self.assertEqual(create[create.index('--target') + 1], '0123abc')
 
     def test_channel_predecessors_and_feed_retention(self):
         with tempfile.TemporaryDirectory() as temporary:
