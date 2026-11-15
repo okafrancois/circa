@@ -43,7 +43,8 @@ final class OrbitPaperGrainView: NSView {
         let value = min(1, max(0, strength))
         return value <= 0.3 ? value / 0.3 * 0.5 : 0.5 + (value - 0.3) / 0.7 * 0.5
     }
-    var strength: CGFloat = 0.3 { didSet { refreshBlend() } }
+    /// Space swipes and theme springs re-assign the same strength every frame; only a change counts.
+    var strength: CGFloat = 0.3 { didSet { if strength != oldValue { refreshBlend() } } }
     var patternOffset: CGPoint = .zero { didSet { if oldValue != patternOffset { needsDisplay = true } } }
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -56,11 +57,18 @@ final class OrbitPaperGrainView: NSView {
         super.viewDidChangeEffectiveAppearance()
         refreshBlend()
     }
+    /// The appearance the current tile content is painted for. `draw` depends only on the
+    /// light/dark tile and the pattern offset, so strength alone never repaints the pattern.
+    private var paintedDark: Bool?
     private func refreshBlend() {
         let dark = OrbitAppearance.isDark(effectiveAppearance)
-        layer?.compositingFilter = dark ? nil : "multiplyBlendMode"
+        let filter: String? = dark ? nil : "multiplyBlendMode"
+        if layer?.compositingFilter as? String != filter { layer?.compositingFilter = filter }
         alphaValue = dark ? min(1, max(0, strength)) * 0.15 : Self.opacity(for: strength)
-        needsDisplay = true
+        if paintedDark != dark {
+            paintedDark = dark
+            needsDisplay = true
+        }
     }
     required init?(coder: NSCoder) { nil }
     override var isOpaque: Bool { false }

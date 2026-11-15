@@ -21,13 +21,26 @@ final class BrowserSyncRuntime: ObservableObject {
     private var passwords: BrowserPasswordSync?
     private var historyTransport: (any BrowserHistorySyncTransport)?
     private var task: Task<Void, Never>?
+    private var loading: Task<Void, Never>?
     private var isTerminating = false
+    /// Failure backoff base, and the minimum spacing between two cycles (the former poll period).
     private var interval = Duration.seconds(5)
+    /// Coalesces a burst of local edits or pushes into one cycle.
+    private var debounce = Duration.seconds(2)
+    /// Slow safety cycle: forces a fetch/send and a full password rescan for missed signals.
+    private var safetyInterval = Duration.seconds(600)
     var hasScheduledCycle: Bool { task != nil }
     private var flushHistory: (() async throws -> Void)?
     private var historyRetryAfter = Date.distantPast
     private var historyFailures = 0
     private var cycle: (() async throws -> Void)?
+    private var pendingWake = false
+    private var refreshRequested = false
+    private var lastRefresh: ContinuousClock.Instant?
+    private var waiter: CheckedContinuation<Void, Never>?
+    private var waitGeneration = 0
+    private var admission = BrowserSyncAdmission()
+    private var signalsObserved = false
 
     init() {
         available = BrowserSyncEntitlement.isAvailable()
@@ -36,14 +49,18 @@ final class BrowserSyncRuntime: ObservableObject {
     }
 
     /// A local-only scheduler seam: tests never construct a CloudKit container.
-    init(destination: URL, interval: Duration, cycle: @escaping () async throws -> Void) {
+    init(destination: URL, interval: Duration, debounce: Duration? = nil, safetyInterval: Duration = .seconds(600),
+         observesSignals: Bool = false, cycle: @escaping () async throws -> Void) {
         available = true
         showsSettings = true
         self.destination = destination
         worker = BrowserSyncWorker(state: BrowserSyncState(), destination: destination)
         self.interval = interval
+        self.debounce = debounce ?? min(interval, .seconds(2))
+        self.safetyInterval = safetyInterval
         self.cycle = cycle
         status = .off
+        if observesSignals { observeSignals() }
     }
 
     func skillsChanged() {
@@ -61,12 +78,10 @@ final class BrowserSyncRuntime: ObservableObject {
         }
     }
 
-    func configure<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>, destination: URL) throws {
+    func configure<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>, destination: URL,
+                                          onError: @escaping @MainActor (any Error) -> Void) {
         guard available, !environment.isPrivate else { return }
         self.destination = destination
-        let state = try BrowserSyncState.load(destination)
-        worker = BrowserSyncWorker(state: state, destination: destination)
-        enabled = state.enabled; status = enabled ? .on : .off
         cycle = { [weak self, weak environment] in
             guard let self, let environment, !environment.isFinalizing, !environment.settingsRemovalIsRunning else { return }
             try await self.synchronize(environment)
@@ -78,11 +93,83 @@ final class BrowserSyncRuntime: ObservableObject {
                 _ = try await environment.historyRecorder.syncBatches(for: profile.id, forcePacking: true)
             }
         }
-        if enabled { NSApp?.registerForRemoteNotifications() }
-        start()
+        observeSignals()
+        // Read, decode and seed the replica off the main actor (one read, one decode).
+        loading = Task { [weak self] in
+            do {
+                let worker = try await Task.detached(priority: .utility) { try BrowserSyncWorker(loading: destination) }.value
+                let enabled = await worker.enabled
+                guard let self else { return }
+                self.worker = worker
+                self.enabled = enabled; status = enabled ? .on : .off
+                loading = nil
+                if enabled { NSApp?.registerForRemoteNotifications() }
+                start()
+            } catch {
+                self?.loading = nil
+                onError(error)
+            }
+        }
+    }
+
+    // MARK: Wake sources
+
+    /// A committed local edit (session save, settings, Boosts, skills, passwords).
+    func localStateChanged() { wake() }
+    /// CloudKit fetched pushed changes, failed, or saw an account change.
+    func remoteChangeArrived() { wake() }
+    func accountChanged() { admission.reset(); wake(refresh: true) }
+    func applicationBecameActive() {
+        // Covers a missed push when the user comes back; at most one forced fetch per minute.
+        if let lastRefresh, ContinuousClock.now - lastRefresh < .seconds(60) { return }
+        wake(refresh: true)
+    }
+
+    private func wake(refresh: Bool = false) {
+        guard enabled, !isTerminating else { return }
+        if refresh { refreshRequested = true }
+        pendingWake = true
+        resumeWaiter()
+    }
+
+    private func observeSignals() {
+        guard !signalsObserved else { return }
+        signalsObserved = true
+        let center = NotificationCenter.default
+        _ = center.addObserver(forName: BrowserSyncLocalChanges.notification, object: nil, queue: nil) { [weak self] _ in
+            Task { @MainActor in self?.localStateChanged() }
+        }
+        _ = center.addObserver(forName: .CKAccountChanged, object: nil, queue: nil) { [weak self] _ in
+            Task { @MainActor in self?.accountChanged() }
+        }
+        _ = center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
+            Task { @MainActor in self?.applicationBecameActive() }
+        }
+    }
+
+    private func resumeWaiter() {
+        waiter?.resume(); waiter = nil
+    }
+
+    /// Returns on a wake, after `timeout`, or on cancellation; never polls.
+    private func waitForWake(timeout: Duration) async {
+        guard !pendingWake, !Task.isCancelled else { return }
+        waitGeneration += 1
+        let generation = waitGeneration
+        let timer = Task { [weak self] in
+            guard (try? await Task.sleep(for: timeout)) != nil, let self, self.waitGeneration == generation else { return }
+            self.resumeWaiter()
+        }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { waiter = $0 }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.resumeWaiter() }
+        }
+        timer.cancel()
     }
 
     func setEnabled(_ value: Bool) async throws {
+        await loading?.value
         guard available, let worker else { return }
         if !value { task?.cancel() }
         try await worker.setEnabled(value)
@@ -93,6 +180,7 @@ final class BrowserSyncRuntime: ObservableObject {
 
     func prepareForTermination() async {
         isTerminating = true
+        await loading?.value
         task?.cancel()
         await transport?.stop()
         await historyTransport?.stop()
@@ -117,51 +205,101 @@ final class BrowserSyncRuntime: ObservableObject {
                 start()
             }
             var failures = 0
+            var retryAfter: Duration?
+            var lastStart: ContinuousClock.Instant?
+            // Launch and enable run one cycle immediately; later cycles wait for a signal.
+            var immediate = true
             while enabled && !Task.isCancelled {
-                if enabled {
-                    do { try await cycle?(); failures = 0 }
-                    catch is CancellationError where Task.isCancelled { break }
-                    catch BrowserSyncError.signedOut {
-                        failures = min(failures + 1, 6)
-                        status = .signedOut; await stopPasswords(); await transport?.stop(); transport = nil
-                        await historyTransport?.stop(); historyTransport = nil
+                if !immediate {
+                    if failures > 0 || retryAfter != nil {
+                        // Backoff retries do not need a signal; signals arriving meanwhile are kept.
+                        let backoff = min(interval * (1 << failures), .seconds(300))
+                        do { try await Task.sleep(for: max(backoff, retryAfter ?? .zero)) } catch { break }
+                    } else {
+                        var timeout = safetyInterval
+                        let history = historyRetryAfter.timeIntervalSinceNow
+                        if history > 0, historyRetryAfter != .distantPast {
+                            timeout = min(timeout, .milliseconds(Int64(history * 1000) + 1))
+                        }
+                        await waitForWake(timeout: timeout)
+                        guard enabled, !Task.isCancelled else { break }
+                        if pendingWake {
+                            var delay = debounce
+                            if let lastStart { delay = max(delay, interval - (ContinuousClock.now - lastStart)) }
+                            do { try await Task.sleep(for: delay) } catch { break }
+                        } else if lastRefresh.map({ ContinuousClock.now - $0 >= safetyInterval }) ?? true {
+                            refreshRequested = true
+                        }
                     }
-                    catch BrowserSyncError.accountChanged {
-                        await stopPasswords()
-                        await historyTransport?.stop(); historyTransport = nil
-                        status = .accountChanged; needsAccountDecision = true
-                        await transport?.stop(); transport = nil
-                        // Require an explicit decision; never attach the retained data to a new ID.
-                        try? await setEnabled(false)
-                        status = .accountChanged
-                    }
-                    catch BrowserSyncError.localChange { status = .on }
-                    catch { failures = min(failures + 1, 6); status = .unavailable; await stopPasswords(); await transport?.stop(); transport = nil }
                 }
+                immediate = false
                 guard enabled, !Task.isCancelled else { break }
-                do { try await Task.sleep(for: min(interval * (1 << failures), .seconds(300))) } catch { break }
+                pendingWake = false
+                lastStart = .now
+                retryAfter = nil
+                do { try await cycle?(); failures = 0 }
+                catch is CancellationError where Task.isCancelled { break }
+                catch BrowserSyncError.signedOut {
+                    failures = min(failures + 1, 6)
+                    status = .signedOut; await stopPasswords(); await transport?.stop(); transport = nil
+                    await historyTransport?.stop(); historyTransport = nil
+                }
+                catch BrowserSyncError.accountChanged {
+                    await stopPasswords()
+                    await historyTransport?.stop(); historyTransport = nil
+                    status = .accountChanged; needsAccountDecision = true
+                    await transport?.stop(); transport = nil
+                    // Require an explicit decision; never attach the retained data to a new ID.
+                    try? await setEnabled(false)
+                    status = .accountChanged
+                }
+                catch BrowserSyncError.localChange { status = .on; pendingWake = true }
+                catch let error where BrowserSyncRetry.isTransient(error) {
+                    // Throttling or connectivity: keep the transports (the engines retry their
+                    // own pending work) and back off, honoring the server's retry delay.
+                    failures = min(failures + 1, 6)
+                    retryAfter = BrowserSyncRetry.retryAfter(error)
+                    status = .on
+                }
+                catch { failures = min(failures + 1, 6); status = .unavailable; await stopPasswords(); await transport?.stop(); transport = nil }
             }
         }
+    }
+
+    /// The signed-in identity, verified at most once a minute and again after any account
+    /// change notification (each check costs two daemon round trips).
+    private func verifiedIdentity() async throws -> String? {
+        if let cached = admission.identity() { return cached }
+        let epoch = BrowserSyncAccountEpoch.current
+        let container = CKContainer(identifier: BrowserSyncSchema.container)
+        let identity = try await container.accountStatus() == .available ? try await container.userRecordID().recordName : nil
+        admission.record(identity, epoch: epoch)
+        return identity
     }
 
     private func synchronize<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>) async throws {
         guard let destination, let worker, enabled else { return }
         // No container is ever initialized in unsigned/synthetic processes.
         guard available else { throw BrowserSyncError.unavailable }
-        let container = CKContainer(identifier: BrowserSyncSchema.container)
-        let identity = try await container.accountStatus() == .available ? try await container.userRecordID().recordName : nil
+        let identity = try await verifiedIdentity()
         try await worker.admit(identity)
         guard let identity else { throw BrowserSyncError.signedOut }
+        let remote: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.remoteChangeArrived() } }
         if transport == nil {
             transport = try await Task.detached(priority: .utility) {
-                try BrowserCloudKitTransport(destination: destination.appendingPathExtension("cloudkit"), identity: identity)
+                try BrowserCloudKitTransport(destination: destination.appendingPathExtension("cloudkit"), identity: identity,
+                                             onRemoteChange: remote)
             }.value
         }
         guard let transport else { return }
+        let refresh = refreshRequested
+        refreshRequested = false
+        if refresh { lastRefresh = .now; await transport.requestRefresh() }
         status = .syncing
+        let session = await environment.store.sessionDocument()
         do {
             if Date() >= historyRetryAfter {
-                try await synchronizeHistory(environment, identity: identity, destination: destination)
+                try await synchronizeHistory(environment, session: session, identity: identity, destination: destination)
                 historyFailures = 0; historyRetryAfter = .distantPast
             }
         }
@@ -174,14 +312,18 @@ final class BrowserSyncRuntime: ObservableObject {
             historyFailures = min(historyFailures + 1, 6)
             historyRetryAfter = Date().addingTimeInterval(min(300, 5 * pow(2, Double(historyFailures))))
         }
-        do { try await synchronizePasswords(environment, identity: identity, destination: destination) }
+        var deferred: (any Error)?
+        do { try await synchronizePasswords(environment, session: session, identity: identity, destination: destination, refresh: refresh) }
         catch BrowserSyncError.signedOut { throw BrowserSyncError.signedOut }
         catch BrowserSyncError.accountChanged { throw BrowserSyncError.accountChanged }
+        catch let error where BrowserSyncRetry.isTransient(error) {
+            // Keep the password transport; retry with the runtime backoff after this cycle.
+            deferred = error
+        }
         catch {
             // Password schema/key/engine failures are isolated from the other sync zones.
             await stopPasswords()
         }
-        let session = await environment.store.sessionDocument()
         let settings = await environment.settings.store.snapshot()
         var boostDocuments: [BrowserBoostDocument] = []
         for profile in session.profiles { boostDocuments.append(await (try environment.boosts.store(for: profile.id)).snapshot()) }
@@ -205,6 +347,7 @@ final class BrowserSyncRuntime: ObservableObject {
         if !prepared.changed {
             try await worker.acknowledge(prepared.projection)
             status = .synced(Date())
+            if let deferred { throw deferred }
             return
         }
         guard enabled, !Task.isCancelled, !environment.isFinalizing, !environment.settingsRemovalIsRunning else { return }
@@ -230,10 +373,11 @@ final class BrowserSyncRuntime: ObservableObject {
         try await environment.saveNow()
         try await worker.acknowledge(prepared.projection)
         status = .synced(Date())
+        if let deferred { throw deferred }
     }
 
     private func synchronizeHistory<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>,
-        identity: String, destination: URL) async throws {
+        session: BrowserSessionDocument, identity: String, destination: URL) async throws {
         guard enabled, !environment.isPrivate else { return }
         if historyTransport == nil {
             historyTransport = try await Task.detached(priority: .utility) {
@@ -241,7 +385,6 @@ final class BrowserSyncRuntime: ObservableObject {
             }.value
         }
         guard let historyTransport else { return }
-        let session = await environment.store.sessionDocument()
         let now = Date()
         var outgoing: [BrowserHistorySyncBatch] = []
         for profile in session.profiles {
@@ -267,23 +410,27 @@ final class BrowserSyncRuntime: ObservableObject {
     }
 
     private func synchronizePasswords<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>,
-        identity: String, destination: URL) async throws {
+        session: BrowserSessionDocument, identity: String, destination: URL, refresh: Bool) async throws {
         guard enabled, !environment.isPrivate, let store = environment.engine.passwordStore else { return }
         if passwords == nil || passwordTransport == nil {
             let key = try await Task.detached(priority: .utility) { try BrowserPasswordSyncCache.systemKey() }.value
-            passwords = try BrowserPasswordSync(cache: .init(destination: destination.appendingPathExtension("passwords.sealed"), key: key))
+            let local: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.localStateChanged() } }
+            let remote: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.remoteChangeArrived() } }
+            let sync = try BrowserPasswordSync(cache: .init(destination: destination.appendingPathExtension("passwords.sealed"), key: key))
+            await sync.setLocalChangeHandler(local)
+            passwords = sync
             passwordTransport = try await Task.detached(priority: .utility) {
                 try BrowserPasswordCloudKitTransport(
-                    cache: .init(destination: destination.appendingPathExtension("passwords.cloudkit.sealed"), key: key), identity: identity)
+                    cache: .init(destination: destination.appendingPathExtension("passwords.cloudkit.sealed"), key: key), identity: identity,
+                    onRemoteChange: remote)
             }.value
         }
         guard let passwords, let passwordTransport else { return }
-        let session = await environment.store.sessionDocument()
+        if refresh { await passwordTransport.requestRefresh() }
         try await passwords.synchronize(store: store, profiles: session.profiles.map(\.id), transport: passwordTransport) { [weak self, weak environment] in
             guard let self, let environment, enabled, !Task.isCancelled,
                   !environment.isFinalizing, !environment.settingsRemovalIsRunning else { throw BrowserSyncError.unavailable }
-            let container = CKContainer(identifier: BrowserSyncSchema.container)
-            let current = try await container.accountStatus() == .available ? try await container.userRecordID().recordName : nil
+            let current = try await verifiedIdentity()
             try await worker?.admit(current)
             guard current == identity else { throw BrowserSyncError.accountChanged }
         }

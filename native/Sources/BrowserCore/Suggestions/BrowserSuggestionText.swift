@@ -7,18 +7,22 @@ public enum BrowserSuggestionText {
     }
 
     /// Display form of a URL: decoded, credential-free and with invisible controls escaped.
+    /// The host is Unicode only where `BrowserHostDisplay` deems it safe; otherwise ASCII.
     public static func displayURL(_ url: URL) -> String {
         safeDisplay(readableURL(url))
     }
 
-    /// Decoded, credential-free URL text without display escaping. Matching and persisted
-    /// search columns use this form so that indexing never depends on display policy.
+    /// Decoded, credential-free URL text without display escaping, with the display host.
     static func readableURL(_ url: URL) -> String {
+        urlText(url) { BrowserHostDisplay.displayHost($0) }
+    }
+
+    /// Path, query and fragment are percent-decoded; the host comes from `host`.
+    private static func urlText(_ url: URL, host: (URLComponents) -> String?) -> String {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url.absoluteString }
         components.user = nil
         components.password = nil
-        // Foundation's host accessor decodes IDNA; decoded text is for reading and matching, never navigation.
-        let host = components.host ?? url.host ?? ""
+        let host = host(components) ?? url.host ?? ""
         let port = components.port.map { ":\($0)" } ?? ""
         let path = components.percentEncodedPath.removingPercentEncoding ?? components.path
         let query = components.percentEncodedQuery.map { "?" + ($0.removingPercentEncoding ?? $0) } ?? ""
@@ -39,8 +43,11 @@ public enum BrowserSuggestionText {
         }.joined()
     }
 
+    /// Matching and persisted search columns use the ASCII (IDNA) host, so an ASCII query never
+    /// matches a diacritic or lookalike host as if it were the same site, and indexing never
+    /// depends on display policy.
     public static func searchableURL(_ url: URL) -> String {
-        var text = readableURL(url)
+        var text = urlText(url) { BrowserHostDisplay.asciiHost($0) }
         if let range = text.range(of: "://") { text = String(text[range.upperBound...]) }
         if text.lowercased().hasPrefix("www.") { text = String(text.dropFirst(4)) }
         return fold(text)

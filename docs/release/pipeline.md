@@ -35,8 +35,18 @@
   `xcrun notarytool store-credentials orbit-notary --apple-id <Apple-ID> --team-id 5Y39TTNCM7`.
 - Configured notarization submits/staples the app before archiving, then the signed DMG.
   The local test app 0.0.2 was notarized and stapled successfully (Accepted).
-- CEF and Sparkle nested code are signed inside out with hardened runtime. CEF hosts/helpers
-  receive JIT/executable-memory/library-validation entitlements; Sparkle retains its own ones.
+- CEF and Sparkle nested code are signed inside out with hardened runtime; Sparkle retains its
+  own entitlements. Developer ID builds scope code-signing exceptions per process:
+  | Target | `com.apple.security.cs.*` |
+  | --- | --- |
+  | Host app | none (library validation stays on; device and iCloud/passkey capabilities only) |
+  | Helper (Renderer); Helper (GPU), used only for the SwiftShader fallback | `allow-jit` |
+  | Helper (GPU process and utility services, including the Widevine CDM signed by its vendor) | `disable-library-validation` |
+  | Helper (Plugin), unused by this engine | `allow-unsigned-executable-memory`, `disable-library-validation` |
+  | Helper (Alerts) | none |
+  `release.py` fails after signing if the host carries any `cs.*` entitlement or a helper
+  carries more than its set. The `local` identity has no Team ID, so library validation cannot
+  pass between its binaries: local test bundles keep all three exceptions on every target.
 
 ## Build and publish
 - Local: `python3 scripts/release.py --tag v0.1.0`.

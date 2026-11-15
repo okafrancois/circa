@@ -137,10 +137,10 @@ public actor BrowserHistoryStore {
             let statement = try database.prepare("INSERT OR IGNORE INTO visits(id,url,site,time,title,typed,payload,searchTitle) VALUES(?,?,?,?,?,?,?,?)")
             defer { sqlite3_finalize(statement) }
             var inserted = 0
-            let barriers = try syncDeletions()
+            var barriers = BrowserHistorySyncBarriers(respectsBarriers ? try syncDeletions() : [])
             let cutoff = try syncCutoff()
             for visit in visits {
-                guard visit.visitedAt >= cutoff, (!respectsBarriers || !barriers.contains(where: { $0.matches(visit) })) else { continue }
+                guard visit.visitedAt >= cutoff, !barriers.matches(visit) else { continue }
                 sqlite3_reset(statement)
                 sqlite3_clear_bindings(statement)
                 var stored = visit
@@ -427,13 +427,21 @@ public actor BrowserHistoryStore {
         return count
     }
 
-    func deleteRows(clause: String, values: [HistoryValue]) throws -> Int {
+    /// `purgeSyncJournal` removes the deleted visits from the sync journal and its saved batches
+    /// in the same transaction. Only expiry maintenance passes false: rows older than the cutoff
+    /// leave the journal through their own expiry.
+    func deleteRows(clause: String, values: [HistoryValue], purgeSyncJournal: Bool = true) throws -> Int {
         guard let database else { return 0 }
         let count = try database.transaction {
-            try database.execute("CREATE TEMP TABLE affected AS SELECT DISTINCT url FROM visits WHERE \(clause)", values)
-            defer { try? database.execute("DROP TABLE affected") }
-            try database.execute("DELETE FROM visits WHERE \(clause)", values)
+            try database.execute("CREATE TEMP TABLE deletedVisits AS SELECT id,url FROM visits WHERE \(clause)", values)
+            defer { try? database.execute("DROP TABLE deletedVisits") }
+            try database.execute("DELETE FROM visits WHERE id IN (SELECT id FROM deletedVisits)")
             let count = database.changes
+            // Nothing matched: no page, journal or favicon maintenance (a full favicon scan).
+            guard count > 0 else { return 0 }
+            try database.execute("CREATE TEMP TABLE affected AS SELECT DISTINCT url FROM deletedVisits")
+            defer { try? database.execute("DROP TABLE affected") }
+            if purgeSyncJournal { try database.purgeSyncJournal(deletedVisits: "deletedVisits") }
             try database.execute("DELETE FROM pages WHERE url IN (SELECT url FROM affected)")
             try database.execute("""
                 INSERT INTO pages(url,title,favicon,last,visits,typed,searchURL,searchTitle)
@@ -451,6 +459,7 @@ public actor BrowserHistoryStore {
                 try database.execute("UPDATE pages SET searchURL=?,searchTitle=? WHERE url=?", [.text(Self.searchURL(URL(string: url)!)), .text(Self.fold(title)), .text(url)])
             }
             database.faviconAddresses.removeAll()
+            database.faviconCollections += 1
             try database.execute("""
                 DELETE FROM favicons WHERE ('orbit-favicon:' || hash) NOT IN (
                     SELECT json_extract(payload,'$.faviconReference') FROM visits
@@ -460,7 +469,8 @@ public actor BrowserHistoryStore {
             return count
         }
         // The deletion has committed. Maintenance failure must not report that mutation as failed.
-        if database.withHandle({ sqlite3_get_autocommit($0) != 0 }) { maintenanceStatus = database.checkpoint() }
+        // Callers inside a transaction (delete, sync) checkpoint once after their own commit.
+        if count > 0, database.withHandle({ sqlite3_get_autocommit($0) != 0 }) { maintenanceStatus = database.checkpoint() }
         return count
     }
 
@@ -498,16 +508,18 @@ public actor BrowserHistoryStore {
     }
 }
 
-enum HistoryValue { case text(String), number(Double) }
+enum HistoryValue { case text(String), number(Double), null }
 
 /// Confined to its owning actor after initialization; never shared between actors.
 final class HistoryDatabase: @unchecked Sendable {
     private var handle: OpaquePointer?
     var faviconAddresses = BrowserCostCache<URL, URL>(budget: 256 * 1024, countLimit: 128)
     var tombstoneRevision: UInt64 = 0
+    /// Full favicon garbage collections run by this connection (tests assert they are skipped).
+    var faviconCollections = 0
     var changes: Int { Int(sqlite3_changes(handle)) }
 
-    static let currentVersion = 8
+    static let currentVersion = 9
 
     init(openingURL url: URL, flags: Int32) throws {
         // Checked ancestors, single-link database/sidecars, and directory identity before/after open.
@@ -551,6 +563,7 @@ final class HistoryDatabase: @unchecked Sendable {
                         case 5: try migrateToVersionSix(profileID)
                         case 6: try migrateToVersionSeven()
                         case 7: try migrateToVersionEight()
+                        case 8: try migrateToVersionNine(profileID)
                         default: throw BrowserHistoryError.unsupportedVersion
                         }
                         migratingVersion += 1
@@ -715,6 +728,26 @@ final class HistoryDatabase: @unchecked Sendable {
         }
     }
 
+    /// Search URLs now index the ASCII (IDNA) host; only internationalized hosts change and the
+    /// FTS update trigger reindexes those few rows. The sync journal is then indexed by visit so
+    /// deletions can purge it, and what earlier builds left there is removed: journal rows and
+    /// saved batches of visits deleted before this version, and plain hosts in site tombstones.
+    private func migrateToVersionNine(_ profileID: ProfileID) throws {
+        _ = try normalizeSearchURLs(where: "instr(lower(url),'xn--')>0")
+        try execute("ALTER TABLE historySyncEvents ADD COLUMN visit TEXT")
+        try execute("UPDATE historySyncEvents SET visit=json_extract(payload,'$.visit.id') WHERE kind=0")
+        try execute("CREATE INDEX historySyncVisit ON historySyncEvents(visit)")
+        try execute("CREATE TABLE historySyncBatchVisits(batch TEXT NOT NULL,visit TEXT NOT NULL,time REAL NOT NULL,PRIMARY KEY(batch,visit)) WITHOUT ROWID")
+        try execute("CREATE INDEX historySyncBatchVisit ON historySyncBatchVisits(visit)")
+        try execute("CREATE TABLE historySyncRetired(id TEXT PRIMARY KEY,expires REAL NOT NULL)")
+        try execute("""
+            INSERT OR IGNORE INTO historySyncBatchVisits
+            SELECT b.id,json_extract(e.value,'$.visit.id'),json_extract(e.value,'$.visit.visitedAt')+\(Date.timeIntervalBetween1970AndReferenceDate)
+            FROM historySyncBatches b, json_each(b.payload,'$.events') e WHERE json_extract(e.value,'$.visit.id') IS NOT NULL
+            """)
+        try sanitizeSyncJournal()
+    }
+
     /// Frecency is monotone in last-visit time within a fixed visit weight.
     private func migrateToVersionSeven() throws {
         try execute("CREATE INDEX pages_weight_last ON pages((visits+typed*4.0) DESC,last DESC,url ASC)")
@@ -736,9 +769,10 @@ final class HistoryDatabase: @unchecked Sendable {
 
     static let migrationBatch = 2048
 
-    func scalarInt(_ sql: String) throws -> Int {
+    func scalarInt(_ sql: String, _ values: [HistoryValue] = []) throws -> Int {
         let statement = try prepare(sql)
         defer { sqlite3_finalize(statement) }
+        try bind(statement, values)
         guard try next(statement) else { throw BrowserHistoryError.storageFailure(SQLITE_ERROR) }
         return Int(sqlite3_column_int64(statement, 0))
     }
@@ -778,6 +812,7 @@ final class HistoryDatabase: @unchecked Sendable {
             switch value {
             case .text(let text): result = text.withCString { sqlite3_bind_text(statement, Int32(index + 1), $0, Int32(text.utf8.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self)) }
             case .number(let number): result = sqlite3_bind_double(statement, Int32(index + 1), number)
+            case .null: result = sqlite3_bind_null(statement, Int32(index + 1))
             }
             guard result == SQLITE_OK else { throw BrowserHistoryError.storageFailure(result) }
         }

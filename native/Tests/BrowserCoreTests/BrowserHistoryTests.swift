@@ -407,6 +407,7 @@ private final class HistoryTestSQL {
             DROP INDEX IF EXISTS pages_weight_last;
             DROP TABLE historySyncEvents; DROP TABLE historySyncBatches;
             DROP TABLE historySyncState; DROP TABLE historySyncVersions;
+            DROP TABLE historySyncBatchVisits; DROP TABLE historySyncRetired;
             DROP TRIGGER pages_insert; DROP TRIGGER pages_delete; DROP TRIGGER pages_update;
             DROP TRIGGER titleWords_insert; DROP TRIGGER titleWords_delete; DROP TRIGGER titleWords_update;
             DROP TABLE titleWords;

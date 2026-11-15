@@ -53,7 +53,9 @@ struct DeveloperToolbarTests {
         let icon = NSImage(size: NSSize(width: 14, height: 14), flipped: false) { rect in
             NSColor.red.setFill(); rect.fill(); return true
         }
-        let png = try #require(icon.tiffRepresentation).base64EncodedString()
+        // Engine extension icons are PNG; the shell refuses other formats.
+        let tiff = try #require(icon.tiffRepresentation)
+        let png = try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])).base64EncodedString()
         let first = BrowserExtensionSummary(id: "first", name: "First", version: "1", isEnabled: true,
                                             hasAction: true, isPinned: true, iconPNGBase64: png, actionBadgeText: "22")
         let second = BrowserExtensionSummary(id: "second", name: "Second", version: "1", isEnabled: true, hasAction: true)

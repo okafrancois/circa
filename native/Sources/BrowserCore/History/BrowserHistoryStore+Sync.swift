@@ -28,15 +28,16 @@ extension BrowserHistoryStore {
         let cutoff = BrowserHistorySyncSchema.cutoff(Date())
         if cutoff > lastHistoryJournalPrune {
             try database.execute("DELETE FROM historySyncEvents WHERE expires<?", [.number(cutoff.timeIntervalSince1970)])
-            try database.execute("DELETE FROM historySyncBatches WHERE expires<?", [.number(cutoff.timeIntervalSince1970)])
+            try database.pruneSyncBatches(before: cutoff)
             try database.execute("DELETE FROM historySyncVersions WHERE id IN (SELECT id FROM visits WHERE time<?)", [.number(cutoff.timeIntervalSince1970)])
             lastHistoryJournalPrune = cutoff
         }
         // History outside the upload window remains local until enabled sync runs maintenance.
         guard event.expires >= cutoff else { return }
-        try database.execute("INSERT OR IGNORE INTO historySyncEvents(id,payload,expires,kind) VALUES(?,?,?,?)",
+        try database.execute("INSERT OR IGNORE INTO historySyncEvents(id,payload,expires,kind,visit) VALUES(?,?,?,?,?)",
             [.text(event.id.uuidString), .text(String(decoding: try BrowserSyncReplica.encodeValue(event), as: UTF8.self)),
-             .number(event.expires.timeIntervalSince1970), .number(event.deletion == nil ? 0 : 1)])
+             .number(event.expires.timeIntervalSince1970), .number(event.deletion == nil ? 0 : 1)]
+            + (event.visit.map { [.text($0.id.uuidString)] } ?? [.null]))
         if let visit = event.visit {
             try database.execute("INSERT OR REPLACE INTO historySyncVersions VALUES(?,?,?)",
                 [.text(visit.id.uuidString), .number(event.time.timeIntervalSince1970), .text(event.id.uuidString)])
@@ -45,10 +46,11 @@ extension BrowserHistoryStore {
 
     public func historySyncNeedsApply(_ batches: [BrowserHistorySyncBatch], now: Date = Date()) throws -> Bool {
         guard let database else { return false }
-        let relevant = batches.filter { $0.profileID == profileID }
+        let relevant = batches.filter { $0.profileID == profileID && !$0.isRetraction }
         if max(BrowserHistorySyncSchema.cutoff(now), relevant.map(\.cutoff).max() ?? .distantPast) > (try syncCutoff()) { return true }
         for batch in relevant {
-            let row = try database.prepare("SELECT 1 FROM historySyncBatches WHERE id=?")
+            // A batch this store retracted is known: re-applying it would only retract it again.
+            let row = try database.prepare("SELECT 1 FROM historySyncBatches WHERE id=?1 UNION ALL SELECT 1 FROM historySyncRetired WHERE id=?1")
             defer { sqlite3_finalize(row) }
             try database.bind(row, [.text(batch.id.uuidString)])
             if try !database.next(row) { return true }
@@ -73,7 +75,8 @@ extension BrowserHistoryStore {
         let result = try database.transaction {
             let previous = try syncCutoff()
             let cutoff = max(previous, BrowserHistorySyncSchema.cutoff(now))
-            try advanceSyncCutoff(cutoff)
+            // Day-granular: an unchanged cutoff has nothing to expire (no visit scan, no favicon GC).
+            if cutoff > previous { try advanceSyncCutoff(cutoff) }
             let rows = try database.prepare("SELECT payload FROM historySyncEvents WHERE batch IS NULL ORDER BY rowid LIMIT 5000")
             var events: [BrowserHistorySyncEvent] = []
             do {
@@ -110,6 +113,13 @@ extension BrowserHistoryStore {
             while try database.next(saved) {
                 result.append(try JSONDecoder().decode(BrowserHistorySyncBatch.self, from: Data(database.text(saved, 0).utf8)))
             }
+            // Retracted batches travel as local notices until they would have expired anyway.
+            let retired = try database.prepare("SELECT id FROM historySyncRetired WHERE expires>=?")
+            defer { sqlite3_finalize(retired) }
+            try database.bind(retired, [.number(cutoff.timeIntervalSince1970)])
+            while try database.next(retired) {
+                if let id = UUID(uuidString: database.text(retired, 0)) { result.append(.retraction(of: id, profileID: profileID)) }
+            }
             return result
         }
         if try deferredUntil != nil || database.scalarText("SELECT COUNT(*) FROM historySyncEvents WHERE batch IS NULL") == "0" {
@@ -120,18 +130,25 @@ extension BrowserHistoryStore {
     }
 
     private func saveSyncBatch(_ batch: BrowserHistorySyncBatch) throws {
+        guard let database else { return }
         let bytes = try batch.encoded()
         try batch.validate(encodedSize: bytes.count)
-        try database?.execute("INSERT OR IGNORE INTO historySyncBatches VALUES(?,?,?)",
+        try database.execute("INSERT OR IGNORE INTO historySyncBatches VALUES(?,?,?)",
             [.text(batch.id.uuidString), .text(String(decoding: bytes, as: UTF8.self)), .number(batch.expires.timeIntervalSince1970)])
+        guard database.changes > 0 else { return }
+        // Which saved batches carry a visit: a deletion retracts exactly those.
+        for visit in batch.events.compactMap(\.visit) {
+            try database.execute("INSERT OR IGNORE INTO historySyncBatchVisits VALUES(?,?,?)",
+                [.text(batch.id.uuidString), .text(visit.id.uuidString), .number(visit.visitedAt.timeIntervalSince1970)])
+        }
     }
 
     private func advanceSyncCutoff(_ cutoff: Date) throws {
         guard let database else { return }
         try database.execute("UPDATE historySyncState SET cutoff=MAX(cutoff,?)", [.number(cutoff.timeIntervalSince1970)])
-        _ = try deleteRows(clause: "time<?", values: [.number(cutoff.timeIntervalSince1970)])
+        _ = try deleteRows(clause: "time<?", values: [.number(cutoff.timeIntervalSince1970)], purgeSyncJournal: false)
         try database.execute("DELETE FROM historySyncEvents WHERE expires<?", [.number(cutoff.timeIntervalSince1970)])
-        try database.execute("DELETE FROM historySyncBatches WHERE expires<?", [.number(cutoff.timeIntervalSince1970)])
+        try database.pruneSyncBatches(before: cutoff)
         try database.execute("DELETE FROM historySyncVersions WHERE id NOT IN (SELECT id FROM visits)")
     }
 
@@ -139,16 +156,17 @@ extension BrowserHistoryStore {
     /// A replay or metadata revision cannot resurrect a deleted identity or inflate counters.
     @discardableResult public func applyHistorySync(_ batches: [BrowserHistorySyncBatch], now: Date = Date()) throws -> Bool {
         guard let database else { return false }
-        let relevant = batches.filter { $0.profileID == profileID }
+        let relevant = batches.filter { $0.profileID == profileID && !$0.isRetraction }
         for batch in relevant { try batch.validate() }
         applyingHistorySync = true
         defer { applyingHistorySync = false }
         return try database.transaction {
             let cutoff = max(try syncCutoff(), BrowserHistorySyncSchema.cutoff(now), relevant.map(\.cutoff).max() ?? .distantPast)
             let oldCutoff = try syncCutoff()
-            try advanceSyncCutoff(cutoff)
+            if cutoff > oldCutoff { try advanceSyncCutoff(cutoff) }
             var incoming: [BrowserHistorySyncBatch] = []
             for batch in relevant where batch.expires >= cutoff {
+                guard try database.scalarInt("SELECT COUNT(*) FROM historySyncRetired WHERE id=?", [.text(batch.id.uuidString)]) == 0 else { continue }
                 let rows = try database.prepare("SELECT payload FROM historySyncBatches WHERE id=?")
                 let exists: Bool
                 do {
@@ -165,16 +183,26 @@ extension BrowserHistoryStore {
                     guard let deletion = event.deletion else { continue }
                     var clauses = [deletion.endInclusive ? "time<=?" : "time<?"], values: [HistoryValue] = [.number(deletion.end.timeIntervalSince1970)]
                     if let id = deletion.visitID { clauses = ["id=?"]; values = [.text(id.uuidString)] }
-                    if let site = deletion.site { clauses.append("site=?"); values.append(.text(site)) }
+                    if let site = deletion.site {
+                        let hosts = BrowserHistorySyncDeletion.isHashedSite(site) ? try database.sites(matching: site) : [site]
+                        guard !hosts.isEmpty else { continue }
+                        clauses.append("site IN (" + hosts.map { _ in "?" }.joined(separator: ",") + ")")
+                        values += hosts.map(HistoryValue.text)
+                    }
                     if let start = deletion.start { clauses.append("time>=?"); values.append(.number(start.timeIntervalSince1970)) }
                     _ = try deleteRows(clause: clauses.joined(separator: " AND "), values: values)
                 }
             }
-            let barriers = try syncDeletions()
+            var barriers = BrowserHistorySyncBarriers(try syncDeletions())
+            var deletedContent: [UUID] = []
             for batch in incoming {
                 for event in batch.events {
-                    guard let visit = event.visit, visit.visitedAt >= cutoff,
-                          !barriers.contains(where: { $0.matches(visit) }) else { continue }
+                    guard let visit = event.visit, visit.visitedAt >= cutoff else { continue }
+                    // A deleted visit must not stay in this store, even inside a saved batch.
+                    guard !barriers.matches(visit) else {
+                        if deletedContent.last != batch.id { deletedContent.append(batch.id) }
+                        continue
+                    }
                     let rows = try database.prepare("SELECT time,event FROM historySyncVersions WHERE id=?")
                     let newer: Bool
                     do {
@@ -194,6 +222,17 @@ extension BrowserHistoryStore {
                 for event in batch.events where event.deletion != nil {
                     try database.execute("UPDATE historySyncEvents SET batch=? WHERE id=?", [.text(batch.id.uuidString), .text(event.id.uuidString)])
                 }
+                // Journal rows still waiting for upload (a survivor of a batch retracted here) are
+                // already published in this batch: adopt it instead of uploading them again.
+                for event in batch.events where event.visit != nil {
+                    try database.execute("UPDATE historySyncEvents SET batch=? WHERE id=? AND batch IS NULL", [.text(batch.id.uuidString), .text(event.id.uuidString)])
+                }
+            }
+            if !deletedContent.isEmpty {
+                try database.execute("CREATE TEMP TABLE deletedContent(id TEXT PRIMARY KEY)")
+                defer { try? database.execute("DROP TABLE deletedContent") }
+                for id in deletedContent { try database.execute("INSERT OR IGNORE INTO deletedContent VALUES(?)", [.text(id.uuidString)]) }
+                try database.retractSyncBatches(in: "deletedContent")
             }
             return !incoming.isEmpty || oldCutoff != cutoff
         }

@@ -164,7 +164,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
     private let dim = CALayer()
     private let edge = CAShapeLayer()
     private let observers = OrbitWorkspaceObservers()
-    var foreground: NSColor = OrbitTokens.Color.Text.primary { didSet { refreshColors() } }
+    var foreground: NSColor = OrbitTokens.Color.Text.primary { didSet { if foreground != oldValue { refreshColors() } } }
     var cornerRadius: CGFloat = OrbitTokens.Radius.floatingSidebar { didSet { needsLayout = true } }
 
     override init(frame frameRect: NSRect) {

@@ -47,12 +47,16 @@ enum OrbitIcon {
 
     static func image(sfName: String, pointSize: CGFloat, variant: Variant = .template,
                       accessibilityDescription: String? = nil, weight: NSFont.Weight = .regular) -> NSImage? {
+        let key = "\(variant.rawValue)/\(pointSize)/\(weight.rawValue)/\(sfName)"
+        // Only catalog resources are cached, so a hit skips the catalog scan and bundle lookup.
+        if let cached = images.withLockUnchecked({ $0[key] }) {
+            return published(cached, sfName: sfName, variant: variant, accessibilityDescription: accessibilityDescription)
+        }
         guard let url = resourceURL(sfName: sfName, pointSize: pointSize, variant: variant) else {
             return NSImage(systemSymbolName: sfName, accessibilityDescription: accessibilityDescription)?
                 .withSymbolConfiguration(.init(pointSize: pointSize, weight: weight))
         }
-        let key = "\(variant.rawValue)/\(pointSize)/\(weight.rawValue)/\(sfName)"
-        return images.withLockUnchecked { images in
+        let source: NSImage? = images.withLockUnchecked { images in
             if images[key] == nil {
                 guard let source = NSImage(contentsOf: url) else { return nil }
                 source.size = NSSize(width: pointSize, height: pointSize)
@@ -81,14 +85,20 @@ enum OrbitIcon {
                     images[key] = matchedTemplate(source, sfName: sfName, pointSize: pointSize, weight: weight)
                 }
             }
-            // Callers may resize or annotate their image without mutating another control's copy.
-            guard let result = images[key]?.copy() as? NSImage else { return nil }
-            result.accessibilityDescription = accessibilityDescription
-            if variant == .template {
-                templateIdentities.withLockUnchecked { $0.setObject(sfName as NSString, forKey: result) }
-            }
-            return result
+            return images[key]
         }
+        return source.flatMap { published($0, sfName: sfName, variant: variant, accessibilityDescription: accessibilityDescription) }
+    }
+
+    /// Callers may resize or annotate their image without mutating another control's copy.
+    private static func published(_ cached: NSImage, sfName: String, variant: Variant,
+                                  accessibilityDescription: String?) -> NSImage? {
+        guard let result = cached.copy() as? NSImage else { return nil }
+        result.accessibilityDescription = accessibilityDescription
+        if variant == .template {
+            templateIdentities.withLockUnchecked { $0.setObject(sfName as NSString, forKey: result) }
+        }
+        return result
     }
 
     /// Match the symbol's ink inside its original canvas, retaining its alignment and baseline.

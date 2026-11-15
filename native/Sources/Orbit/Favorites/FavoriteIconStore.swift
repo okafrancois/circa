@@ -176,26 +176,13 @@ actor FavoriteIconStore {
             let (stream, response) = try await session.bytes(for: request)
             guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
                   response.expectedContentLength <= 524_288, let final = response.url, origin(final) != nil else { return nil }
-            var data = Data()
-            for try await byte in stream {
-                guard !Task.isCancelled, data.count < 524_288 else { return nil }
-                data.append(byte)
-            }
+            guard let data = try await BrowserUntrustedImage.collect(stream, expectedLength: response.expectedContentLength,
+                                                                     maximumBytes: 524_288) else { return nil }
             return (data, final)
         } catch { return nil }
     }
 
     static func decode(_ data: Data, source url: URL) -> BrowserFaviconImage? {
-        guard data.count <= 524_288,
-              let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: BrowserFaviconImage.maximumDimension,
-                kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
-        let png = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(png, UTType.png.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return BrowserFaviconImage(sourceURL: url, png: png as Data)
+        BrowserUntrustedImage.favicon(data, sourceURL: url, maximumBytes: 524_288)
     }
 }

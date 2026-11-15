@@ -278,35 +278,104 @@ def configured_identity(name='local'):
         yield ['--sign', matches[0], '--timestamp']
 
 
+CS_ALLOW_JIT = 'com.apple.security.cs.allow-jit'
+CS_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = 'com.apple.security.cs.allow-unsigned-executable-memory'
+CS_DISABLE_LIBRARY_VALIDATION = 'com.apple.security.cs.disable-library-validation'
+CODE_SIGNING_ENTITLEMENT_PREFIX = 'com.apple.security.cs.'
+
+# The local self-signed identity has no Team ID, so library validation can never pass between
+# its own binaries: local test bundles keep one broad set on the host and every helper.
+LOCAL_CHROMIUM_ENTITLEMENTS = frozenset({
+    CS_ALLOW_JIT, CS_ALLOW_UNSIGNED_EXECUTABLE_MEMORY, CS_DISABLE_LIBRARY_VALIDATION})
+
+# Developer ID builds scope runtime exceptions per process type, keyed by the helper suffix.
+# The host keeps library validation and gets no code-signing exception: it owns the Keychain
+# items, CloudKit, passkeys and device grants, so it must load only code signed by the team.
+# - Renderer and GPU: JIT only, as Chromium ships them (V8/WebAssembly; the GPU helper is used only
+#   when the SwiftShader fallback is allowed, otherwise the GPU process runs in the plain helper).
+# - Plain helper: GPU process and utility services, including the Widevine CDM, which is downloaded
+#   by the component updater and signed by its vendor's team, so this process type alone disables
+#   library validation. Without it the CDM fails with "CreateCdmFunc not available".
+# - Plugin: no launch path uses it in this engine; it keeps the historical CDM host set.
+# - Alerts: notification service, no exception.
+HOST_CODE_SIGNING_ENTITLEMENTS = frozenset()
+DEVELOPER_ID_HELPER_ENTITLEMENTS = {
+    '': frozenset({CS_DISABLE_LIBRARY_VALIDATION}),
+    ' (Renderer)': frozenset({CS_ALLOW_JIT}),
+    ' (GPU)': frozenset({CS_ALLOW_JIT}),
+    ' (Plugin)': frozenset({CS_ALLOW_UNSIGNED_EXECUTABLE_MEMORY, CS_DISABLE_LIBRARY_VALIDATION}),
+    ' (Alerts)': frozenset(),
+}
+HOST_DEVICE_ENTITLEMENTS = {
+    'com.apple.security.device.audio-input': True,
+    'com.apple.security.device.camera': True,
+    'com.apple.security.personal-information.location': True,
+}
+_HELPER_BUNDLE = re.compile(r'.+ Helper( \([A-Za-z]+\))?\.app')
+
+
+def helper_variant(path):
+    """Return the helper suffix ('' for the plain helper) of the enclosing helper bundle, or None."""
+    for component in reversed(Path(path).parts):
+        match = _HELPER_BUNDLE.fullmatch(component)
+        if match:
+            return match.group(1) or ''
+    return None
+
+
+def is_local_identity(identity_name):
+    return not identity_name or identity_name == 'local'
+
+
+def helper_code_signing_entitlements(variant, identity_name='local'):
+    if is_local_identity(identity_name):
+        return LOCAL_CHROMIUM_ENTITLEMENTS
+    if variant not in DEVELOPER_ID_HELPER_ENTITLEMENTS:
+        # A new helper type must be classified explicitly before it can ship.
+        raise ValueError(f'Unclassified Chromium helper variant: {variant!r}')
+    return DEVELOPER_ID_HELPER_ENTITLEMENTS[variant]
+
+
+def host_entitlements(identity_name='local', main_entitlements=None):
+    main_entitlements = dict(main_entitlements or {})
+    if any(key.startswith(CODE_SIGNING_ENTITLEMENT_PREFIX) for key in main_entitlements):
+        raise ValueError('Host capabilities cannot carry code-signing exceptions')
+    code_signing = LOCAL_CHROMIUM_ENTITLEMENTS if is_local_identity(identity_name) else HOST_CODE_SIGNING_ENTITLEMENTS
+    values = dict.fromkeys(sorted(code_signing), True)
+    # Hardened Runtime capture and CoreLocation require these capabilities in addition to
+    # site and OS consent. Without the location one, macOS never prompts and every
+    # navigator.geolocation request fails with POSITION_UNAVAILABLE.
+    values.update(HOST_DEVICE_ENTITLEMENTS)
+    values.update(main_entitlements)
+    return values
+
+
 def sign_chromium_bundle(bundle, identity_name='local', main_entitlements=None):
     """Sign nested Mach-O code, Sparkle services, helpers, frameworks, then the host."""
     import plistlib
     bundle = Path(bundle)
-    if main_entitlements and identity_name == 'local':
+    if main_entitlements and is_local_identity(identity_name):
         raise ValueError('Local test signatures cannot claim iCloud capabilities')
     with configured_identity(identity_name) as signing, tempfile.TemporaryDirectory(prefix='orbit-entitlements-') as temporary:
-        entitlements = Path(temporary) / 'chromium.plist'
-        entitlements.write_bytes(plistlib.dumps({
-            'com.apple.security.cs.allow-jit': True,
-            'com.apple.security.cs.allow-unsigned-executable-memory': True,
-            'com.apple.security.cs.disable-library-validation': True,
-        }))
-        host_entitlements = Path(temporary) / 'host.plist'
-        host_values = plistlib.loads(entitlements.read_bytes())
-        # Hardened Runtime capture and CoreLocation require these capabilities in addition to
-        # site and OS consent. Without the location one, macOS never prompts and every
-        # navigator.geolocation request fails with POSITION_UNAVAILABLE.
-        host_values.update({
-            'com.apple.security.device.audio-input': True,
-            'com.apple.security.device.camera': True,
-            'com.apple.security.personal-information.location': True,
-        })
-        host_values.update(main_entitlements or {})
-        host_entitlements.write_bytes(plistlib.dumps(host_values))
-        def sign_one(path, chromium=False, preserve=False):
+        host_file = Path(temporary) / 'host.plist'
+        host_file.write_bytes(plistlib.dumps(host_entitlements(identity_name, main_entitlements)))
+        helper_files = {}
+
+        def helper_file(variant):
+            if variant not in helper_files:
+                filename = Path(temporary) / f'helper-{len(helper_files)}.plist'
+                values = helper_code_signing_entitlements(variant, identity_name)
+                filename.write_bytes(plistlib.dumps(dict.fromkeys(sorted(values), True)))
+                helper_files[variant] = filename
+            return helper_files[variant]
+
+        def sign_one(path, preserve=False):
             arguments = [CODESIGN, '--force', *signing, '--options', 'runtime']
-            if chromium:
-                arguments += ['--entitlements', str(host_entitlements if path == bundle else entitlements)]
+            variant = None if path == bundle else helper_variant(path.relative_to(bundle))
+            if path == bundle:
+                arguments += ['--entitlements', str(host_file)]
+            elif variant is not None:
+                arguments += ['--entitlements', str(helper_file(variant))]
             elif preserve:
                 arguments += ['--preserve-metadata=entitlements']
             run([*arguments, str(path)], label='nested code signing', timeout=120)
@@ -319,10 +388,9 @@ def sign_chromium_bundle(bundle, identity_name='local', main_entitlements=None):
                 with entry.open('rb') as handle:
                     magic = handle.read(4)
                 if magic in (b'\xcf\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca'):
-                    sign_one(entry, chromium='Helper' in str(entry),
-                             preserve='Downloader.xpc' in str(entry))
+                    sign_one(entry, preserve='Downloader.xpc' in str(entry))
         for entry in sorted(frameworks.rglob('*'), key=lambda p: len(p.parts), reverse=True):
             if not entry.is_symlink() and entry.is_dir() and entry.suffix in {'.app', '.xpc', '.framework'}:
-                sign_one(entry, chromium='Helper' in entry.name, preserve=entry.name == 'Downloader.xpc')
-        sign_one(bundle, chromium=True)
+                sign_one(entry, preserve=entry.name == 'Downloader.xpc')
+        sign_one(bundle)
     run([CODESIGN, '--verify', '--deep', '--strict', str(bundle)], label='bundle signature verification')

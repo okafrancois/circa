@@ -71,11 +71,18 @@ public enum BrowserHistoryFavicon {
         if ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
             return url.host != nil && url.user == nil && url.password == nil
         }
+        return png(url) != nil
+    }
+
+    /// PNG bytes of an inline reference made by `reference(png:)`. Any other data URL is nil.
+    /// The bytes are still untrusted (sync, older rows) and must be decoded through the gate.
+    public static func png(_ url: URL) -> Data? {
         let text = url.absoluteString
         let prefix = "data:image/png;base64,"
         guard text.utf8.count <= 180_000, text.hasPrefix(prefix),
-              let data = Data(base64Encoded: String(text.dropFirst(prefix.count))) else { return false }
-        return reference(png: data) != nil
+              let data = Data(base64Encoded: String(text.dropFirst(prefix.count))),
+              reference(png: data) != nil else { return nil }
+        return data
     }
 }
 

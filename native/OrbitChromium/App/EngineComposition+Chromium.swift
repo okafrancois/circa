@@ -146,6 +146,7 @@ enum OrbitLauncher {
             }) {
                 BrowserPerformance.mark(.authentication)
                 try prepareEngineMigrationBackup(configuration)
+                purgeEngineHistory(configuration)
                 processSiteSessionImport(configuration)
                 runtimeStatus = startRuntime(configuration)
             }
@@ -213,6 +214,17 @@ enum OrbitLauncher {
             let category = error is BrowserEngineMigrationBackup.Failure ? "unsafe-snapshot-path" : "copy-or-write"
             FileHandle.standardError.write(Data("orbit: engine migration backup refused category=\(category) code=\(failure.code)\n".utf8))
             throw error
+        }
+    }
+
+    /// Deletes the engine history files of profiles whose history was cleared (or removed) in an
+    /// earlier run, before CEF opens them. A failure keeps the request for the next launch and
+    /// never blocks startup; only a fixed category is reported.
+    private static func purgeEngineHistory(_ configuration: OrbitProductConfiguration) {
+        do {
+            try BrowserEngineHistoryPurge.performPending(dataRoot: configuration.dataRoot, engineRoot: configuration.engineRoot)
+        } catch {
+            FileHandle.standardError.write(Data("orbit: engine history purge deferred category=\(error)\n".utf8))
         }
     }
 
