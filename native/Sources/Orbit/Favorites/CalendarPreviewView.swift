@@ -7,7 +7,7 @@ final class CalendarPreviewView: NSView {
     let scroll = NSScrollView()
     private let timeline = CalendarTimelineView()
     private let gear = NSButton(title: "", target: nil, action: nil)
-    private let add = NSButton(title: "", target: nil, action: nil)
+    private let add = CalendarAddButton(title: "", target: nil, action: nil)
     private var tracking: NSTrackingArea?
     var onPointer: ((Bool) -> Void)?
     var onMenu: (() -> NSMenu?)?
@@ -26,6 +26,7 @@ final class CalendarPreviewView: NSView {
             button.target = self; button.action = action; button.toolTip = title; button.setAccessibilityLabel(title)
             addSubview(button)
         }
+        gear.image = OrbitIcon.calendarSettingsImage()
         setAccessibilityRole(.group); setAccessibilityLabel(uiText("Live Calendar"))
     }
     required init?(coder: NSCoder) { nil }
@@ -58,6 +59,29 @@ final class CalendarPreviewView: NSView {
     override func mouseExited(with event: NSEvent) { onPointer?(false) }
     @objc private func showMenu() { onMenu?()?.popUp(positioning: nil, at: .init(x: gear.frame.minX, y: gear.frame.maxY), in: self) }
     @objc private func createEvent() { onAdd?() }
+}
+
+@MainActor
+private final class CalendarAddButton: NSButton {
+    override func draw(_ dirtyRect: NSRect) {
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.75, dy: 0.75))
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.15)
+        shadow.shadowBlurRadius = 2; shadow.shadowOffset = .init(width: 0, height: -1)
+        shadow.set()
+        OrbitTokens.Color.Calendar.addButton.setFill(); circle.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.separatorColor.setStroke(); circle.lineWidth = 0.5; circle.stroke()
+        if isHighlighted {
+            OrbitTokens.Color.State.sidebarItem.setFill(); circle.fill()
+        }
+        if let image {
+            OrbitIcon.draw(image, in: .init(x: bounds.midX - image.size.width / 2,
+                y: bounds.midY - image.size.height / 2, width: image.size.width, height: image.size.height),
+                tint: OrbitTokens.Color.Text.primary)
+        }
+    }
 }
 
 @MainActor
@@ -107,7 +131,8 @@ private final class CalendarTimelineView: NSView {
             }
         }
         let nowY = offset(Date())
-        ink.setFill(); NSRect(x: 42, y: nowY, width: bounds.width - 47, height: 1.5).fill()
+        OrbitTokens.Color.Calendar.now.setFill()
+        NSRect(x: 42, y: nowY, width: bounds.width - 47, height: 1.5).fill()
         NSBezierPath(ovalIn: .init(x: 39, y: nowY - 2.5, width: 6, height: 6)).fill()
     }
 }

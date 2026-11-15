@@ -15,10 +15,10 @@ final class CalendarReminderView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        title.font = .systemFont(ofSize: 12, weight: .medium)
+        title.font = OrbitTokens.Typography.sidebarTabTitle
         title.lineBreakMode = .byTruncatingTail; title.maximumNumberOfLines = 1
         addSubview(title)
-        join.isBordered = false; join.wantsLayer = true; join.layer?.cornerRadius = 5
+        join.isBordered = false; join.wantsLayer = true; join.layer?.cornerRadius = 4
         join.font = .systemFont(ofSize: 11, weight: .semibold)
         join.contentTintColor = .white
         join.target = self; join.action = #selector(activate)
@@ -45,14 +45,14 @@ final class CalendarReminderView: NSView {
         needsDisplay = true
     }
     override func draw(_ dirtyRect: NSRect) {
-        title.textColor = OrbitTokens.Color.Text.sidebarTitle
+        title.textColor = OrbitTokens.Color.Text.primary
     }
     override func layout() {
         super.layout()
-        title.frame = .init(x: 8, y: 8, width: max(0, bounds.width - 66), height: 18)
-        join.frame = .init(x: bounds.width - 52, y: 5, width: 46, height: 25)
-        joinLabel.frame = .init(x: 0, y: 5, width: join.bounds.width, height: 16)
-        check.frame = join.bounds.insetBy(dx: 16, dy: 6)
+        title.frame = .init(x: 8, y: 8, width: max(0, bounds.width - 58), height: 18)
+        join.frame = .init(x: bounds.width - 44, y: 8, width: 38, height: 20)
+        joinLabel.frame = .init(x: 0, y: 2, width: join.bounds.width, height: 16)
+        check.frame = join.bounds.insetBy(dx: 12, dy: 4)
     }
     @objc private func activate() {
         guard !joined, onJoin?() == true else { return }
@@ -94,9 +94,9 @@ final class CalendarJoinButton: NSButton {
         let rect = bounds.insetBy(dx: 0, dy: 1)
         let fill = OrbitTokens.Color.Calendar.join
         fill.blended(withFraction: 0.25, of: .black)?.setFill()
-        NSBezierPath(roundedRect: rect.offsetBy(dx: 0, dy: 1), xRadius: 5, yRadius: 5).fill()
+        NSBezierPath(roundedRect: rect.offsetBy(dx: 0, dy: 1), xRadius: 4, yRadius: 4).fill()
         (hovered || isHighlighted ? fill.blended(withFraction: 0.12, of: .black) ?? fill : fill).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
