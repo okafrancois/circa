@@ -75,6 +75,23 @@ struct BrowserLinkPreviewTests {
         server.releaseHeld()
     }
 
+    @Test @MainActor func revokingPolicyDuringTheBodyStopsBeforeTheResponseFinishes() async throws {
+        let server = try LinkPreviewFixtureServer()
+        defer { server.releaseHeld(); server.stop() }
+        let port = try await server.start()
+        let loader = BrowserLinkPreviewLoader(requestTimeout: 1, resourceTimeout: 2)
+        var checks = 0
+        await #expect(throws: CancellationError.self) {
+            try await loader.load(URL(string: "http://127.0.0.1:\(port)/stream-held")!, allowed: { _ in
+                checks += 1
+                // Permit the request and headers, then revoke when the first body chunk arrives.
+                return checks < 3
+            })
+        }
+        #expect(checks == 3)
+        #expect(server.requests.map(\.path) == ["/stream-held"])
+    }
+
     /// The transport must finish on URLSession's own queue: a saturated Swift cooperative pool
     /// (other suites blocking its threads under a loaded full run) once outlasted the resource
     /// timeout. Opt-in, because it deliberately occupies the shared pool for two seconds.
@@ -214,6 +231,13 @@ private final class LinkPreviewFixtureServer: @unchecked Sendable {
             hook?()
             // `/held` answers nothing until released or cancelled: a transfer in flight.
             if path == "/held" { held = connection; return }
+            if path == "/stream-held" {
+                held = connection
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 2048\r\nConnection: close\r\n\r\n"
+                    + String(repeating: "x", count: 1024)
+                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in })
+                return
+            }
             let body = path == "/streamed-oversized"
                 ? String(repeating: "x", count: BrowserLinkPreviewLoader.maximumBytes + 1)
                 : "<title>Public page</title><body>Useful text.</body>"

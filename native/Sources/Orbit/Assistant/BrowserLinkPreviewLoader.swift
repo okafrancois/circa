@@ -45,7 +45,7 @@ final class BrowserLinkPreviewLoader {
             var request = URLRequest(url: next, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: requestTimeout)
             request.httpShouldHandleCookies = false
             request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
-            let (response, data) = try await exchange(request)
+            let (response, data) = try await exchange(request, allowed: allowed)
             guard allowed(next) else { throw CancellationError() }
             if [301, 302, 303, 307, 308].contains(response.statusCode),
                let location = response.value(forHTTPHeaderField: "Location"),
@@ -74,11 +74,12 @@ final class BrowserLinkPreviewLoader {
     /// queue. Completion never waits for the Swift cooperative pool: `URLSession.bytes(for:)`
     /// needs that pool to make progress while the resource timeout runs, so a saturated pool
     /// turned a prompt answer into a timeout. Task cancellation cancels the transfer at once.
-    private func exchange(_ request: URLRequest) async throws -> (HTTPURLResponse, Data) {
+    private func exchange(_ request: URLRequest, allowed: @escaping @MainActor (URL) -> Bool) async throws -> (HTTPURLResponse, Data) {
         let task = session.dataTask(with: request)
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                task.delegate = LinkPreviewExchange(limit: Self.maximumBytes, continuation: continuation)
+                task.delegate = LinkPreviewExchange(limit: Self.maximumBytes, url: request.url!, allowed: allowed,
+                                                     continuation: continuation)
                 task.resume()
             }
         } onCancel: { task.cancel() }
@@ -136,13 +137,25 @@ private final class LinkPreviewTransport: NSObject, URLSessionTaskDelegate, Send
 /// Redirects are never followed here: the loader revalidates the target first.
 private final class LinkPreviewExchange: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let limit: Int
+    private let url: URL
+    private let allowed: @MainActor (URL) -> Bool
     private var continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>?
     private var response: HTTPURLResponse?
     private var body = Data()
 
-    init(limit: Int, continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>) {
+    init(limit: Int, url: URL, allowed: @escaping @MainActor (URL) -> Bool,
+         continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>) {
         self.limit = limit
+        self.url = url
+        self.allowed = allowed
         self.continuation = continuation
+    }
+
+    /// Policy belongs to the main actor. Recheck before accepting headers and every body
+    /// chunk without scheduling work on the cooperative pool that the transport avoids.
+    private func isAllowed() -> Bool {
+        if Thread.isMainThread { return MainActor.assumeIsolated { allowed(url) } }
+        return DispatchQueue.main.sync { MainActor.assumeIsolated { allowed(url) } }
     }
 
     private func finish(_ result: Result<(HTTPURLResponse, Data), Error>) {
@@ -153,6 +166,10 @@ private final class LinkPreviewExchange: NSObject, URLSessionDataDelegate, @unch
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+        guard isAllowed() else {
+            finish(.failure(CancellationError()))
+            return completionHandler(.cancel)
+        }
         guard let response = response as? HTTPURLResponse else {
             finish(.failure(CancellationError()))
             return completionHandler(.cancel)
@@ -167,6 +184,10 @@ private final class LinkPreviewExchange: NSObject, URLSessionDataDelegate, @unch
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard continuation != nil else { return }
+        guard isAllowed() else {
+            finish(.failure(CancellationError()))
+            return dataTask.cancel()
+        }
         guard body.count + data.count <= limit else {
             finish(.failure(BrowserAIError.failed))
             return dataTask.cancel()
