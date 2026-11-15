@@ -2116,3 +2116,7 @@
 "Adjust Tab Volume" = "Adjust Tab Volume";
 
 "Play" = "Play";
+
+"Receive nightly builds" = "Receive nightly builds";
+
+"New features first, with less stability. Turning this off keeps your build until a newer stable release." = "New features first, with less stability. Turning this off keeps your build until a newer stable release.";

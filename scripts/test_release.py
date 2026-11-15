@@ -37,7 +37,8 @@ class ReleaseTests(unittest.TestCase):
 
     def test_versions_are_semantic_and_builds_are_numeric(self):
         self.assertEqual(release.release_version('v0.1.0'), '0.1.0')
-        for tag in ['0.1.0', 'v1.2', 'v1.2.3-rc1', 'main']:
+        self.assertEqual(release.release_version('v1.2.3-nightly.1'), '1.2.3-nightly.1')
+        for tag in ['v1.2.3-nightly.0', 'v1.2.3-nightly', 'v1.2.3-nightly.1/other', '0.1.0', 'v1.2', 'v1.2.3-rc1', 'main']:
             with self.assertRaises(ValueError):
                 release.release_version(tag)
         info = release.update_info({}, self.config, '0.1.0', 123)
@@ -93,6 +94,56 @@ class ReleaseTests(unittest.TestCase):
                                     stable_dmg=Path('Circa.dmg'))
         self.assertEqual(commands[1], ['gh', 'release', 'upload', 'v1.2.3', '--repo', self.config['repository'], '--clobber',
                                        'app.zip', 'app.dmg', 'Circa.dmg', 'appcast.xml'])
+
+    def test_nightly_notes_and_publishing_never_change_latest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            notes = root / 'release/notes/nightly/1.2.3-nightly.1.md'
+            with patch.object(release, 'ROOT', root):
+                with self.assertRaises(ValueError):
+                    release.release_notes_path('1.2.3-nightly.1')
+                notes.parent.mkdir(parents=True)
+                notes.write_text('Try new features in Advanced Settings.\n')
+                dmg = root / 'versioned.dmg'
+                dmg.write_bytes(b'test')
+                commands = []
+                with patch.object(release.subprocess, 'run', return_value=SimpleNamespace(returncode=1)), \
+                        patch.object(release, 'run', side_effect=lambda *args, **kw: commands.append(list(map(str, args)))):
+                    release.publish_release(self.config, '1.2.3-nightly.1', Path('app.zip'), dmg, Path('appcast.xml'),
+                                            stable_dmg=Path('Circa.dmg'))
+                self.assertTrue((root / 'Circa-Nightly.dmg').is_file())
+                for command in commands:
+                    self.assertNotIn('--latest', command)
+                    self.assertNotIn('Circa.dmg', command)
+                    if command[2] in ('create', 'edit'):
+                        self.assertIn('--prerelease', command)
+                        self.assertIn('--latest=false', command)
+                self.assertTrue(any(command[2:4] == ['upload', 'nightly'] for command in commands))
+
+    def test_channel_predecessors_and_feed_retention(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            def item(build, channel=''):
+                return ('<item><sparkle:version>%s</sparkle:version>%s'
+                        '<enclosure url="https://example.test/%s.zip" sparkle:edSignature="sig"/>'
+                        '<sparkle:deltas><enclosure url="https://example.test/%s.delta"/></sparkle:deltas></item>' %
+                        (build, '<sparkle:channel>%s</sparkle:channel>' % channel if channel else '', build, build))
+            def feed(path, items):
+                path.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>' + items + '</channel></rss>')
+            previous, current = root / 'previous.xml', root / 'appcast.xml'
+            feed(previous, item(1) + item(2, 'nightly') + item(3, 'nightly'))
+            self.assertEqual([i[0] for i in release.preservation_items(previous, True)], [3])
+            self.assertEqual([i[0] for i in release.preservation_items(previous, False)], [1, 3])
+            feed(current, item(4, 'nightly'))
+            release.merge_published_items(current, previous, 4, True)
+            self.assertEqual(release.latest_feed_item(current, '')[0], 1)
+            self.assertEqual(release.latest_feed_item(current, 'nightly')[0], 4)
+            self.assertIn('https://example.test/2.delta', current.read_text())
+            with self.assertRaises(ValueError):
+                release.merge_published_items(current, previous, 4, False)
+            feed(current, item(5))
+            release.merge_published_items(current, previous, 5, False)
+            self.assertEqual([i[0] for i in release.preservation_items(current, False)], [5, 3])
 
     def test_release_enables_quarantine_even_for_older_source_bundles(self):
         for source in ({}, {'LSFileQuarantineEnabled': False}):
@@ -516,9 +567,28 @@ class PreservationGateTests(unittest.TestCase):
                     verify.assert_called_once()
                     self.assertFalse(any('ditto' in map(str, call.args) for call in runner.call_args_list), reason)
 
+    def test_gate_qualifies_every_required_channel_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            item = (10, '1.0.0', 'https://x/app.zip', 4, 'sig')
+            nightly = (11, '1.1.0-nightly.1', 'https://x/nightly.zip', 4, 'sig')
+            with patch.object(release, 'download'), patch.object(release, 'verify_feed_signature'), \
+                    patch.object(release, 'latest_feed_item', return_value=nightly), \
+                    patch.object(release, 'preservation_items', return_value=[item, nightly]), \
+                    patch.object(release, 'qualify_previous') as qualify:
+                release.qualify_preservation(self.config, Path('candidate.app'), 12, output)
+                self.assertEqual([call.args[-1] for call in qualify.call_args_list], [item, nightly])
+                qualify.reset_mock()
+                with self.assertRaises(ValueError):
+                    release.qualify_preservation(self.config, Path('candidate.app'), 11, output)
+                qualify.assert_not_called()
+                qualify.side_effect = RuntimeError('failed preservation')
+                with self.assertRaises(RuntimeError):
+                    release.qualify_preservation(self.config, Path('candidate.app'), 12, output)
+
     def test_gate_runs_before_signing_for_every_non_isolated_release(self):
         source = Path(release.__file__).read_text()
-        gate = source.index('qualify_preservation(config, source, build, output)')
+        gate = source.index('qualify_preservation(config, source, build, output, nightly=nightly)')
         self.assertLess(gate, source.index('prepare_bundle(source, app, config'))
         self.assertLess(gate, source.index("publish_release(config, version, archive, dmg, archives"))
         self.assertIn('if args.publish or args.qualify_only or not args.local_test_root:', source)

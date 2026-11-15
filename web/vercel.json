@@ -39,5 +39,12 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "source": "/nightly",
+      "destination": "https://github.com/okafrancois/circa/releases/download/nightly/Circa-Nightly.dmg",
+      "permanent": false
+    }
   ]
 }

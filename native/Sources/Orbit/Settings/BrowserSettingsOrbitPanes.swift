@@ -481,6 +481,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var advanced: some View {
         Group {
             panel {
+                settingRow("Receive nightly builds", subtitle: "New features first, with less stability. Turning this off keeps your build until a newer stable release.") {
+                    BrowserNightlyUpdateToggle(updater: runtime.updater)
+                }
+            }
+            panel {
                 liveToggle("Allow JavaScript from Apple Events",
                            value: runtime.document.allowJavaScriptFromAppleEvents,
                            identifier: "settings-apple-events-javascript", save: runtime.setAllowJavaScriptFromAppleEvents)
@@ -594,6 +599,17 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     }
     private func open(_ page: BrowserSettingsPage, profile: ProfileID) {
         model.perform { try await model.openBrowserSettings(page, profile: profile) }
+    }
+}
+
+@MainActor
+private struct BrowserNightlyUpdateToggle: View {
+    @ObservedObject var updater: OrbitUpdater
+    var body: some View {
+        Toggle(uiText("Receive nightly builds"), isOn: Binding(get: { updater.receivesNightlyBuilds },
+            set: { updater.setReceivesNightlyBuilds($0) }))
+            .labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
+            .accessibilityIdentifier("settings-nightly-updates")
     }
 }
 

@@ -5,7 +5,10 @@ enum OrbitReleaseNotes {
     static let changelogURL = URL(string: "https://circabrowser.com/changelog")!
 
     static func versionURL(_ version: String) -> URL? {
-        guard version.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil else { return nil }
+        guard version.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+(?:-nightly\.[1-9][0-9]*)?$"#, options: .regularExpression) != nil else { return nil }
+        if version.contains("-nightly.") {
+            return URL(string: "https://github.com/okafrancois/circa/releases/tag/v" + version)
+        }
         return URL(string: changelogURL.absoluteString + "#v" + version)
     }
 

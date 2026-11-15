@@ -27,13 +27,13 @@ enum OrbitUpdateFeed {
     }
 
     /// The bundle's own policy: when it requires signed feeds, the hint reads only verified bytes.
-    static func latestVersion(data: Data, info: [String: Any]) throws -> String {
-        guard info["SURequireSignedFeed"] as? Bool == true else { return try latestVersion(data: data) }
+    static func latestVersion(data: Data, info: [String: Any], allowedChannels: Set<String> = []) throws -> String {
+        guard info["SURequireSignedFeed"] as? Bool == true else { return try latestVersion(data: data, allowedChannels: allowedChannels) }
         guard let key = info["SUPublicEDKey"] as? String else { throw URLError(.cannotParseResponse) }
-        return try latestVersion(data: verifiedContent(data, publicKey: key))
+        return try latestVersion(data: verifiedContent(data, publicKey: key), allowedChannels: allowedChannels)
     }
 
-    static func latestVersion(data: Data) throws -> String {
+    static func latestVersion(data: Data, allowedChannels: Set<String> = []) throws -> String {
         let reader = Reader()
         let parser = XMLParser(data: data)
         parser.delegate = reader
@@ -41,7 +41,7 @@ enum OrbitUpdateFeed {
         let os = ProcessInfo.processInfo.operatingSystemVersion
         let currentOS = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
         guard let latest = reader.items.filter({ item in
-            item.channel.isEmpty && !item.version.isEmpty
+            (item.channel.isEmpty || allowedChannels.contains(item.channel)) && !item.version.isEmpty
                 && (item.minimum.isEmpty || currentOS.compare(item.minimum, options: .numeric) != .orderedAscending)
                 && (item.maximum.isEmpty || currentOS.compare(item.maximum, options: .numeric) != .orderedDescending)
         }).map(\.version).max(by: { $0.compare($1, options: .numeric) == .orderedAscending }) else {

@@ -143,6 +143,8 @@ struct IdleUpdateTests {
         updater.prepared(version: "28", displayVersion: "not-a-version")
         #expect(await updater.validatePendingUpdate())
         #expect(updater.releaseNotesURL == OrbitReleaseNotes.changelogURL)
+        #expect(OrbitReleaseNotes.versionURL("1.2.3-nightly.1")?.absoluteString == "https://github.com/okafrancois/circa/releases/tag/v1.2.3-nightly.1")
+        #expect(OrbitReleaseNotes.versionURL("1.2.3-nightly.0") == nil)
         #expect(OrbitReleaseNotes.versionURL("1.2.3#other") == nil)
         #expect(OrbitReleaseNotes.versionURL("١.٢.٣") == nil)
     }

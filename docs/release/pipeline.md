@@ -50,13 +50,14 @@
 
 ## Build and publish
 - Local: `python3 scripts/release.py --tag v0.1.0`.
-- Published versions use tags `vX.Y.Z`; the short version is `X.Y.Z`, build number defaults
+- Stable versions use tags `vX.Y.Z`; nightly versions use `vX.Y.Z-nightly.N` (N ≥ 1).
+  The short version matches the tag without `v`; the build number defaults
   to the full-history Git commit count. Increment `--build-number` for rebuilt tags if needed;
   every distributed build number must strictly increase. Do not replace published versions.
 - Outputs: `dist/release/archives/Orbit-X.Y.Z.zip`, `appcast.xml`, deltas, plus the install DMG.
   Preserve this directory between releases for delta generation and previous appcast URLs.
 - After separately pushing the reviewed tag, run the same command with `--publish`, or use
-  the workflow. Publishing creates a draft, uploads all assets (including `appcast.xml`), then explicitly marks the browser version latest. It then creates or updates the `update-feed` prerelease and uploads the same appcast with `--clobber`; that tag does not match the browser release workflow trigger. Website and mobile releases must always use `--latest=false`.
+  the workflow. Publishing creates a draft, uploads all assets (including `appcast.xml`), then marks stable browser versions latest; nightlies are prereleases with `--latest=false`. It then creates or updates the `update-feed` prerelease and uploads the same appcast with `--clobber`; that tag does not match the browser release workflow trigger. Website and mobile releases must always use `--latest=false`.
 - The app checks at launch and hourly (including a persisted-interval override), downloads signed
   updates silently, and offers a sidebar restart card. Pending installers are revalidated against
   a fresh feed before the card, restart and normal quit; stale installers are cancelled through
@@ -79,7 +80,8 @@
   across the engine change; it never launches the supplied production bundle directly.
 - **Update preservation gate (mandatory, automatic).** `release.py` runs it before anything is
   signed, notarized or published, for every publishing run and every build that is not an
-  isolated `--local-test-root` E2E. It downloads the latest release from the public feed,
+  isolated `--local-test-root` E2E. It downloads the required predecessors from the public feed (latest of any channel for a nightly;
+  latest stable and latest nightly for a stable candidate),
   verifies the feed and archive EdDSA signatures, the Developer ID team and that its build is
   older than the candidate, then runs `scripts/test_update_ux.py --cases auth-transition` from
   that release to the candidate. In two synthetic profiles:
@@ -95,7 +97,7 @@
   The gate accepts only this run's complete result (a fixed list of required checks, a run
   nonce, digests of the exact previous and candidate bundles). A failure, missing evidence,
   mismatched input, unreachable feed or unavailable GUI session stops the release; there is no
-  skip option. Evidence: `dist/release/preservation-<build>/` (synthetic data only).
+  skip option. Evidence: `dist/release/preservation-<build>-from-<previous>/` (synthetic data only).
   `hosted-build.yml` runs the same gate with `--qualify-only` (no credentials) on every main
   push and pull request. Locally: `python3 scripts/release.py --qualify-only --skip-build`
   (GUI runs take `/tmp/orbit-gui-slot.lock`, at most 55 s per stage).
@@ -109,6 +111,47 @@
   before this feature shipped cannot be recovered by it. A failed snapshot refuses startup before
   the engine can change profile files; the next launch retries.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
+
+## Nightly channel and promotion
+
+- **Opt in:** Settings → Advanced → Receive nightly builds. The preference persists through
+  updates. Nightlies offer new features first and may be less stable. Turning the switch off
+  cancels a staged update and silently checks stable again; an installed nightly stays installed
+  until a stable build has a greater build number. Sparkle never downgrades.
+- One signed `update-feed/appcast.xml` serves everyone. Stable items have no channel; nightly
+  items have `<sparkle:channel>nightly</sparkle:channel>`. Sparkle's delegate and the app's
+  signed-feed freshness check both admit nightly only for opted-in users. Stable is always
+  admitted. Sparkle 2.10.1 supports this directly (`allowedChannels`, `generate_appcast --channel`).
+- **Cut a nightly (PM only):** choose the upcoming stable X.Y.Z and next N; commit 1–3 lines
+  of user-facing notes to `release/notes/nightly/X.Y.Z-nightly.N.md`, then create and push
+  `vX.Y.Z-nightly.N` through the normal release workflow. Locally, prepare with
+  `python3 scripts/release.py --tag vX.Y.Z-nightly.N`; remote mutation still requires `--publish`.
+  The current hook, `release_notes_path`, requires nonempty nightly notes before compilation;
+  the shared notes validator can extend that hook without changing this directory contract.
+- Nightly version releases are prereleases, always `--latest=false`. The fixed `nightly`
+  prerelease holds a clobbered `Circa-Nightly.dmg`; https://circabrowser.com/nightly redirects
+  there. The stable `releases/latest/download/Circa.dmg` and GitHub latest remain stable.
+  Installing the nightly DMG does not opt the user into future nightlies; use the toggle.
+- **Promote:** after nightly qualification, commit stable notes to `release/notes/X.Y.Z.md`
+  and tag `vX.Y.Z` on a newer commit. Build numbers use full-history commit counts and must
+  exceed every published channel, even when an explicit build number is supplied. A tag on
+  the same nightly commit fails this requirement. Promotion builds a new stable artifact;
+  it never changes a published nightly item or reuses its build number.
+- **Hotfix:** a reviewed fix may go straight to a stable patch tag with stable notes. Its
+  commit count must still exceed the newest nightly; bring the fix onto current history rather
+  than publishing an older-count branch. Engine changes must go through nightly first.
+- The mandatory preservation gate has no skip switch: nightly candidates qualify from the
+  newest published build; stable candidates qualify separately from the latest stable and
+  latest nightly (when present). Each predecessor retains signature, identity, monotonicity,
+  authentication and extension checks. A failed predecessor blocks the release.
+- The verified published feed seeds generation even on fresh runners. Existing entries and
+  their archive/delta URLs are retained, then the combined feed is signed and verified again.
+  Preserve local archives for new delta generation; a fresh runner still offers full archives
+  and retains previously published deltas. Both channels remain in the single signed feed.
+- Local channel qualification:
+  `python3 scripts/test_update_ux.py --source-app <compiled-product> --cases channel-stable channel-opt-in channel-opt-out channel-tampered channel-staged-opt-out`.
+  It uses only signed loopback feeds, temporary keys, mock Keychain and confined synthetic
+  bundles, with the GUI slot held for each ≤55 s case. No production feed is modified.
 
 ## Content blocking rulesets
 - The built-in blocker ships declarativeNetRequest rulesets generated from EasyList and
@@ -159,7 +202,7 @@
 - Provision CEF, signing identity and the backed-up EdDSA key on that machine first.
   Preserve `.tools/` and `dist/release/` in the runner checkout. The script was **not executed**.
 - `.github/workflows/release.yml` runs only owner-pushed `v*` tags or owner dispatches
-  in the configured repository; numeric repository ID, owner, actor and strict `vX.Y.Z` tag guards reject other targets. No PR trigger.
+  in the configured repository; numeric repository ID, owner, actor and strict `vX.Y.Z` / `vX.Y.Z-nightly.N` tag guards reject other targets. No PR trigger.
 - GitHub Settings → Actions → General: require approval for **all outside collaborators**
   on fork pull-request workflows; keep fork write-token/secret access disabled and the default
   workflow token read-only. This release job explicitly requests `contents: write`.
