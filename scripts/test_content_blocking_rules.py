@@ -70,7 +70,9 @@ class PinTests(unittest.TestCase):
         manifest = json.loads(rules.EXTENSION_MANIFEST.read_text())
         resources = manifest["declarative_net_request"]["rule_resources"]
         self.assertEqual([(entry["id"], entry["enabled"]) for entry in resources], [("easylist", False), ("easyprivacy", False)])
-        self.assertEqual(manifest["permissions"], ["declarativeNetRequest", "cookies"])
+        self.assertEqual(manifest["permissions"], ["declarativeNetRequest"])
+        # Configured by the engine in the browser process: no worker, host access or incognito key.
+        self.assertFalse({"background", "host_permissions", "incognito"} & manifest.keys())
 
     def test_generate_from_local_lists_and_detect_tampering(self):
         with tempfile.TemporaryDirectory() as temporary:

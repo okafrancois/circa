@@ -691,33 +691,38 @@ int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t, vo
 int32_t ACRExtensionOptionsOpen(uint64_t token, const char* extension_id);
 int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* extension_id, int32_t allowed);
 
-/* Built-in content blocking: the data-root copy of the bundled ContentBlocker extension, added to --load-extension
- * at startup (never for synthetic authentication runs). Its declarativeNetRequest rulesets start
- * disabled. Persistent profiles, plus the private channel below; all calls on UI.
- * Configure writes one profile's state: enabled 0/1, allowed hosts ("|"-joined lowercase ASCII
- * hosts, ignored when disabled) and a revision > 0, and disables the extension while off.
- * The acknowledgement callback (UI, exactly once for accepted calls) receives the extension's last
- * applied "<revision>.<enabled>", or NULL when it has not applied any yet. */
-typedef void (*orbit_content_blocking_ack_t)(void* context, const char* acknowledgement);
+/* Built-in content blocking (side API v19): the data-root copy of the bundled ContentBlocker
+ * extension, loaded by the engine as a component of every regular profile (hidden from the
+ * extensions page and user management; never for synthetic authentication runs). Its
+ * declarativeNetRequest rulesets start disabled. All calls on UI.
+ * Configure replaces one profile's state: enabled 0/1 and the allowed hosts ("|"-joined lowercase
+ * ASCII hosts, ignored when disabled). Returns 1 when accepted; `done` (optional) is then called
+ * once on UI with 1 when the rules are in place or -1 on failure. 0: refused, no callback. */
 const char* ACRContentBlockingExtensionID(void);
 int32_t ACRContentBlockingAvailable(void);
-int32_t ACRContentBlockingConfigure(uint64_t profile_token, int32_t enabled, const char* hosts, uint64_t revision);
-int32_t ACRContentBlockingAcknowledgement(uint64_t profile_token, orbit_content_blocking_ack_t callback, void* context);
-/* Private windows are off-the-record children of the initial profile. That profile's copy of the
- * extension runs in incognito split mode: one worker per private context, started with it.
- * PreparePrivate enables that copy and allows it in incognito (engine side API v16, capability
- * bit 8) while no private context exists, without reloading it; call it before creating private
- * contexts and retry while it returns 0 (the copy may still be loading at launch). ConfigurePrivate writes the same contract as
- * Configure to every ready private context's own cookie store (session cookies, rules kept as
- * session rules); nothing reaches disk. ContextList returns the number of ready private contexts
- * and copies up to `capacity` tokens. EndPrivateSession unloads and reloads that copy, which drops
- * its session rules; call it when no private window remains. */
+int32_t ACRContentBlockingConfigure(uint64_t profile_token, int32_t enabled, const char* hosts,
+                                    orbit_status_callback_t done, void* context);
+/* Private windows are off-the-record children of the initial profile, where the component is
+ * allowed too. They share one configuration, with the same contract as Configure; its exception
+ * rules stay in memory. EndPrivateSession clears it when no private window remains. */
 int32_t ACRContentBlockingPrivateAvailable(void);
-int32_t ACRContentBlockingPreparePrivate(void);
-int32_t ACRContentBlockingConfigurePrivate(int32_t enabled, const char* hosts, uint64_t revision);
-int32_t ACRContentBlockingPrivateContextList(uint64_t* tokens, int32_t capacity);
-int32_t ACRContentBlockingPrivateAcknowledgement(uint64_t private_token, orbit_content_blocking_ack_t callback, void* context);
+int32_t ACRContentBlockingConfigurePrivate(int32_t enabled, const char* hosts,
+                                           orbit_status_callback_t done, void* context);
 int32_t ACRContentBlockingEndPrivateSession(void);
+
+/* Side API v19. Output volume of the surface's tab in [0, 1], independent of mute (tab capture
+ * included). Set: 1 accepted, 0 refused. Get: 1 with `volume` filled (1 until set). */
+int32_t ACRAudioVolumeAvailable(void);
+int32_t ACRSetAudioVolume(uint64_t surface_token, double volume);
+int32_t ACRAudioVolume(uint64_t surface_token, double* volume);
+
+/* Side API v19. Runs the extension action of the surface's tab for the shell's current selection
+ * and shows its popup in an engine-owned titled window beside the surface's window: no anchor, and
+ * a selected page-less surface qualifies. 1 accepted, 0 refused, -2 side panel requested. The
+ * window closes on window.close(), Escape, its close button, or when the source tab, window,
+ * extension or profile goes away. */
+int32_t ACRDetachedExtensionActionsAvailable(void);
+int32_t ACRPerformDetachedExtensionAction(uint64_t surface_token, const char* extension_id);
 
 #ifdef __cplusplus
 }

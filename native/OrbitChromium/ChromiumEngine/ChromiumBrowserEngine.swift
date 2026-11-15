@@ -55,6 +55,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         // also render extension documents under the extension system's own access checks.
         if surfaceMode == .hosted { capabilities.formUnion([.beforeUnloadOnClose, .extensionDocuments, .pageSaving]) }
         if ACRBrowserStateAvailable() == 1 { capabilities.insert(.audibleState) }
+        if ACRAudioVolumeAvailable() == 1 { capabilities.insert(.audioVolume) }
         if boosts != nil { capabilities.insert(.boosts) }
         if supportsLiveTabMoves { capabilities.insert(.liveSurfaceTransfer) }
         if patchLevel >= 2 { capabilities.insert(.profileRemoval) }

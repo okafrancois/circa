@@ -74,7 +74,7 @@ enum OrbitContentBlockingProbe {
             }
             return nil
         }
-        func ack() async -> String { await blocker?.acknowledgement(profileID: profile) ?? "none" }
+        func ack() -> String { blocker?.acknowledgement(profileID: profile) ?? "none" }
 
         /// Each step's start, for attributing the fixture server's requests.
         var marks: [[String: Any]] = []
@@ -121,23 +121,33 @@ enum OrbitContentBlockingProbe {
             mark("privateException")
             let before = row?.accessibilityLabel()
             if owned(row?.window) { row?.performClick(nil) }
-            // The row is rebuilt once the engine applied the exception.
-            for _ in 0..<100 {
-                if let label = button("site-content-blocking")?.accessibilityLabel(), label != before { break }
-                try? await Task.sleep(for: .milliseconds(30))
+            // The row is rebuilt at once; the page then reloads as soon as the engine applied the
+            // exception, which closes the panel. Without the panel, read the row's model state.
+            var after: String?
+            for _ in 0..<600 {
+                if let label = button("site-content-blocking")?.accessibilityLabel(), label != before { after = label; break }
+                try? await Task.sleep(for: .milliseconds(5))
             }
-            result["privateRowAfter"] = button("site-content-blocking")?.accessibilityLabel() ?? "absent"
+            if let after {
+                result["privateRowAfter"] = after
+                result["privateRowAfterSource"] = "panel"
+            } else if let state = environment.contentBlocking?.privateSiteState(host: "private.fixture.test") {
+                result["privateRowAfter"] = "Ads & Trackers, " + (state.blocked ? "Blocked" : "Allowed")
+                result["privateRowAfterSource"] = "model"
+            } else {
+                result["privateRowAfter"] = "absent"
+            }
             await capture(button("site-content-blocking")?.window, "13-private-row-allowed")
             dismissPopovers(first)
             result["privateException"] = await report(first)
             await capture(first.window, "14-private-exception-page")
-            result["privateAckWithException"] = await blocker?.privateAcknowledgements() ?? []
+            result["privateAckWithException"] = blocker?.privateAcknowledgements() ?? []
             result["persistentExceptionsAfterPrivate"] = environment.sitePreferences.contentBlockingExceptions(profileID: profile)
             // End the session: every private window closes, then a new one starts fresh.
             await application.closePrivateWindows()
             result["privateWindowsAfterClose"] = application.privateWindows.count
             try? await Task.sleep(for: .milliseconds(300))
-            result["privateAckAfterClose"] = await blocker?.privateAcknowledgements() ?? []
+            result["privateAckAfterClose"] = blocker?.privateAcknowledgements() ?? []
             guard let second = await openPrivate() else { result["privateWindowAgain"] = "missing"; return result }
             mark("privateNewSession")
             result["privateNewSession"] = await load(second, site: "private")
@@ -157,8 +167,119 @@ enum OrbitContentBlockingProbe {
             mark("end")
             await application.closePrivateWindows()
             try? await Task.sleep(for: .milliseconds(300))
-            result["privateAckFinal"] = await blocker?.privateAcknowledgements() ?? []
+            result["privateAckFinal"] = blocker?.privateAcknowledgements() ?? []
             result["marks"] = marks
+            return result
+        }
+
+        /// Side API v19: a test action popup in the engine's detached window, opened from a
+        /// page-less New Tab window, then the tab volume on a synthetic tone page.
+        func runEngineR24() async -> [String: Any] {
+            func wait(_ seconds: Double) async { try? await Task.sleep(for: .milliseconds(Int(seconds * 1000))) }
+            func popupWindow(_ title: String, excluding: Set<ObjectIdentifier>) async -> NSWindow? {
+                for _ in 0..<100 {
+                    if let window = NSApp.windows.first(where: { !excluding.contains(ObjectIdentifier($0)) && $0.isVisible && $0.title == title }) {
+                        return window
+                    }
+                    await wait(0.03)
+                }
+                return nil
+            }
+            func geometry(_ popup: NSWindow, source: NSWindow) -> [String: Double] {
+                let content = popup.contentRect(forFrameRect: popup.frame)
+                return ["width": content.width, "height": content.height,
+                        "titleBar": popup.frame.height - content.height,
+                        "offsetX": popup.frame.minX - source.frame.minX,
+                        "offsetY": source.frame.maxY - popup.frame.maxY]
+            }
+            guard let host = owner.engine.extensions,
+                  let fixture = (try? host.installedExtensions(in: profile))?.first(where: { $0.name == "R24 popup fixture" }) else {
+                result["fixture"] = "missing"; return result
+            }
+            result["detachedSupported"] = host.supportsDetachedActions
+            // A fresh window: its New Tab presentation has no page of its own.
+            guard let id = application.windows.newWindow() else { result["sourceWindow"] = "refused"; return result }
+            await application.windows.waitForPendingCommands()
+            guard let source = application.windows.windows[id], let sourceWindow = source.window else {
+                result["sourceWindow"] = "missing"; return result
+            }
+            sourceWindow.setFrame(NSRect(x: 160, y: 140, width: 1000, height: 700), display: true)
+            sourceWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            await wait(0.5)
+            result["newWindowHadSurface"] = source.session.selectedSurface != nil
+            if source.session.selectedSurface == nil {
+                source.openTab(url: nil)
+                await source.session.waitForPendingCommands()
+                await wait(0.5)
+            }
+            guard let surface = source.session.selectedSurface else { result["sourceSurface"] = "missing"; return result }
+            result["sourceURL"] = surface.navigationState.url?.absoluteString ?? "none"
+            // 1. Opens beside the source window; the fixture grows its content after 0.8 s.
+            var known = Set(NSApp.windows.map(ObjectIdentifier.init))
+            result["firstAccepted"] = (try? host.performDetachedAction(extensionID: fixture.id, on: surface)) != nil
+            if let popup = await popupWindow(fixture.name, excluding: known) {
+                await wait(0.4)
+                result["firstGeometry"] = geometry(popup, source: sourceWindow)
+                await capture(popup, "r24-1-detached-popup")
+                await capture(sourceWindow, "r24-1-source-window")
+                await wait(1.0)
+                result["grownGeometry"] = geometry(popup, source: sourceWindow)
+                await capture(popup, "r24-2-detached-popup-grown")
+                // 2. Escape closes it.
+                popup.makeKeyAndOrderFront(nil)
+                await wait(0.2)
+                for type in [NSEvent.EventType.keyDown, .keyUp] {
+                    if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                    windowNumber: popup.windowNumber, context: nil, characters: "\u{1b}",
+                                                    charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
+                        popup.sendEvent(event)
+                    }
+                }
+                for _ in 0..<60 where popup.isVisible { await wait(0.05) }
+                result["escapeClosed"] = !popup.isVisible
+            } else {
+                result["firstPopup"] = "missing"
+            }
+            // 3. The second opening calls window.close() itself.
+            await wait(0.3)
+            known = Set(NSApp.windows.map(ObjectIdentifier.init))
+            result["secondAccepted"] = (try? host.performDetachedAction(extensionID: fixture.id, on: surface)) != nil
+            if let popup = await popupWindow(fixture.name, excluding: known) {
+                for _ in 0..<60 where popup.isVisible { await wait(0.05) }
+                result["windowCloseClosed"] = !popup.isVisible
+            } else {
+                result["secondPopup"] = "missing"
+            }
+            // 4. The third stays open until its source window closes.
+            await wait(0.3)
+            known = Set(NSApp.windows.map(ObjectIdentifier.init))
+            result["thirdAccepted"] = (try? host.performDetachedAction(extensionID: fixture.id, on: surface)) != nil
+            if let popup = await popupWindow(fixture.name, excluding: known) {
+                await wait(0.5)
+                sourceWindow.close()
+                for _ in 0..<60 where popup.isVisible { await wait(0.05) }
+                result["sourceCloseClosed"] = !popup.isVisible
+            } else {
+                result["thirdPopup"] = "missing"
+            }
+
+            // Tab volume on a synthetic 440 Hz tone: the engine scales the tab's audio streams.
+            owner.window?.makeKeyAndOrderFront(nil)
+            owner.openTab(url: URL(string: "http://tone.fixture.test:\(port)/tone")!)
+            await owner.session.waitForPendingCommands()
+            await wait(1.0)
+            guard let tone = owner.session.selectedSurface as? ChromiumSurface else { result["toneSurface"] = "missing"; return result }
+            result["toneStarted"] = await OrbitPerformanceProbe.evaluate(tone, "(() => { start(); return {ok: true}; })()")?["ok"] as? Bool ?? false
+            await wait(1.0)
+            result["volumeCapability"] = owner.engine.capabilities.contains(.audioVolume)
+            result["volumeBefore"] = tone.audioVolume ?? -1
+            result["volumeSet"] = (try? tone.setAudioVolume(0.25)) != nil
+            result["volumeAfter"] = tone.audioVolume ?? -1
+            result["volumeRejectsOutOfRange"] = (try? tone.setAudioVolume(1.5)) == nil
+            await wait(1.0)
+            try? tone.setAudioVolume(1.0)
+            result["volumeRestored"] = tone.audioVolume ?? -1
             return result
         }
 
@@ -177,7 +298,7 @@ enum OrbitContentBlockingProbe {
         if command["step"] == "relaunch" {
             // After a relaunch: what the restored tab reports, then the engine's own manager page.
             result["restored"] = await report(owner)
-            result["ack"] = await ack()
+            result["ack"] = ack()
             if let surface = owner.session.selectedSurface, let manager = owner.engine.extensionManagement {
                 result["managerOpened"] = (try? manager.openManagement(on: surface)) != nil
                 try? await Task.sleep(for: .milliseconds(1500))
@@ -190,6 +311,10 @@ enum OrbitContentBlockingProbe {
             return await runPrivate()
         }
 
+        if command["step"] == "r24" {
+            return await runEngineR24()
+        }
+
         owner.window?.setFrame(NSRect(x: 60, y: 120, width: 1280, height: 820), display: true)
         owner.showWindow(nil); owner.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -197,7 +322,7 @@ enum OrbitContentBlockingProbe {
         // 1. Default: on, both lists apply.
         result["defaultSetting"] = environment.settings.document.profile(profile).blocksAdsAndTrackers
         result["newsOn"] = await load(owner, site: "news")
-        result["ackAfterStartup"] = await ack()
+        result["ackAfterStartup"] = ack()
         await capture(owner.window, "1-news-blocking-on")
 
         // 2. The internal extension is absent from every shell extension inventory.
@@ -244,7 +369,7 @@ enum OrbitContentBlockingProbe {
         try? await environment.settings.updateProfile(profile) { $0.blocksAdsAndTrackers = true }
         try? await Task.sleep(for: .milliseconds(600))
         result["shopOnAgain"] = await reload(owner)
-        result["ackFinal"] = await ack()
+        result["ackFinal"] = ack()
 
         // 5. Private windows: their own memory-only context, filtered through the private session.
         let opening = ContinuousClock.now
@@ -252,7 +377,7 @@ enum OrbitContentBlockingProbe {
         await application.waitForPrivateWindowCommands()
         result["privateOpenSeconds"] = Double((ContinuousClock.now - opening).components.attoseconds) / 1e18
             + Double((ContinuousClock.now - opening).components.seconds)
-        result["privateAcksAtOpen"] = await blocker?.privateAcknowledgements() ?? []
+        result["privateAcksAtOpen"] = blocker?.privateAcknowledgements() ?? []
         if let id = application.privateWindows.keys.first, let window = application.windows.windows[id] {
             window.palette.dismiss()
             result["privateBlockerAvailable"] = window.engine.contentBlocking != nil

@@ -879,6 +879,19 @@ public final class ChromiumSurface: BrowserEngineSurface {
         onChange?()
     }
 
+    public func setAudioVolume(_ volume: Double) throws {
+        guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        guard webContent == nil, isBrowserCreated, (0...1).contains(volume),
+              ACRSetAudioVolume(token, volume) == 1 else { throw BrowserEngineError.unsupportedOperation }
+        onChange?()
+    }
+
+    public var audioVolume: Double? {
+        guard !isDisposed, webContent == nil, isBrowserCreated else { return nil }
+        var volume = 1.0
+        return ACRAudioVolume(token, &volume) == 1 ? volume : nil
+    }
+
     // MARK: Lifetime
 
     func cancelExtensionAction() {

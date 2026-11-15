@@ -435,6 +435,17 @@ public enum BrowserEngineConformance {
             }
         }
 
+        if !capabilities.contains(.audioVolume) {
+            do {
+                try surface.setAudioVolume(0.5)
+                failures.append("setAudioVolume must throw without the audioVolume capability")
+            } catch {
+                require(error as? BrowserEngineError == .unsupportedOperation,
+                        "missing audio volume must be reported as unsupportedOperation")
+            }
+            require(surface.audioVolume == nil, "audioVolume is nil without the audioVolume capability")
+        }
+
         failures += await checkProfileRemoval(engine)
 
         // Disposal is synchronous for the shell and final.

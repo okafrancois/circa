@@ -34,8 +34,6 @@ public protocol BrowserContentBlocking: AnyObject {
                    waitsForAcknowledgement: Bool) async throws
     /// Whether private windows can be filtered (`configurePrivateWindows`).
     var supportsPrivateWindows: Bool { get }
-    /// Readies private filtering; call before creating a private window's context.
-    func preparePrivateWindows() async throws
     /// Replaces the configuration of every open private context, with the same contract as
     /// `configure`, except that disabling also waits when asked. Nothing of it reaches disk.
     func configurePrivateWindows(_ configuration: BrowserContentBlockingConfiguration,
@@ -55,14 +53,7 @@ public final class BrowserFakeContentBlocking: BrowserContentBlocking {
     public var failure: (any Error)?
     public init() {}
 
-    public private(set) var preparedPrivateWindows = 0
     public private(set) var endedPrivateSessions = 0
-
-    public func preparePrivateWindows() async throws {
-        guard supportsPrivateWindows else { throw BrowserEngineError.unsupportedOperation }
-        if let failure { throw failure }
-        preparedPrivateWindows += 1
-    }
 
     public func configurePrivateWindows(_ configuration: BrowserContentBlockingConfiguration,
                                         waitsForAcknowledgement: Bool) async throws {

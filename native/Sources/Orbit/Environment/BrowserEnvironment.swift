@@ -253,8 +253,6 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             environment.contentBlocking = BrowserContentBlockingCoordinator(blocker: blocker,
                 isEnabled: { [weak environment] in environment?.settings.document.profile($0).blocksAdsAndTrackers ?? false },
                 exceptions: { [weak environment] in environment?.sitePreferences.contentBlockingExceptions(profileID: $0) ?? [] })
-            // Readies private filtering early: allowing it in incognito reloads the extension once.
-            if let blocking = environment.contentBlocking { Task { _ = await blocking.preparePrivateWindow() } }
         }
         BrowserPerformance.mark(.profilesBegin)
         if environment.boosts.hostOverride != nil || engine.capabilities.contains(.boosts) || environment.contentBlocking != nil {

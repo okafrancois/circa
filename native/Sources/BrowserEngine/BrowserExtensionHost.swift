@@ -89,6 +89,19 @@ public protocol BrowserExtensionHost: BrowserExtensionManagement {
     func setAllowedInIncognito(_ allowed: Bool, extensionID: String, in profileID: ProfileID) throws
     func setPinned(_ pinned: Bool, extensionID: String, in profileID: ProfileID) throws
     func setActionAnchor(_ anchor: NSView, on surface: any BrowserEngineSurface)
+    /// True when actions can run without an anchor (`performDetachedAction`).
+    var supportsDetachedActions: Bool { get }
+    /// Runs the extension action for the selected surface and shows its popup in a small titled
+    /// window owned by the engine, beside the surface's window. Needs no anchor or visible
+    /// document (a page-less New Tab qualifies). Default: unsupported.
+    func performDetachedAction(extensionID: String, on surface: any BrowserEngineSurface) throws
+}
+
+public extension BrowserExtensionHost {
+    var supportsDetachedActions: Bool { false }
+    func performDetachedAction(extensionID: String, on surface: any BrowserEngineSurface) throws {
+        throw BrowserEngineError.unsupportedOperation
+    }
 }
 
 /// A separately owned subscription; controllers cancel when their presentation closes.

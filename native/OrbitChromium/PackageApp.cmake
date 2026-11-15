@@ -38,8 +38,7 @@ file(CHMOD "${APP}/Contents/Resources/Orbit.icns"
 # Built-in content blocking: the shell's extension and the separately licensed EasyList rulesets.
 set(CONTENT_BLOCKER "${APP}/Contents/Resources/ContentBlocker")
 file(MAKE_DIRECTORY "${CONTENT_BLOCKER}/rulesets")
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/ContentBlocker/manifest.json"
-    "${CMAKE_CURRENT_LIST_DIR}/ContentBlocker/background.js" DESTINATION "${CONTENT_BLOCKER}")
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/ContentBlocker/manifest.json" DESTINATION "${CONTENT_BLOCKER}")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/../ThirdParty/easylist/easylist.json"
     "${CMAKE_CURRENT_LIST_DIR}/../ThirdParty/easylist/easyprivacy.json"
     "${CMAKE_CURRENT_LIST_DIR}/../ThirdParty/easylist/LICENSE.md" DESTINATION "${CONTENT_BLOCKER}/rulesets")

@@ -27,7 +27,7 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 18u
+#define ORBIT_CEF_API_VERSION 19u
 
 // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
 typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
@@ -41,6 +41,9 @@ typedef void (*orbit_trace_callback_t)(void*, int32_t success, const char* path)
 // v18. UI-thread callback: 0 closed, 1 left, 2 bottom, 3 right, 4 undocked,
 // 5 loading. Flags bit0 requests focus. Views are owned by the embedder.
 typedef void (*orbit_devtools_changed_t)(void*, int32_t state, uint32_t flags);
+
+// v19. UI-thread completion of an accepted operation: 1 applied, -1 failed.
+typedef void (*orbit_status_callback_t)(void*, int32_t status);
 
 typedef struct {
   uint32_t struct_size;
@@ -382,6 +385,31 @@ typedef struct {
   int32_t (*devtools_state)(int32_t);
   int32_t (*devtools_layout)(int32_t);
   int32_t (*devtools_focus)(int32_t);
+
+  // Version 19. Native user action only, for the shell's exact published
+  // selection; no anchor or visibility requirement (a selected page-less
+  // source qualifies). A popup opens in an engine-owned titled window whose
+  // content is the popup's size, its top-left 40 pt right and 10 pt below the
+  // source window's. It follows content-size changes and closes on
+  // window.close(), Escape, its close button, extension_cancel, or when the
+  // source tab, source window, extension or profile goes away. Statuses as
+  // extension_action: 1 accepted, 0 refused, -2 side panel requested.
+  int32_t (*extension_action_detached)(int32_t browser_id, const char* extension_id,
+                                       uint64_t invocation, uint64_t surface_token,
+                                       uint64_t profile_token, uint64_t selection_epoch);
+  // Version 19. Output volume of a tab in [0, 1], independent of mute; it
+  // scales everything the tab plays, tab capture included. Get reports 1 until set.
+  int32_t (*tab_volume_set)(int32_t browser_id, double volume);
+  int32_t (*tab_volume_get)(int32_t browser_id, double* volume);
+  // Version 19. Built-in content blocking: the embedder component extension
+  // of a loaded regular profile (never loads one). otr 0 configures the
+  // profile (rules persist); otr 1 its off-the-record contexts (exception
+  // rules stay in memory). hosts: '|'-separated lowercase host names whose
+  // pages are never filtered, ignored while disabled. Returns 1 when accepted,
+  // then calls back (when not NULL) once on UI; 0 when refused, without one.
+  int32_t (*content_blocking_configure)(const char* profile_path, int32_t otr, int32_t enabled,
+                                        const char* hosts, orbit_status_callback_t callback,
+                                        void* context);
 
 } orbit_cef_api_t;
 
