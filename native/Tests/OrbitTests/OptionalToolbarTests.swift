@@ -32,11 +32,14 @@ struct OptionalToolbarTests {
         toolbar.update(url: URL(string: "http://127.0.0.1:8765/fullscreen.html"), canGoBack: false, canGoForward: false)
         toolbar.layoutSubtreeIfNeeded()
         #expect(BrowserOptionalToolbar.height == 33)
-        #expect(toolbar.back.image === OrbitGlyph.back)
-        #expect(toolbar.forward.image === OrbitGlyph.forward)
+        #expect(toolbar.back.image === OrbitToolbarGlyphs.backArrow)
+        #expect(toolbar.forward.image === OrbitToolbarGlyphs.forwardArrow)
+        #expect(toolbar.back.image?.isTemplate == true && toolbar.forward.image?.isTemplate == true)
+        #expect(toolbar.back.image?.size == NSSize(width: 13, height: 10.5))
         #expect(toolbar.reload.image === OrbitGlyph.reload)
         typealias M = BrowserOptionalToolbar.Metrics
         #expect(toolbar.back.frame.midX == M.back.x && toolbar.forward.frame.midX == M.forward.x && toolbar.reload.frame.midX == M.reload.x)
+        #expect(toolbar.back.frame.height == 28 && toolbar.forward.frame.height == 28)
         #expect(toolbar.site.frame.midX == 590 - M.siteFromRight.x && toolbar.split.frame.midX == 590 - M.splitFromRight.x)
         #expect([toolbar.back, toolbar.forward, toolbar.reload, toolbar.site, toolbar.split].allSatisfy { abs($0.frame.midY - 16) <= 0.5 })
         let address = toolbar.address
@@ -152,6 +155,10 @@ struct NativeOptionalToolbarTests {
         let window = try await makeWindow(environment)
         let other = try await makeWindow(environment)
         defer { for item in [window, other] { item.session.close(); item.window?.close() } }
+        #expect(window.backButton.glyph === OrbitToolbarGlyphs.back)
+        #expect(window.forwardButton.glyph === OrbitToolbarGlyphs.forward)
+        #expect(window.backButton.glyph !== window.optionalToolbar.back.image)
+        #expect(window.forwardButton.glyph !== window.optionalToolbar.forward.image)
         #expect(window.contentCard.header == nil)
         #expect(!window.sidebar.addressContainer.isHidden)
         window.toggleToolbar()

@@ -104,9 +104,9 @@ final class BrowserOptionalToolbar: NSView {
             button.setAccessibilityIdentifier(id)
             addSubview(button)
         }
-        // Share the current shell navigation glyphs; their ink boxes need no SF Symbol offset.
-        back.image = OrbitGlyph.back
-        forward.image = OrbitGlyph.forward
+        // Straight arrows belong to this row; sidebar navigation keeps its compact chevrons.
+        back.image = OrbitToolbarGlyphs.backArrow
+        forward.image = OrbitToolbarGlyphs.forwardArrow
         reload.image = OrbitGlyph.reload
         address.onActivate = { [weak self] in self?.onAddress?() }
         addSubview(address)
