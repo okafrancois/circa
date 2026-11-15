@@ -82,6 +82,11 @@ struct MeetingPictureInPictureTests {
         try controls.preferences.set(settings, url: meeting.currentURL, profileID: profile)
         controls.render()
         #expect(meeting.automaticPiPUpdates.last?.selected == true)
+        controls.updateSelectedAutomaticPiP(isAway: true)
+        #expect(meeting.automaticPiPUpdates.last?.selected == false)
+        #expect(meeting.automaticPiPUpdates.last?.allowed == (site && global))
+        controls.updateSelectedAutomaticPiP(isAway: false)
+        #expect(meeting.automaticPiPUpdates.last?.selected == true)
         host.siteControlSurface = other
         controls.render()
         #expect(meeting.automaticPiPUpdates.last?.selected == false)
