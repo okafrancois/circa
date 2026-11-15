@@ -47,6 +47,35 @@ struct PrivateWindowRoutingTests {
         app.windows.shutdown()
     }
 
+    @Test("Private palettes share configured bang aliases and retain memory-only navigation")
+    func inlineBangs() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let normal = PreviewEnvironment()
+        let custom = BrowserSiteSearch(name: "Local", shortcut: "loc", template: "http://127.0.0.1:8123/s?q=%s")
+        try await normal.settings.store.saveSiteSearch(custom)
+        await normal.settings.refresh()
+        var key: NSWindow?
+        let app = OrbitApplication(environment: normal, commandKeyWindow: { key }, windowPresenter: { _, _ in })
+        #expect(app.commands.registry.dispatch(.newIncognitoWindow, origin: .keyboard))
+        await app.waitForPrivateWindowCommands()
+        let window = try #require(app.windows.selectedWindow)
+        key = window.window
+        let domain = try #require(app.privateWindows[window.id])
+        #expect(window.isPrivateWindow && !window.savesSessionLocally && domain.environment.sessionFile == nil)
+        #expect(window.palette.isPresented)
+        await window.palette.waitForResults()
+        window.palette.query("hello world !loc")
+        #expect(window.palette.results.first?.url == custom.url(for: "hello world"))
+        window.palette.accept()
+        await window.palette.waitForAcceptance()
+        await window.session.waitForPendingCommands()
+        #expect(window.session.selectedSurface?.currentURL == custom.url(for: "hello world"))
+        #expect(await normal.store.sessionDocument().tabs.isEmpty)
+        await app.closePrivateWindows()
+        normal.autoArchive.scheduler.stop()
+        app.windows.shutdown()
+    }
+
     @Test("French palette action opens a private window; New Window does not inherit its profile")
     func paletteAndNormalWindow() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

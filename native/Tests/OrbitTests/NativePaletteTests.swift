@@ -745,6 +745,37 @@ struct NativePaletteTests {
         try await h.close()
     }
 
+    @Test("Inline bangs reuse the scoped result and navigate without entering Tab scope")
+    func inlineBangs() async throws {
+        let h = try await PaletteHarness()
+        let custom = BrowserSiteSearch(name: "Synthetic Search", shortcut: "loc", template: "http://127.0.0.1:8123/s?q=%s")
+        h.window.palette.siteSearches.append(custom)
+        await h.show()
+        let palette = try #require(h.window.palette)
+        for input in ["!loc hello world", "hello world !loc", "!gh react", "!gh"] {
+            palette.query(input)
+            await palette.waitForResults()
+            let bang = try #require(BrowserSearchBang.parse(input, entries: palette.siteSearches))
+            #expect(palette.results == bang.site.results(query: bang.query, destination: bang.url))
+            #expect(palette.results.first?.id == "site-search" && palette.siteSearch == nil)
+            #expect(palette.draft == input && palette.view.input.stringValue == input)
+        }
+        palette.query("!unknown hello")
+        let fallback = try #require(palette.results.first { $0.id == "search" })
+        #expect(fallback.url == h.window.addressResolver.searchEngine.searchURL(for: "!unknown hello"))
+        palette.query("!loc hello world")
+        palette.accept()
+        await h.settle()
+        #expect(!palette.isPresented)
+        #expect(h.window.session.selectedSurface?.currentURL == custom.url(for: "hello world"))
+        await h.show()
+        palette.query("loc")
+        #expect(palette.enterSiteSearch())
+        palette.query("!gh react")
+        #expect(palette.results.first?.url == custom.url(for: "!gh react"))
+        try await h.close()
+    }
+
     @Test("First results stay synchronous while 100k history is searched off the main actor")
     func latency100k() async throws {
         let h = try await PaletteHarness()

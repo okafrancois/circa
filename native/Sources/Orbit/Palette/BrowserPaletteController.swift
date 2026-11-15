@@ -22,7 +22,11 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private var sourceContext: BrowserContext?
     private(set) var mode: BrowserPaletteMode = .newTab
     private var opensEmptyAddress = false
-    private var isSkillQuery: Bool { siteSearch == nil && draft.hasPrefix("/") }
+    var bangSiteSearches: (() -> [BrowserSiteSearch])?
+    private var inlineBang: BrowserSearchBang? {
+        siteSearch == nil ? BrowserSearchBang.parse(draft, entries: bangSiteSearches?() ?? siteSearches) : nil
+    }
+    private var isSkillQuery: Bool { siteSearch == nil && inlineBang == nil && draft.hasPrefix("/") }
     private(set) var results: [BrowserPaletteResult] = []
     private(set) var selection = BrowserPaletteSelection()
     private var candidates: [BrowserPaletteResult] = []
@@ -287,13 +291,13 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         generation = UUID()
         let token = generation
         queryTask?.cancel()
-        if siteSearch == nil, let owner, let profileID = sourceContext?.profileID {
+        if siteSearch == nil, inlineBang == nil, let owner, let profileID = sourceContext?.profileID {
             let cached = owner.historyObserver.cachedSuggestions(for: profileID, query: text)
             history = BrowserPaletteRanking.rankedHistory(history + cached, query: text)
         }
         refreshSearchSuggestions()
         rebuild(preserveSelection: preserveSelection)
-        guard siteSearch == nil, let owner, let profileID = sourceContext?.profileID else { return }
+        guard siteSearch == nil, inlineBang == nil, let owner, let profileID = sourceContext?.profileID else { return }
         queryTask = Task { [weak self, weak owner] in
             guard let owner, !Task.isCancelled else { return }
             let suggestions: [BrowserHistorySuggestion]
@@ -324,7 +328,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     }
 
     private func refreshSearchSuggestions() {
-        guard let owner, let profileID = sourceContext?.profileID, isPresented, siteSearch == nil, !isSkillQuery else {
+        guard let owner, let profileID = sourceContext?.profileID, isPresented, siteSearch == nil, inlineBang == nil, !isSkillQuery else {
             searchSuggestions.cancel(); return
         }
         searchSuggestions.update(query: draft, engine: owner.addressResolver.searchEngine, profileID: profileID,
@@ -368,14 +372,15 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private func rebuild(preserveSelection: Bool) {
         guard let owner else { return }
         let selectedID = preserveSelection && selectionWasMoved && results.indices.contains(selection.index) ? results[selection.index].id : nil
-        results = siteSearch?.results(query: draft) ?? BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
+        let bang = inlineBang
+        results = siteSearch?.results(query: draft) ?? bang.map { $0.site.results(query: $0.query, destination: $0.url) } ?? BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
                                                 candidates: opensEmptyAddress ? candidates.filter { $0.url?.absoluteString != "about:blank" } : candidates,
                                                 history: history.filter { !deletingHistory.contains($0.url.absoluteString) }, actions: opensEmptyAddress && draft.isEmpty ? [] : availableActions,
                                                 prepared: opensEmptyAddress ? preparedCandidates.filter { $0.result.url?.absoluteString != "about:blank" } : preparedCandidates)
-        if siteSearch == nil {
+        if siteSearch == nil, bang == nil {
             results = BrowserPaletteRanking.merging(searchSuggestions.values, into: results, engine: owner.addressResolver.searchEngine)
         }
-        if siteSearch == nil, !isSkillQuery, owner.assistantEnabled,
+        if siteSearch == nil, bang == nil, !isSkillQuery, owner.assistantEnabled,
            (owner.settingsPreferences?.runtime.document.ai.defaultModels[.chat] != nil || BrowserAIPolicy.automaticChoice(for: .chat, statuses: owner.aiService?.statuses ?? [:]) != nil),
            BrowserPaletteQuestion.matches(draft, resolver: owner.addressResolver),
            let conversation = owner.ensureAssistant() {
@@ -472,7 +477,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         view.siteSearchHint = siteSearch == nil ? BrowserPaletteSiteSearch.matching(draft, in: siteSearches) : nil
         view.favicons = icons
         view.render(results, selected: selection.index)
-        if results.indices.contains(selection.index), siteSearch == nil {
+        if results.indices.contains(selection.index), siteSearch == nil, inlineBang == nil {
             view.completeURL(for: results[selection.index], draft: draft)
         }
     }
@@ -486,7 +491,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             editor.setSelectedRange(NSRange(location: (draft as NSString).length, length: 0))
         }
         view.updateSelection(selection.index)
-        if results.indices.contains(selection.index), siteSearch == nil {
+        if results.indices.contains(selection.index), siteSearch == nil, inlineBang == nil {
             view.completeURL(for: results[selection.index], draft: draft)
         }
     }
