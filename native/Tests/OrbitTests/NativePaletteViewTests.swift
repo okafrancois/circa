@@ -1,4 +1,5 @@
 import AppKit
+import BrowserCore
 import Testing
 @testable import Orbit
 
@@ -51,6 +52,30 @@ extension NativeWebKitTests {
 @Suite("Native palette reusable view", .serialized)
 @MainActor
 struct NativePaletteViewTests {
+    @Test("Extension rows keep the puzzle symbol separate from the named icon chip across reuse")
+    func extensionChip() throws {
+        let h = PaletteViewHarness(); defer { h.close() }
+        let image = NSImage(size: NSSize(width: 16, height: 16))
+        let row = BrowserPaletteResult(id: "extension", title: uiFormat("Extension · %@", "Fixture"), detail: "",
+            section: .commands, action: .extensionAction("fixture"), searchAliases: "Fixture")
+        h.view.favicons[row.id] = image
+        h.render([row])
+        let cell = try #require(h.table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? PaletteResultCell)
+        cell.layoutSubtreeIfNeeded()
+        #expect(cell.titleLabel.stringValue == uiText("Extension"))
+        #expect(cell.extensionNameLabel.stringValue == "Fixture")
+        #expect(cell.extensionIcon.image === image)
+        #expect(cell.icon.image !== image)
+        #expect(!cell.extensionChip.isHidden)
+        #expect(cell.extensionChip.frame.minX > cell.titleLabel.frame.maxX)
+        #expect(cell.extensionChip.frame.maxX <= cell.bounds.width)
+        let count = cell.configurationCount
+        h.render([row])
+        #expect(cell.configurationCount == count)
+        cell.configure(result: paletteViewResult(1), image: nil, usesFavicon: false)
+        #expect(cell.extensionChip.isHidden && cell.extensionNameLabel.isHidden && cell.extensionIcon.isHidden)
+    }
+
     @Test("Unchanged presentation and selection do not reconfigure cells; one icon changes one row")
     func presentationDiff() throws {
         let h = PaletteViewHarness(); defer { h.close() }

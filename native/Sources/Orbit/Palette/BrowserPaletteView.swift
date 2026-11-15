@@ -647,6 +647,9 @@ final class PaletteResultCell: NSTableCellView {
     private var textWidths: [ObjectIdentifier: (String, NSFont, CGFloat)] = [:]
     private(set) var configurationCount = 0
 
+    let extensionChip = NSView()
+    let extensionNameLabel = NSTextField(labelWithString: "")
+    let extensionIcon = NSImageView()
     let titleLabel = NSTextField(labelWithString: "")
     let detailLabel = NSTextField(labelWithString: "")
     let actionLabel = NSTextField(labelWithString: "")
@@ -673,6 +676,12 @@ final class PaletteResultCell: NSTableCellView {
         background.layer?.cornerRadius = OrbitTokens.Radius.commandBarRow
         background.setAccessibilityElement(false)
         addSubview(background)
+        extensionChip.wantsLayer = true
+        extensionChip.layer?.cornerRadius = 4
+        extensionChip.setAccessibilityElement(false)
+        addSubview(extensionChip)
+        extensionNameLabel.font = OrbitTokens.Typography.commandBarRowTitle
+        extensionNameLabel.lineBreakMode = .byTruncatingTail
         titleLabel.font = OrbitTokens.Typography.commandBarRowTitle
         detailLabel.font = OrbitTokens.Typography.commandBarAccessory
         actionLabel.font = OrbitTokens.Typography.commandBarAccessory
@@ -691,7 +700,7 @@ final class PaletteResultCell: NSTableCellView {
         addSubview(iconTile)
         addSubview(accessory)
         setAccessibilityElement(false)
-        for view in [titleLabel, detailLabel, actionLabel, shortcutLabel, icon, actionIcon] {
+        for view in [titleLabel, detailLabel, actionLabel, shortcutLabel, icon, actionIcon, extensionNameLabel, extensionIcon] {
             view.setAccessibilityElement(false)
             addSubview(view)
         }
@@ -700,16 +709,23 @@ final class PaletteResultCell: NSTableCellView {
     required init?(coder: NSCoder) { nil }
 
     func configure(result: BrowserPaletteResult, image: NSImage?, usesFavicon: Bool, showsDetails: Bool = true) {
-        guard presentedResult != result || presentedImage !== image || self.usesFavicon != usesFavicon || presentedDetails != showsDetails else { return }
+        guard presentedResult != result || presentedImage !== image || self.usesFavicon != (usesFavicon && result.extensionName == nil) || presentedDetails != showsDetails else { return }
         configurationCount += 1
         presentedResult = result
         presentedImage = image
         presentedDetails = showsDetails
         paintKey = nil
         if resultID != result.id { isHovered = false; resultID = result.id }
-        self.usesFavicon = usesFavicon
-        if titleLabel.stringValue != result.title {
-            titleLabel.stringValue = result.title
+        let extensionName = result.extensionName
+        self.usesFavicon = usesFavicon && extensionName == nil
+        extensionChip.isHidden = extensionName == nil
+        extensionNameLabel.isHidden = extensionName == nil
+        extensionIcon.isHidden = extensionName == nil
+        extensionNameLabel.stringValue = extensionName ?? ""
+        extensionIcon.image = extensionName == nil ? nil : image
+        let title = extensionName == nil ? result.title : uiText("Extension")
+        if titleLabel.stringValue != title {
+            titleLabel.stringValue = title
             needsLayout = true
         }
         showsTabAction = result.section == .tabs || { if case .tab = result.action { return true }; return false }()
@@ -728,7 +744,9 @@ final class PaletteResultCell: NSTableCellView {
             shortcutLabel.attributedStringValue = OrbitChromeTextStyle.mono.attributedString(result.shortcut, size: 13, weight: .medium)
             needsLayout = true
         }
-        if icon.image !== image { icon.image = image }
+        let leadingImage = extensionName == nil ? image : OrbitIcon.image(sfName: result.symbol, pointSize: 16, accessibilityDescription: nil)
+        if icon.image !== leadingImage { icon.image = leadingImage }
+        needsLayout = true
     }
     func apply(selected: Bool, accent: NSColor, usesMaterial: Bool = true) {
         let key = PaintKey(selected: selected, accent: accent, material: usesMaterial, appearance: effectiveAppearance.name)
@@ -739,6 +757,8 @@ final class PaletteResultCell: NSTableCellView {
         isSelectedResult = selected
         selectionAccent = accent
         refreshBackground()
+        extensionNameLabel.textColor = OrbitFloatingMaterial.body
+        extensionChip.layer?.backgroundColor = OrbitFloatingMaterial.body.withAlphaComponent(0.08).resolvedCGColor(for: effectiveAppearance)
         titleLabel.textColor = OrbitFloatingMaterial.body
         detailLabel.textColor = OrbitFloatingMaterial.secondary
         actionLabel.textColor = selected ? OrbitFloatingMaterial.body : OrbitFloatingMaterial.secondary
@@ -750,7 +770,7 @@ final class PaletteResultCell: NSTableCellView {
         actionLabel.isHidden = !showsAction
         shortcutLabel.isHidden = shortcutLabel.stringValue.isEmpty
         accessory.layer?.backgroundColor = (selected ? NSColor.white : OrbitTokens.Color.State.commandBarAccessory).resolvedCGColor(for: effectiveAppearance)
-        let hasWhiteTile = selected && (showsTabAction || !shortcutLabel.stringValue.isEmpty)
+        let hasWhiteTile = selected && (showsTabAction || !shortcutLabel.stringValue.isEmpty || !extensionChip.isHidden)
         icon.contentTintColor = usesFavicon ? nil : (selected ? (hasWhiteTile ? accent : OrbitFloatingMaterial.body) : OrbitFloatingMaterial.body)
         iconTile.layer?.backgroundColor = (hasWhiteTile ? NSColor.white : .clear).resolvedCGColor(for: effectiveAppearance)
         if oldActionHidden != actionLabel.isHidden { needsLayout = true }
@@ -796,8 +816,13 @@ final class PaletteResultCell: NSTableCellView {
         actionLabel.frame = NSRect(x: actionRight - actionWidth, y: (m.rowHeight - 18) / 2, width: actionWidth, height: 18)
         let usableWidth = max(0, actionLabel.frame.minX - (actionWidth > 0 ? 16 : 0) - x)
         let hasDetail = !detailLabel.stringValue.isEmpty
-        let titleWidth = hasDetail ? min(textWidth(titleLabel), usableWidth * 0.62) : usableWidth
+        let titleWidth = !extensionChip.isHidden ? min(textWidth(titleLabel), usableWidth) : (hasDetail ? min(textWidth(titleLabel), usableWidth * 0.62) : usableWidth)
         titleLabel.frame = NSRect(x: x, y: (m.rowHeight - 18) / 2, width: titleWidth, height: 18)
+        let chipX = titleLabel.frame.maxX + 6
+        let chipWidth = min(textWidth(extensionNameLabel) + 32, max(0, x + usableWidth - chipX))
+        extensionChip.frame = NSRect(x: chipX, y: (m.rowHeight - 24) / 2, width: chipWidth, height: 24)
+        extensionIcon.frame = NSRect(x: chipX + 5, y: (m.rowHeight - 16) / 2, width: 16, height: 16)
+        extensionNameLabel.frame = NSRect(x: chipX + 26, y: (m.rowHeight - 18) / 2, width: max(0, chipWidth - 30), height: 18)
         let detailX = titleLabel.frame.maxX + (hasDetail ? 4 : 0)
         detailLabel.frame = NSRect(x: detailX, y: (m.rowHeight - 18) / 2, width: hasDetail ? max(0, x + usableWidth - detailX) : 0, height: 18)
     }

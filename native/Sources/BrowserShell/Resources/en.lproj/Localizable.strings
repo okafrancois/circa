@@ -2216,3 +2216,6 @@
 "10 minutes before" = "10 minutes before";
 "Meeting reminder sound" = "Meeting reminder sound";
 "Starts in %d min" = "Starts in %d min";
+
+"Extension" = "Extension";
+"Extension · %@" = "Extension · %@";

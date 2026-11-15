@@ -371,6 +371,16 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         catch { clearPopupHold(); owner.session.onError?(error) }
     }
 
+    /// Palette actions use the engine-owned window, including on page-less New Tabs.
+    func performPaletteAction(extensionID: String, on surface: Engine.Surface) throws {
+        guard let owner, owner.acceptsCommands, !owner.isPrivateWindow,
+              owner.session.selectedSurface === surface, owner.owns(surface),
+              let host = owner.engine.extensions, host.supportsDetachedActions else {
+            throw BrowserEngineError.unsupportedOperation
+        }
+        try host.performDetachedAction(extensionID: extensionID, on: surface)
+    }
+
     /// Native popups appear after their document loads; an action without a popup never
     /// takes key focus, so the arm expires instead of keeping the strip revealed.
     private func armPopupHold() {

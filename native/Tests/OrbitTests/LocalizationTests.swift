@@ -80,7 +80,7 @@ struct LocalizationTests {
             "Riso", "⌘", "⌘T", "W", "URL", "Perplexity",
             "Chromium %@", "%@, %@", "Little Circa — %@", "example.com", "Codex",
             "Claude Code", "%ld min", "Max", "Ultra", "Assistant",
-            "Suggestions", "Boost · %@", "GitHub",
+            "Suggestions", "Boost · %@", "GitHub", "Extension", "Extension · %@",
         ])
         #expect(Set(french.filter { $0.key == $0.value }.keys) == invariant)
         #expect(french["Downloads"] == "Téléchargements")
