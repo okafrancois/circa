@@ -9,6 +9,42 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.74.0-nightly.1/</id>
+    <title>0.74.0-nightly.1 — Live Calendar skips meetings you declined.</title>
+    <link href="https://circabrowser.com/changelog/0.74.0-nightly.1/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Live Calendar skips meetings you declined.
+
+1 fixed
+
+## Fixed
+
+- Live Calendar no longer reminds you about meetings you declined, and hides them from the preview.
+
+## Known limits
+
+- A meeting declined after the last calendar refresh is hidden at the next refresh.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.74.0-nightly.1" data-version="0.74.0-nightly.1" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.74.0-nightly.1" aria-label="Link to version 0.74.0-nightly.1"&gt;0.74.0-nightly.1&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Live Calendar skips meetings you declined.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Live Calendar no longer reminds you about meetings you declined, and hides them from the preview.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;A meeting declined after the last calendar refresh is hidden at the next refresh.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.74.0-nightly.1/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.73.0/</id>
     <title>0.73.0 — Live Calendar, a sidebar on either side, an optional toolbar and faster everyday tab handling.</title>
     <link href="https://circabrowser.com/changelog/0.73.0/" />
