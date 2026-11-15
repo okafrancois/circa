@@ -116,6 +116,35 @@ class OwnedStateTests(unittest.TestCase):
                 self.assertEqual(update_ux.owned_application_state(state, executable), {})
 
 
+class StageDiagnosticsTests(unittest.TestCase):
+    def test_reports_fixture_requests_and_log_tail_without_cookie_statuses(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            (work / 'auth.log').write_text('\n'.join([
+                json.dumps({'phase': 'ext-installed', 'profile': 'A', 'path': '/whoami', 'cookies': {'auth': 'ok'}}),
+                'not json',
+                json.dumps({'phase': 'ext-restart', 'profile': 'B', 'path': '/whoami', 'cookies': {'auth': 'stale'}}),
+            ]) + '\n')
+            (work / 'ext-requests.log').write_text('/ext/update.xml\n')
+            lines = ['acr: hosted creation deferred'] + ['line %d %s' % (index, 'x' * 400) for index in range(100)]
+            report = update_ux.stage_diagnostics(work, lines)
+        sections = report.split('\n')
+        self.assertIn('ext-installed A /whoami', sections)
+        self.assertIn('ext-restart B /whoami', sections)
+        self.assertIn('/ext/update.xml', sections)
+        self.assertNotIn('ok', ' '.join(sections[sections.index('authentication requests:'):sections.index('log tail:')]))
+        self.assertNotIn('stale', report)
+        tail = sections[sections.index('log tail:') + 1:-1]
+        self.assertEqual(len(tail), 80)
+        self.assertTrue(tail[-1].startswith('line 99'))
+        self.assertTrue(all(len(line) <= 300 for line in sections))
+
+    def test_missing_fixture_logs_still_produce_a_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            report = update_ux.stage_diagnostics(Path(temporary), [])
+        self.assertEqual(report, 'requests:\nauthentication requests:\nlog tail:\n')
+
+
 class InputIdentityTests(unittest.TestCase):
     def test_bundle_digest_covers_bridge_resources_and_symlink_targets(self):
         with tempfile.TemporaryDirectory() as temporary:

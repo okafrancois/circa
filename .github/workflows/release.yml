@@ -89,7 +89,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Circa-preservation-${{ github.run_id }}
-          path: dist/release/preservation-*/*.json
+          path: |
+            dist/release/preservation-*/*.json
+            dist/release/preservation-*/*.log
           if-no-files-found: ignore
           retention-days: 14
       - name: Retain verification results
