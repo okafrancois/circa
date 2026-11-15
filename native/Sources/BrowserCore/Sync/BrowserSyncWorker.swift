@@ -48,6 +48,15 @@ public actor BrowserSyncWorker {
         self.state = state; self.destination = destination
         self.persistence = BrowserSyncClockPersistence(state: state, destination: destination)
     }
+
+    /// Reads and decodes the replica once (call off the main actor) and seeds the clock writer
+    /// from the same bytes instead of reloading the file.
+    public init(loading destination: URL) throws {
+        let (state, bytes) = try BrowserSyncState.loadWithBytes(destination)
+        self.state = state; self.destination = destination
+        self.persistence = BrowserSyncClockPersistence(loaded: state, bytes: bytes, destination: destination)
+    }
+    public var enabled: Bool { state.enabled }
     func persistenceCounts() -> (writes: Int, bytes: Int, replicaWrites: Int) {
         (persistence.writes, persistence.bytesWritten, persistence.replicaWrites)
     }

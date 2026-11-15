@@ -20,17 +20,27 @@ public actor BrowserPasswordCloudKitTransport: BrowserPasswordSyncTransport, CKS
     private var engine: CKSyncEngine?
     private var stopped = false
     private var failure: (any Error)?
+    private var admission = BrowserSyncAdmission()
+    private var gate = BrowserSyncExchangeGate()
+    private var remoteRevision = 0
+    private var exchanging = false
+    private var zoneQueued = false
+    private let onRemoteChange: @Sendable () -> Void
 
-    public init(cache: BrowserPasswordSyncCache, identity: String) throws {
+    public init(cache: BrowserPasswordSyncCache, identity: String, onRemoteChange: @escaping @Sendable () -> Void = {}) throws {
         guard BrowserSyncEntitlement.isAvailable() else { throw BrowserSyncError.unavailable }
         container = CKContainer(identifier: BrowserSyncSchema.container)
-        self.cache = cache; self.identity = identity
+        self.cache = cache; self.identity = identity; self.onRemoteChange = onRemoteChange
         state = try cache.load(State.self) ?? State()
     }
 
     public func account() async throws -> String? {
-        guard try await container.accountStatus() == .available else { return nil }
-        return try await container.userRecordID().recordName
+        if let cached = admission.identity() { return cached }
+        let epoch = BrowserSyncAccountEpoch.current
+        guard try await container.accountStatus() == .available else { admission.reset(); return nil }
+        let current = try await container.userRecordID().recordName
+        if current == identity { admission.record(current, epoch: epoch) } else { admission.reset() }
+        return current
     }
 
     private func admitted() async throws {
@@ -39,9 +49,30 @@ public actor BrowserPasswordCloudKitTransport: BrowserPasswordSyncTransport, CKS
         guard current == identity else { throw BrowserSyncError.accountChanged }
     }
 
+    public func requestRefresh() async { gate.invalidate() }
+
+    /// A latched failure needs a fresh transport (its engine token was not persisted).
+    private func throwLatchedFailure() throws {
+        guard let failure else { return }
+        if BrowserSyncRetry.isTransient(failure) { throw BrowserSyncError.unavailable }
+        throw failure
+    }
+
     public func exchange(_ records: [BrowserPasswordSyncEntry]) async throws -> [BrowserPasswordSyncEntry] {
         try await admitted()
-        if let failure { throw failure }
+        try throwLatchedFailure()
+        let now = Date()
+        let unchanged = try records.allSatisfy { record in
+            guard let old = state.records[record.id.uuidString] else { return false }
+            var merged = old
+            try merged.merge(record)
+            return merged == old
+        }
+        if gate.canSkip(now: now, remoteRevision: remoteRevision, inputsUnchanged: unchanged, pendingSends: !state.dirty.isEmpty) {
+            return Array(state.records.values)
+        }
+        exchanging = true
+        defer { exchanging = false }
         if engine == nil {
             var configuration = CKSyncEngine.Configuration(database: container.privateCloudDatabase,
                 stateSerialization: state.engine, delegate: self)
@@ -52,7 +83,7 @@ public actor BrowserPasswordCloudKitTransport: BrowserPasswordSyncTransport, CKS
         var fetch = CKSyncEngine.FetchChangesOptions()
         fetch.scope = .zoneIDs([zone])
         try await engine.fetchChanges(fetch)
-        if let failure { throw failure }
+        try throwLatchedFailure()
         try await admitted()
         var pending: [CKSyncEngine.PendingRecordZoneChange] = []
         for record in records {
@@ -68,11 +99,13 @@ public actor BrowserPasswordCloudKitTransport: BrowserPasswordSyncTransport, CKS
             }
         }
         try persist()
-        engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone))])
+        // Once per transport; `.zoneNotFound` re-queues it.
+        if !zoneQueued { engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone))]); zoneQueued = true }
         engine.state.add(pendingRecordZoneChanges: pending)
         try await engine.sendChanges()
-        if let failure { throw failure }
+        try throwLatchedFailure()
         try await admitted()
+        gate.exchanged(at: now, remoteRevision: remoteRevision)
         return Array(state.records.values)
     }
 
@@ -96,8 +129,10 @@ public actor BrowserPasswordCloudKitTransport: BrowserPasswordSyncTransport, CKS
 
     private func accept(_ record: CKRecord) throws {
         let incoming = try BrowserPasswordSyncEntry.fromCloud(record)
-        var merged = state.records[incoming.id.uuidString] ?? incoming
+        let old = state.records[incoming.id.uuidString]
+        var merged = old ?? incoming
         try merged.merge(incoming)
+        if merged != old { remoteRevision += 1 }
         state.records[incoming.id.uuidString] = merged
         if merged != incoming { state.dirty.insert(incoming.id.uuidString) }
         let archiver = NSKeyedArchiver(requiringSecureCoding: true)
@@ -112,7 +147,9 @@ public actor BrowserPasswordCloudKitTransport: BrowserPasswordSyncTransport, CKS
                 if case .signIn(let user) = event.changeType, user.recordName == identity { return }
                 // Freeze immediately. A new transport requires the persisted marker's admission.
                 stopped = true
+                admission.reset()
                 Task { await syncEngine.cancelOperations() }
+                onRemoteChange()
             case .stateUpdate(let event):
                 guard !stopped, failure == nil else { return }
                 state.engine = event.stateSerialization
@@ -145,15 +182,23 @@ public actor BrowserPasswordCloudKitTransport: BrowserPasswordSyncTransport, CKS
                         }
                         syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone))])
                         syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(failed.record.recordID)])
+                    case _ where BrowserSyncRetry.isTransient(failed.error):
+                        // The engine keeps and retries the pending save; the entry stays dirty.
+                        break
                     default: throw failed.error
                     }
                 }
                 try persist()
             case .fetchedDatabaseChanges(let event):
                 if event.deletions.contains(where: { $0.zoneID == zone }) { throw BrowserSyncError.invalidRecord }
+            case .didFetchChanges:
+                if !exchanging { onRemoteChange() }
             default: break
             }
-        } catch { failure = error }
+        } catch {
+            failure = error
+            if !exchanging { onRemoteChange() }
+        }
     }
 
     public func nextRecordZoneChangeBatch(_ context: CKSyncEngine.SendChangesContext,

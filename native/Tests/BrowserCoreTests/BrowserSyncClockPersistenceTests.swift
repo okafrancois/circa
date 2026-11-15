@@ -70,7 +70,8 @@ struct BrowserSyncClockPersistenceTests {
         try await cycle(fixture.document(title: "Changed"))
         let after = await worker.persistenceCounts()
         #expect(after.replicaWrites - before.replicaWrites == 1)
-        #expect(after.writes - before.writes == 2) // one replica, one subsequent eager clock
+        // One replica write; the unchanged recaptures no longer advance (and rewrite) the clock.
+        #expect(after.writes - before.writes == 1)
     }
 
     @Test func restartAndFailedBarriers() throws {
@@ -84,14 +85,19 @@ struct BrowserSyncClockPersistenceTests {
             var writer = BrowserSyncClockPersistence(state: state, destination: url)
             try writer.save(state, to: url)
             #expect(writer.writes == 1 && writer.replicaWrites == 0 && writer.bytesWritten == 72)
+            // An unchanged capture no longer advances the clock; a clock-only change (as after
+            // merging older remote stamps) still commits only the tiny clock record.
             try state.replica.capture(projection(), now: now)
+            try writer.save(state, to: url)
+            #expect(writer.writes == 1)
+            state.replica.tick += 1
             try writer.save(state, to: url)
             #expect(writer.writes == 2 && writer.replicaWrites == 0 && writer.bytesWritten == 144)
         }
         for boundary in BrowserPermissionFile.WriteBarrier.allCases {
             let prior = state
             var writer = BrowserSyncClockPersistence(state: state, destination: url)
-            try state.replica.capture(projection(), now: now)
+            state.replica.tick += 1
             #expect(throws: BrowserPermissionFile.Failure.io) {
                 try writer.save(state, to: url) { bytes, target, limit in
                     try BrowserPermissionFile.save(bytes, to: target, maximumBytes: limit, barrier: {

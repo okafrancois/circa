@@ -304,8 +304,9 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         guard !didCommitStartup else { return }
         didCommitStartup = true
         if let sessionFile {
-            do { try sync.configure(self, destination: sessionFile.appendingPathExtension("sync.json")) }
-            catch { onPersistenceError?(error) }
+            sync.configure(self, destination: sessionFile.appendingPathExtension("sync.json")) { [weak self] error in
+                self?.onPersistenceError?(error)
+            }
         }
         let document = startupIconDocument
         startupIconDocument = nil
@@ -834,6 +835,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     func scheduleSave(metadataOnly: Bool = false) {
         guard persistence != nil, !isFinalizing else { return }
         BrowserPerformance.count(.savesScheduled)
+        // Session edits wake iCloud sync (debounced there) instead of a periodic poll.
+        sync.localStateChanged()
         let delay = saveSchedule.schedule(at: ProcessInfo.processInfo.systemUptime, metadataOnly: metadataOnly)
         saveTask?.cancel()
         saveTask = Task { [weak self] in
@@ -862,6 +865,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     /// which records its ledger only after the merged session is on disk).
     func saveNow(fullSync: Bool = false) async throws {
         guard let persistence, !isFinalizing else { throw BrowserSessionPersistence.PersistenceError.finalizationInProgress }
+        sync.localStateChanged()
         await windowActivitySave?.value
         try await liveFoldersIfStarted?.persistAll()
         await captureWindowPlacements()

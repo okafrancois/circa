@@ -26,7 +26,7 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
         var dirty: Set<String> = []
         var systemFields: [String: Data] = [:]
     }
-    private let container: CKContainer
+    private let container: CKContainer?
     private let destination: URL
     private let identity: String
     private let zone = CKRecordZone.ID(zoneName: BrowserSyncSchema.zone)
@@ -35,19 +35,47 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
     private var persistence = BrowserSyncPersistence()
     private var stopped = false
     private var failure: (any Error)?
+    private var admission = BrowserSyncAdmission()
+    private var gate = BrowserSyncExchangeGate()
+    private var remoteRevision = 0
+    private var exchanging = false
+    private var zoneQueued = false
+    private let onRemoteChange: @Sendable () -> Void
+    private(set) var explicitExchanges = 0
+    private(set) var accountQueries = 0
 
-    public init(destination: URL, identity: String) throws {
+    /// `onRemoteChange` fires when the engine fetched, failed or saw an account change outside
+    /// an explicit exchange (push-driven automatic sync). It must only schedule a cycle.
+    public init(destination: URL, identity: String, onRemoteChange: @escaping @Sendable () -> Void = {}) throws {
         guard BrowserSyncEntitlement.isAvailable() else { throw BrowserSyncError.unavailable }
         container = CKContainer(identifier: BrowserSyncSchema.container)
-        self.destination = destination; self.identity = identity
+        self.destination = destination; self.identity = identity; self.onRemoteChange = onRemoteChange
         if let bytes = try BrowserPermissionFile.load(destination, maximumBytes: 64 * 1024 * 1024) {
             state = try JSONDecoder().decode(State.self, from: bytes)
         } else { state = State() }
     }
 
+    /// Local-only seam: no container, engine or daemon. Admission uses the fixed identity.
+    init(testDestination: URL, identity: String = "synthetic") throws {
+        container = nil
+        destination = testDestination; self.identity = identity; onRemoteChange = {}
+        if let bytes = try BrowserPermissionFile.load(testDestination, maximumBytes: 64 * 1024 * 1024) {
+            state = try JSONDecoder().decode(State.self, from: bytes)
+        } else { state = State() }
+    }
+
+    func persistenceWrites() -> Int { persistence.writes }
+
     public func account() async throws -> String? {
-        guard try await container.accountStatus() == .available else { return nil }
-        return try await container.userRecordID().recordName
+        if let cached = admission.identity() { return cached }
+        let epoch = BrowserSyncAccountEpoch.current
+        accountQueries += 1
+        let current: String?
+        if let container {
+            current = try await container.accountStatus() == .available ? try await container.userRecordID().recordName : nil
+        } else { current = identity }
+        if current == identity { admission.record(current, epoch: epoch) } else { admission.reset() }
+        return current
     }
 
     private func admitted() async throws {
@@ -56,20 +84,48 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
         guard current == identity else { throw BrowserSyncError.accountChanged }
     }
 
+    public func requestRefresh() async { gate.invalidate() }
+
+    /// A latched failure always needs a fresh transport: the engine token after the failed
+    /// event was not persisted, so a new transport refetches it. Even a transient cause is
+    /// therefore reported as unavailable (teardown), unlike a direct throttling error.
+    private func throwLatchedFailure() throws {
+        guard let failure else { return }
+        if BrowserSyncRetry.isTransient(failure) { throw BrowserSyncError.unavailable }
+        throw failure
+    }
+
     public func exchange(_ records: [BrowserSyncRecord]) async throws -> [BrowserSyncRecord] {
+        try await exchange(records, now: Date())
+    }
+
+    func exchange(_ records: [BrowserSyncRecord], now: Date) async throws -> [BrowserSyncRecord] {
         try await admitted()
-        if let failure { throw failure }
-        if engine == nil {
+        try throwLatchedFailure()
+        let unchanged = try records.allSatisfy { record in
+            guard let old = state.records[record.id] else { return false }
+            var merged = old
+            try merged.merge(record)
+            return merged == old
+        }
+        if gate.canSkip(now: now, remoteRevision: remoteRevision, inputsUnchanged: unchanged, pendingSends: !state.dirty.isEmpty) {
+            return Array(state.records.values)
+        }
+        explicitExchanges += 1
+        exchanging = true
+        defer { exchanging = false }
+        if engine == nil, let container {
             var configuration = CKSyncEngine.Configuration(database: container.privateCloudDatabase,
                 stateSerialization: state.engine, delegate: self)
             configuration.automaticallySync = true
             engine = CKSyncEngine(configuration)
         }
-        guard let engine else { throw BrowserSyncError.unavailable }
+        // Automatic sync fetches on push; this explicit fetch only runs on a non-idle exchange
+        // (local edit, remote change, refresh request or the periodic forced exchange).
         var fetch = CKSyncEngine.FetchChangesOptions()
         fetch.scope = .zoneIDs([zone])
-        try await engine.fetchChanges(fetch)
-        if let failure { throw failure }
+        try await engine?.fetchChanges(fetch)
+        try throwLatchedFailure()
         try await admitted()
         var pending: [CKSyncEngine.PendingRecordZoneChange] = []
         for record in records {
@@ -85,11 +141,18 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
             }
         }
         try persist()
-        engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone))])
-        engine.state.add(pendingRecordZoneChanges: pending)
-        try await engine.sendChanges()
-        if let failure { throw failure }
+        if let engine {
+            // Once per transport; `.zoneNotFound` re-queues it.
+            if !zoneQueued { engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone))]); zoneQueued = true }
+            engine.state.add(pendingRecordZoneChanges: pending)
+            try await engine.sendChanges()
+        } else if container == nil {
+            // Test seam: no server, so every queued save is acknowledged immediately.
+            state.dirty.removeAll()
+        }
+        try throwLatchedFailure()
         try await admitted()
+        gate.exchanged(at: now, remoteRevision: remoteRevision)
         return Array(state.records.values)
     }
 
@@ -115,8 +178,10 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
               let bytes = record["payload"] as? Data else { throw BrowserSyncError.invalidRecord }
         let incoming = try JSONDecoder().decode(BrowserSyncRecord.self, from: bytes)
         guard incoming.id == record.recordID.recordName else { throw BrowserSyncError.invalidRecord }
-        var merged = state.records[incoming.id] ?? incoming
+        let old = state.records[incoming.id]
+        var merged = old ?? incoming
         try merged.merge(incoming)
+        if merged != old { remoteRevision += 1 }
         state.records[incoming.id] = merged
         if merged != incoming { state.dirty.insert(incoming.id) }
         let archiver = NSKeyedArchiver(requiringSecureCoding: true)
@@ -131,7 +196,9 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
                 if case .signIn(let user) = event.changeType, user.recordName == identity { return }
                 // Freeze immediately. A new transport requires the persisted marker's admission.
                 stopped = true
+                admission.reset()
                 Task { await syncEngine.cancelOperations() }
+                onRemoteChange()
             case .stateUpdate(let event):
                 guard !stopped, failure == nil else { return }
                 state.engine = event.stateSerialization
@@ -160,15 +227,26 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
                     case .zoneNotFound:
                         syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zone))])
                         syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(failed.record.recordID)])
+                    case _ where BrowserSyncRetry.isTransient(failed.error):
+                        // Throttling and connectivity: the engine keeps and retries the pending
+                        // save; the record stays dirty so the next exchange re-queues it.
+                        break
                     default: throw failed.error
                     }
                 }
                 try persist()
             case .fetchedDatabaseChanges(let event):
                 if event.deletions.contains(where: { $0.zoneID == zone }) { throw BrowserSyncError.invalidRecord }
+            case .didFetchChanges:
+                // Push-driven fetches (any zone of the private database, including history)
+                // wake the runtime; fetches inside an explicit exchange are already consumed.
+                if !exchanging { onRemoteChange() }
             default: break
             }
-        } catch { failure = error }
+        } catch {
+            failure = error
+            if !exchanging { onRemoteChange() }
+        }
     }
 
     public func nextRecordZoneChangeBatch(_ context: CKSyncEngine.SendChangesContext,
@@ -204,11 +282,15 @@ public struct BrowserSyncState: Codable, Sendable {
     public var account = BrowserSyncAccountMarker()
     public init() {}
     public static func load(_ destination: URL) throws -> Self {
-        guard let bytes = try BrowserPermissionFile.load(destination, maximumBytes: 64 * 1024 * 1024) else { return Self() }
+        try loadWithBytes(destination).state
+    }
+    /// One read and one decode; the bytes seed the clock writer without re-reading the file.
+    public static func loadWithBytes(_ destination: URL) throws -> (state: Self, bytes: Data?) {
+        guard let bytes = try BrowserPermissionFile.load(destination, maximumBytes: 64 * 1024 * 1024) else { return (Self(), nil) }
         var value = try JSONDecoder().decode(Self.self, from: bytes)
         guard value.version == BrowserSyncSchema.version, value.replica.version == BrowserSyncSchema.version else { throw BrowserSyncError.unsupportedVersion }
         value.replica.tick = max(value.replica.tick, BrowserSyncClockPersistence.loadTick(for: bytes, at: destination) ?? value.replica.tick)
-        return value
+        return (value, bytes)
     }
     public func save(_ destination: URL) throws {
         try BrowserPermissionFile.save(BrowserSyncReplica.encodeValue(self), to: destination, maximumBytes: 64 * 1024 * 1024)

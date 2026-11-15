@@ -543,6 +543,7 @@ public actor BrowserSettingsStore {
         guard next != document || needsDurabilityRetry else { return }
         try Self.validate(next)
         if let destination {
+            defer { BrowserSyncLocalChanges.post() }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             do { try BrowserPermissionFile.save(encoder.encode(next), to: destination, fullSync: fullSync) }
