@@ -99,6 +99,7 @@ Delete, the remaining spelling toggles, Substitutions, Transformations, and Spee
 | Shortcut | Command / behavior |
 |---|---|
 | ⌘S | Show/Hide Sidebar |
+| ⇧⌘D | Show/Hide Toolbar |
 | ⌃␣ | Reveal Current Tab in the sidebar (hidden menu binding) |
 | ⌘. | Stop Loading |
 | ⌘R | Refresh the Page |
@@ -219,6 +220,6 @@ The options menu can choose **Prefer Circa**, **Prefer Websites**, or **Use Both
 
 This reference covers the default command bindings and their active menu aliases, plus the contextual bindings above. Text entry, ordinary dialog navigation, website shortcuts, and extension-defined shortcuts are not an exhaustive part of this list. Saved overrides, keyboard layout, focus, private browsing, and macOS shortcut reservations can change what is available.
 
-A declaration in the catalog alone does not make a shortcut available. Blank Window, Show/Hide Toolbar, Join Meeting, and Peek Email have declarations but no installed command handler. New Note, New Note (in Split), New Easel, New ChatGPT Message, and Copy URL as Quote are hidden from command surfaces. Their declared keys are deliberately not listed as usable defaults.
+A declaration in the catalog alone does not make a shortcut available. Blank Window, Join Meeting, and Peek Email have declarations but no installed command handler. New Note, New Note (in Split), New Easel, New ChatGPT Message, and Copy URL as Quote are hidden from command surfaces. Their declared keys are deliberately not listed as usable defaults.
 
 To update this document, compare [the command catalog](../native/Sources/Orbit/Commands/OrbitCommandCatalog.swift) with [the menu tree](../native/Sources/Orbit/Commands/OrbitMenuTree.swift), [menu construction](../native/Sources/Orbit/Commands/BrowserCommandMenus.swift), and [shortcut preferences](../native/Sources/Orbit/Commands/BrowserShortcutPreferences.swift). Check installed handlers and scoped overrides starting at [application menu setup](../native/Sources/Orbit/App/OrbitApplication+Menus.swift). Preserve hidden active aliases, normalize uppercase letters to explicit Shift, and check dynamic menus and commands without bindings rather than copying every catalog row.

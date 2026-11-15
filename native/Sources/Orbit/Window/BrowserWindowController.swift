@@ -97,6 +97,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var sidebarWidth: NSLayoutConstraint!
     var sidebarLeading: NSLayoutConstraint!
     var isSidebarVisible = true
+    /// View > Show/Hide Toolbar, mirrored from the settings document when one is attached.
+    var isToolbarVisible = false
 
     // MARK: Content card
     let contentCard = BrowserContentCardView()
@@ -134,8 +136,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var onBackgroundMediaChange: (() -> Void)?
     let mediaPlayerState = SidebarMediaPlayerState()
     let developerToolbar = BrowserDeveloperToolbar()
+    let optionalToolbar = BrowserOptionalToolbar()
     var developerToolbarProfile: ProfileID?
-    weak var developerTintSurface: Surface?
+    weak var pageTintSurface: Surface?
     lazy var sharing = BrowserSharingController(owner: self)
 
     let archive = BrowserArchivePresentation()
@@ -407,8 +410,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         pinnedURLEditor?.complete(save: false)
         translation.close()
         passwordPrompt.close()
-        developerTintSurface?.setPageTintObservationEnabled(false)
-        developerTintSurface = nil
+        pageTintSurface?.setPageTintObservationEnabled(false)
+        pageTintSurface = nil
         boostTask?.cancel()
         boostEditor?.close()
         library.boostsTask?.cancel()
@@ -612,7 +615,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         if pillSelectionChanged { sidebar.addressContainer.beginSelectionUpdate() }
         siteControls.render()
         renderSidebarMediaPlayer()
-        renderDeveloperToolbar()
+        renderPageHeader()
         extensionControls.render()
         SpaceSwipeTrace.interval("RenderFavorites") {
             if let selection { favorites.applySelection(selection) } else { favorites.render() }

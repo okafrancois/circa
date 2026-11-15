@@ -775,7 +775,7 @@ extension BrowserSiteControls {
                     rows.append(SiteControlButton(siteText("extensions.openAction", "Open Extension"), identifier: "extension-action-" + item.id) { [weak self, weak surface] in
                         guard valid(), let self, let surface else { return }
                         self.panel.close()
-                        do { try host.performAction(extensionID: item.id, on: surface, anchor: self.button) }
+                        do { try host.performAction(extensionID: item.id, on: surface, anchor: self.presentationAnchor ?? self.button) }
                         catch { self.showMessage(siteText("extensions.actionFailed", "The extension action could not be opened.")) }
                     })
                 }

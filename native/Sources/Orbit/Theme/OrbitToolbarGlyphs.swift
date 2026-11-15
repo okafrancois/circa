@@ -1,7 +1,7 @@
 import AppKit
 
-/// Thin vector glyphs of the sidebar toolbar: back/forward chevrons, the circular reload arrow and the
-/// sidebar toggle. The chevrons and the toggle are exactly their ink box (stroke included), so a frame
+/// Thin vector glyphs: sidebar back/forward chevrons, optional toolbar arrows, circular reload and the
+/// sidebar toggle. The navigation glyphs and toggle are exactly their ink box (stroke included), so a frame
 /// centred on the glyph places the visible edge where the geometry expects it. Images are template and
 /// redraw at the backing scale; sizes stay on the 2x pixel grid.
 @MainActor
@@ -10,6 +10,7 @@ enum OrbitToolbarGlyphs {
     nonisolated static let lineWidth: CGFloat = 1.05
     /// Ink box of the full-size chevrons and of the reload arrow.
     nonisolated static let chevronSize = NSSize(width: 5.5, height: 9.5)
+    nonisolated static let arrowSize = NSSize(width: 13, height: 10.5)
     nonisolated static let reloadSize = NSSize(width: 10.5, height: 12)
     nonisolated private static let reloadRadius: CGFloat = 4.6
     nonisolated private static let reloadHeadArm: CGFloat = 2.8
@@ -19,6 +20,8 @@ enum OrbitToolbarGlyphs {
 
     static let back = chevron(pointingLeft: true, size: chevronSize)
     static let forward = chevron(pointingLeft: false, size: chevronSize)
+    static let backArrow = arrow(pointingLeft: true)
+    static let forwardArrow = arrow(pointingLeft: false)
     static let backCompact = chevron(pointingLeft: true, size: compactChevronSize)
     static let forwardCompact = chevron(pointingLeft: false, size: compactChevronSize)
     static let reload = image(size: reloadSize) { rect in
@@ -49,6 +52,24 @@ enum OrbitToolbarGlyphs {
         divider.move(to: NSPoint(x: x, y: frame.minY))
         divider.line(to: NSPoint(x: x, y: frame.maxY))
         stroke(divider)
+    }
+
+    private static func arrow(pointingLeft: Bool) -> NSImage {
+        image(size: arrowSize) { rect in
+            let frame = rect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
+            let tip = pointingLeft ? frame.minX : frame.maxX
+            let tail = pointingLeft ? frame.maxX : frame.minX
+            let shoulder = tip + (pointingLeft ? 1 : -1) * frame.height / 2
+            let head = NSBezierPath()
+            head.move(to: NSPoint(x: shoulder, y: frame.maxY))
+            head.line(to: NSPoint(x: tip, y: frame.midY))
+            head.line(to: NSPoint(x: shoulder, y: frame.minY))
+            stroke(head)
+            let shaft = NSBezierPath()
+            shaft.move(to: NSPoint(x: tip, y: frame.midY))
+            shaft.line(to: NSPoint(x: tail, y: frame.midY))
+            stroke(shaft)
+        }
     }
 
     private static func chevron(pointingLeft: Bool, size: NSSize) -> NSImage {

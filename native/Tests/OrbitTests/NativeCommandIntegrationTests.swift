@@ -109,6 +109,7 @@ struct NativeCommandIntegrationTests {
         BrowserWindowCommands.install(in: registry)
         #expect(registry.isImplemented(.showSiteControls))
         #expect(registry.isImplemented(.showHideSidebar))
+        #expect(registry.isImplemented(.showHideToolbar))
         router.newWindow()
         await router.waitForPendingCommands()
         let controller = try #require(router.selectedWindow)
@@ -117,6 +118,8 @@ struct NativeCommandIntegrationTests {
         let menus = BrowserCommandMenus(registry: registry)
         let bar = menus.makeMenuBar()
         let view = try #require(bar.items.first { $0.title == "View" }?.submenu)
+        let toolbar = try #require(view.items.first { $0.identifier?.rawValue == BrowserCommandID.showHideToolbar.rawValue })
+        #expect(!toolbar.isHidden)
         let site = view.items.filter { $0.identifier?.rawValue == BrowserCommandID.showSiteControls.rawValue }
         #expect(site.isEmpty)
         #expect(site.allSatisfy { $0.allowsAutomaticKeyEquivalentLocalization && $0.allowsAutomaticKeyEquivalentMirroring })

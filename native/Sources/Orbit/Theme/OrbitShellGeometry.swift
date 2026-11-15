@@ -110,6 +110,8 @@ struct OrbitSidebarGeometry: Equatable {
         var spaceHasIcon = false
         var trafficLightPitch: CGFloat = WindowMetrics.trafficLightPitch
         var isFullScreen = false
+        /// False while the optional toolbar replaces the sidebar address row.
+        var showsAddress = true
     }
 
     struct Toolbar: Equatable {
@@ -241,7 +243,9 @@ struct OrbitSidebarGeometry: Equatable {
         let wide = Toolbar.resolve(width: max(width, ToolbarMetrics.compactBelowWidth),
                                    trafficLightPitch: content.trafficLightPitch, isFullScreen: content.isFullScreen)
 
-        let address = CGRect(x: padding, y: SidebarMetrics.addressTop, width: inner, height: SidebarMetrics.addressHeight)
+        let address = content.showsAddress
+            ? CGRect(x: padding, y: SidebarMetrics.addressTop, width: inner, height: SidebarMetrics.addressHeight)
+            : CGRect(x: padding, y: SidebarMetrics.addressTopWithoutAddress, width: inner, height: 0)
         let columns = SidebarMetrics.favoriteColumns(count: content.favoriteCount, sidebarWidth: width,
                                                      minimumTileWidth: content.favoriteMinimumTileWidth)
         let favoriteRows = content.favoriteCount == 0 ? 0 : (content.favoriteCount + columns - 1) / columns

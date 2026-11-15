@@ -156,12 +156,15 @@ final class BrowserContentCardView: NSView {
     private var contentTopConstraint: NSLayoutConstraint?
     private weak var headerView: NSView?
     private var headerConstraints: [NSLayoutConstraint] = []
-    var headerHeight: CGFloat { headerView == nil ? 0 : BrowserDeveloperToolbar.height }
+    private var headerViewHeight: CGFloat = 0
+    var headerHeight: CGFloat { headerView == nil ? 0 : headerViewHeight }
+    var header: NSView? { headerView }
     var pageViewportSize: NSSize {
         NSSize(width: max(0, clip.bounds.width), height: max(0, clip.bounds.height - headerHeight))
     }
-    func setHeader(_ view: NSView?) {
-        guard headerView !== view else { return }
+    func setHeader(_ view: NSView?, height: CGFloat = BrowserDeveloperToolbar.height) {
+        guard headerView !== view || headerViewHeight != height else { return }
+        headerViewHeight = height
         NSLayoutConstraint.deactivate(headerConstraints)
         headerView?.removeFromSuperview()
         headerView = view
@@ -171,7 +174,7 @@ final class BrowserContentCardView: NSView {
             clip.addSubview(view, positioned: .above, relativeTo: nil)
             headerConstraints = [view.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
                 view.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
-                view.topAnchor.constraint(equalTo: clip.topAnchor), view.heightAnchor.constraint(equalToConstant: BrowserDeveloperToolbar.height)]
+                view.topAnchor.constraint(equalTo: clip.topAnchor), view.heightAnchor.constraint(equalToConstant: height)]
             NSLayoutConstraint.activate(headerConstraints)
         }
         contentTopConstraint?.constant = headerHeight
