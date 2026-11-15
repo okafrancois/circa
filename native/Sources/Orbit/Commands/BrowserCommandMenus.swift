@@ -191,6 +191,9 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let value = menuItem.identifier?.rawValue, let id = BrowserCommandID(rawValue: value) else { return false }
+        if id == .toggleSidebarSide {
+            menuItem.title = registry.sidebarOnRight ? uiText("Sidebar on Left") : uiText("Sidebar on Right")
+        }
         if target == nil, let selector = BrowserStandardActions.keyWindowSelector(for: id), let window = nonBrowserKeyWindow() {
             let probe = NSMenuItem(title: menuItem.title, action: selector, keyEquivalent: "")
             return window.responds(to: selector) && window.validateUserInterfaceItem(probe)

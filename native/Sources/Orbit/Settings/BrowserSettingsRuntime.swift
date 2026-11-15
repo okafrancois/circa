@@ -54,6 +54,19 @@ final class BrowserSettingsRuntime: ObservableObject {
         catch { await refresh(); throw error }
     }
 
+    func publishSidebarOnRight(_ value: Bool) {
+        guard document.interaction.sidebarOnRight != value else { return }
+        document.interaction.sidebarOnRight = value
+        onChange?()
+    }
+
+    func setSidebarOnRight(_ value: Bool) async throws {
+        publishSidebarOnRight(value)
+        guard !isUnavailable else { return }
+        do { try await store.updateInteraction { $0.sidebarOnRight = value } }
+        catch { await refresh(); throw error }
+    }
+
     func setOpensExternalLinksInQuickWindow(_ value: Bool) async throws {
         do { try await store.setOpensExternalLinksInQuickWindow(value) }
         catch { await refresh(); throw error }
@@ -164,6 +177,9 @@ final class BrowserWindowSettings {
         owner.sidebar.onReorderSnap = { [weak runtime] in runtime?.feedback.reorderSnapped() }
         owner.windowShell.showsSpaceAroundPages = runtime.document.showsSpaceAroundPages
         if !runtime.document.showsTabHoverPreviews { owner.richTabPreview.dismiss() }
+        owner.windowShell.sidebarOnRight = runtime.document.interaction.sidebarOnRight
+        owner.richTabPreview.sidebarOnRight = runtime.document.interaction.sidebarOnRight
+        owner.favorites?.gmailPreview.sidebarOnRight = runtime.document.interaction.sidebarOnRight
         owner.setToolbarVisible(runtime.document.interaction.showsToolbar)
         guard let profileID = owner.session.activeProfileID else { return }
         let settings = runtime.document.profile(profileID)

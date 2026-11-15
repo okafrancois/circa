@@ -17,6 +17,7 @@ extension BrowserWindowController {
         state.hasURL = navigation?.url != nil
         state.canGoBack = navigation?.canGoBack == true
         state.canGoForward = navigation?.canGoForward == true
+        state.sidebarOnRight = windowShell.sidebarOnRight
         state.isLoading = navigation?.isLoading == true
         state.canReopen = session.canReopenClosedTab
         state.hasPendingCommands = session.hasPendingCommands

@@ -202,6 +202,7 @@ list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitScrollWheelProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPinnedTabProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitToolbarProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitSidebarPlacementProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitTabErgonomicsProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitCommandGapsProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitDailyQA9Probe.swift"

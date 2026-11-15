@@ -38,6 +38,7 @@ struct BrowserCommandState {
     var canGoBack = false
     var canGoForward = false
     var isLoading = false
+    var sidebarOnRight = false
     var canReopen = false
     var hasPendingCommands = false
     var scope: BrowserCommandScope = .browser
@@ -269,6 +270,8 @@ final class BrowserCommandRegistry<Window: AnyObject> {
     func capturePaletteTarget(windowID: UUID? = nil) -> BrowserCommandTarget? {
         captureTarget(windowID: windowID, policy: .document)
     }
+
+    var sidebarOnRight: Bool { state(currentWindowID().flatMap { router.windows[$0] }).sidebarOnRight }
 
     func isEnabled(_ id: BrowserCommandID, target: BrowserCommandTarget? = nil) -> Bool {
         guard let definition = definition(id), isImplemented(id) else { return false }

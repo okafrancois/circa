@@ -465,6 +465,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                            identifier: "settings-tab-hover-previews", icon: "rectangle.on.rectangle",
                            save: runtime.setShowsTabHoverPreviews)
                 rule
+                liveToggle("Sidebar on Right", value: runtime.document.interaction.sidebarOnRight,
+                           identifier: "settings-sidebar-on-right", icon: "sidebar.right",
+                           save: runtime.setSidebarOnRight)
+                rule
                 liveToggle("Space around pages", value: runtime.document.showsSpaceAroundPages,
                            identifier: "settings-space-around-pages", icon: "rectangle.inset.filled",
                            save: model.setShowsSpaceAroundPages)

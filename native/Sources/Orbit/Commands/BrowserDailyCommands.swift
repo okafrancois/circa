@@ -111,7 +111,7 @@ enum BrowserDailyCommands {
         case .refreshThePage: "Reload|Refresh|Recharger|Actualiser"
         case .archiveTab: "Close Tab|Archive Tab|Fermer l'onglet|Fermer l’onglet|Archiver l’onglet"
         case .pinUnpinTab: "Pin Tab|Unpin Tab|Épingler l'onglet|Désépingler l'onglet|Épingler|Désépingler"
-        case .showHideSidebar: "Show Sidebar|Hide Sidebar|Toggle Sidebar|Afficher la barre latérale|Masquer la barre latérale"
+        case .showHideSidebar: "Sidebar|Barre latérale|Show Sidebar|Hide Sidebar|Toggle Sidebar|Afficher la barre latérale|Masquer la barre latérale"
         case .importFromArc: "Import from Arc|Importer depuis Circa|Import Circa"
         default: ""
         }

@@ -152,6 +152,7 @@ enum OrbitMenuTree {
             ])),
             .separator,
             .item(.init(command: .showHideSidebar, title: "Show/Hide Sidebar", key: "s", modifierMask: 1048576)),
+            .item(.init(command: .toggleSidebarSide, title: "Sidebar on Right", key: "", modifierMask: 0)),
             .item(.init(command: .showHideToolbar, title: "Show/Hide Toolbar", key: "D", modifierMask: 1048576)),
             .item(.init(command: .expandPinnedSection, title: "Expand Pinned Section", isHidden: true)),
             .item(.init(command: .collapsePinnedSection, title: "Collapse Pinned Section", isHidden: true)),
