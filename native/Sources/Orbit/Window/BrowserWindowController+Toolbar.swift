@@ -35,15 +35,14 @@ extension BrowserWindowController {
         configureOptionalToolbarIfNeeded()
         sidebar.showsNavigationChrome = !isToolbarVisible
         renderPageHeader()
+        extensionControls.render()
     }
 
     func renderOptionalToolbar(for surface: Surface) {
         configureOptionalToolbarIfNeeded()
         let state = surface.navigationState
         optionalToolbar.apply(theme: windowShell.theme)
-        // Keep the validated white canvas. Page-colour treatment is a separate visual change;
-        // updateTint is the seam for it once its light and dark states have been measured.
-        optionalToolbar.updateTint(BrowserPageTint(red: 255, green: 255, blue: 255))
+        optionalToolbar.updateTint(surface.navigationState.pageTint ?? BrowserPageTint(red: 255, green: 255, blue: 255))
         optionalToolbar.update(url: state.committedURL ?? state.url, canGoBack: state.canGoBack,
                                canGoForward: state.canGoForward)
         contentCard.setHeader(optionalToolbar, height: BrowserOptionalToolbar.height)
@@ -58,6 +57,7 @@ extension BrowserWindowController {
         optionalToolbar.onSiteControls = { [weak self] anchor in
             self?.siteControls.toggle(presentationAnchor: anchor)
         }
+        optionalToolbar.address.contextMenuBuilder = { [weak self] in self?.makeAddressContextMenu(toolbar: true) }
         optionalToolbar.onSplit = { [weak self] in self?.submitInput { $0.addSplitFromSelection() } }
     }
 
@@ -65,5 +65,35 @@ extension BrowserWindowController {
     var optionalToolbarSiteAnchor: NSView? {
         guard isToolbarVisible, contentCard.header === optionalToolbar, optionalToolbar.window != nil else { return nil }
         return optionalToolbar.site
+    }
+}
+
+extension BrowserWindowController {
+    func makeAddressContextMenu(toolbar: Bool) -> NSMenu? {
+        guard acceptsCommands else { return nil }
+        let built = SidebarCommandHub.contextMenu(for: self, commands: [[.copyURL, .share, .capture, .captureFullPage], [.manageExtensions]])
+        toolbarAddressMenuOwner = built?.owner
+        let menu = built?.menu ?? NSMenu()
+        if !menu.items.isEmpty { menu.addItem(.separator()) }
+        if toolbar {
+            let full = BrowserSplitMenuItem(title: optionalToolbar.address.showsFullURL ? uiText("Hide Full URL") : uiText("Show Full URL"),
+                                  handler: { [weak self] in self?.toggleToolbarFullURL() })
+            menu.addItem(full)
+        }
+        let toggle = BrowserSplitMenuItem(title: toolbar ? uiText("Hide Toolbar") : uiText("Show as Toolbar"),
+                                handler: { [weak self] in self?.toggleToolbar() })
+        menu.addItem(toggle)
+        return menu
+    }
+
+    private func toggleToolbarFullURL() {
+        let value = !optionalToolbar.address.showsFullURL
+        optionalToolbar.address.showsFullURL = value
+        guard let runtime = settingsPreferences?.runtime else { return }
+        runtime.publishToolbarShowsFullURL(value)
+        Task { [weak self] in
+            do { try await runtime.setToolbarShowsFullURL(value) }
+            catch { self?.session.onError?(error) }
+        }
     }
 }

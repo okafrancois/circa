@@ -2079,7 +2079,15 @@ class App final : public CefApp, public CefBrowserProcessHandler {
         [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-permissions-fixture"]) {
       command->AppendSwitch("use-fake-device-for-media-stream");
     }
-    if (g_state && g_state->auth_synthetic) {
+    // The toolbar's confined presentation run may load its own two local action fixtures.
+    // Keep the hermetic network and mock storage policy; other synthetic runs stay unchanged.
+    const bool toolbar_fixture = g_state && g_state->auth_synthetic &&
+        [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.toolbar"] &&
+        [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
+        command->GetSwitchValue("load-extension").ToString() ==
+            g_state->root + "/toolbar-fixture," + g_state->root + "/toolbar-fixture-two" +
+            (g_state->content_blocking_path.empty() ? "" : "," + g_state->content_blocking_path);
+    if (g_state && g_state->auth_synthetic && !toolbar_fixture) {
       command->RemoveSwitch("load-extension");
       command->AppendSwitch("disable-extensions");
       command->AppendSwitch("disable-component-extensions-with-background-pages");

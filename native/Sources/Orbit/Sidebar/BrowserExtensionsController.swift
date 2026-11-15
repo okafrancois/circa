@@ -220,7 +220,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
                     }
                 } else {
                     pinnedButtons = buttonsByProfile[profile] ?? []
-                    owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
+                    placePinnedButtons(in: owner)
                     return
                 }
             }
@@ -311,9 +311,19 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         if let cyclingID, !pinnedButtons.contains(where: {
             $0.accessibilityIdentifier() == cyclingID && $0.isEnabled
         }) { cancelCycle() }
-        owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
+        placePinnedButtons(in: owner)
         owner.sidebar.addressContainer.needsLayout = true
         if let surface { owner.engine.extensions?.setActionAnchor(owner.siteControls.actionAnchor, on: surface) }
+    }
+
+    private func placePinnedButtons(in owner: BrowserWindowController<Engine>) {
+        if owner.isToolbarVisible {
+            owner.sidebar.extensionsContainer.setPinnedButtons([])
+            owner.optionalToolbar.setPinnedButtons(pinnedButtons)
+        } else {
+            owner.optionalToolbar.setPinnedButtons([])
+            owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
+        }
     }
 
     var isCycling: Bool { cyclingID != nil }

@@ -26,15 +26,33 @@ enum OrbitToolbarProbe {
             window.setFrame(NSRect(x: visible.maxX - 1104, y: visible.maxY - 40 - 800, width: 1100, height: 800), display: true)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            // Use a stable 500 pt card origin for comparison captures.
+            // A requested sidebar width gives repeatable content geometry for confined captures.
             for _ in 0..<3 {
                 window.contentView?.layoutSubtreeIfNeeded()
                 let minX = owner.contentCard.convert(owner.contentCard.bounds, to: nil).minX
-                owner.windowShell.setSidebarWidth(owner.sidebar.frame.width + 500 - minX)
+                owner.windowShell.setSidebarWidth(owner.sidebar.frame.width + (command["sidebarWidth"].flatMap(Double.init) ?? 500) - minX)
             }
             if let url = command["url"].flatMap(URL.init(string:)), url.scheme == "http", url.host == "127.0.0.1" {
                 owner.session.openTab(url: url)
                 await waitForPage(owner, url: url)
+            }
+        case "navigate":
+            if let url = command["url"].flatMap(URL.init(string:)), url.scheme == "http", url.host == "127.0.0.1",
+               let surface = owner.session.selectedSurface {
+                surface.navigate(to: url)
+                await waitForPage(owner, url: url)
+            }
+        case "resize":
+            let width = max(700, min(1100, command["width"].flatMap(Double.init) ?? 1100))
+            var frame = window.frame
+            frame.size.width = width
+            window.setFrame(frame, display: true)
+        case "pin-fixtures":
+            if let surface = owner.session.selectedSurface, let host = owner.engine.extensions {
+                for item in (try? host.installedExtensions(on: surface)) ?? [] where item.name.hasPrefix("Toolbar fixture") {
+                    try? host.setPinned(true, extensionID: item.id, in: surface.profileID)
+                }
+                owner.extensionControls.render()
             }
         case "toggle":
             // In-process shortcut only. The menu drops the action while NSApp.currentEvent is a
@@ -74,7 +92,12 @@ enum OrbitToolbarProbe {
                 "addressHovered": toolbar.address.pillOpacity > 0,
                 "header": owner.contentCard.header === toolbar, "card": screenRect(owner.contentCard),
                 "address": screenRect(toolbar.address), "site": screenRect(toolbar.site), "split": screenRect(toolbar.split),
-                "back": screenRect(toolbar.back),
+                "back": screenRect(toolbar.back), "reload": screenRect(toolbar.reload), "forward": screenRect(toolbar.forward),
+                "extensions": toolbar.pinnedButtons.map { ["frame": screenRect($0), "badge": $0.accessibilityValue() as? String ?? ""] },
+                "urlText": toolbar.address.displayText.string, "fullURL": toolbar.address.showsFullURL,
+                "tint": [toolbar.pageTint?.red ?? 0, toolbar.pageTint?.green ?? 0, toolbar.pageTint?.blue ?? 0],
+                "addressMenu": owner.makeAddressContextMenu(toolbar: owner.isToolbarVisible)?.items.map(\.title) ?? [],
+                "sidebarAddress": screenRect(owner.sidebar.addressContainer),
                 "palettePresented": owner.palette.isPresented, "paletteInput": owner.palette.view.input.stringValue,
                 "paneHeaders": owner.split.view.subviews.compactMap { $0 as? BrowserSplitPaneView }.filter {
                     !$0.back.isHidden && !$0.address.isHidden && !$0.close.isHidden

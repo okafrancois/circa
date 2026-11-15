@@ -12,8 +12,7 @@ extension BrowserWindowController {
             observePageTint(of: surface)
             renderDeveloperToolbar(for: surface)
         } else if isToolbarVisible, session.activeSplit == nil {
-            pageTintSurface?.setPageTintObservationEnabled(false)
-            pageTintSurface = nil
+            observePageTint(of: surface)
             renderOptionalToolbar(for: surface)
         } else {
             clearPageHeader()

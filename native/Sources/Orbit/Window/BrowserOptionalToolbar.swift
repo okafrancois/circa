@@ -61,12 +61,13 @@ final class BrowserOptionalToolbar: NSView {
     var onSiteControls: ((NSView) -> Void)?
     var onSplit: (() -> Void)?
 
-    let back = NSButton()
-    let forward = NSButton()
-    let reload = NSButton()
-    let site = NSButton()
-    let split = NSButton()
+    let back = SiteControlButton()
+    let forward = SiteControlButton()
+    let reload = SiteControlButton()
+    let site = SiteControlButton()
+    let split = SiteControlButton()
     let address = BrowserToolbarAddressView()
+    private(set) var pinnedButtons: [NSButton] = []
     private let background = OrbitThemeFillView()
     private let separator = CALayer()
     private(set) var pageTint: BrowserPageTint?
@@ -94,6 +95,7 @@ final class BrowserOptionalToolbar: NSView {
             (site, "slider.horizontal.2.square", 17.5, uiText("Site Controls"), "optional-toolbar-site", #selector(showSiteControls)),
             (split, "square.split.2x1", 16.0, uiText("Split View"), "optional-toolbar-split", #selector(showSplit))
         ] as [(NSButton, String, CGFloat, String, String, Selector)] {
+            (button as? SiteControlButton)?.toolbarForeground = .black
             button.image = OrbitGlyph.symbol(symbol, pointSize: size, weight: .regular)
             button.imageScaling = .scaleNone
             button.isBordered = false
@@ -104,6 +106,11 @@ final class BrowserOptionalToolbar: NSView {
             button.setAccessibilityIdentifier(id)
             addSubview(button)
         }
+        back.toolbarHelp = (uiText("Go back"), BrowserShortcut(key: "[", modifiers: .command).displayLabel)
+        forward.toolbarHelp = (uiText("Go forward"), BrowserShortcut(key: "]", modifiers: .command).displayLabel)
+        reload.toolbarHelp = (uiText("Reload this page"), BrowserShortcut(key: "r", modifiers: .command).displayLabel)
+        site.toolbarHelp = (uiText("Site Controls"), nil)
+        split.toolbarHelp = (uiText("Split View"), nil)
         // Straight arrows belong to this row; sidebar navigation keeps its compact chevrons.
         back.image = OrbitToolbarGlyphs.backArrow
         forward.image = OrbitToolbarGlyphs.forwardArrow
@@ -161,14 +168,32 @@ final class BrowserOptionalToolbar: NSView {
         }
         foreground = tint.prefersWhiteForeground ? .white : .black
         address.foreground = foreground
+        for case let button as SiteControlButton in pinnedButtons { button.toolbarForeground = foreground }
         refreshButtonInk()
         CATransaction.commit()
     }
 
     private func refreshButtonInk() {
         for button in [back, forward, reload, site, split] {
+            button.toolbarForeground = foreground
             button.contentTintColor = foreground.withAlphaComponent(button.isEnabled ? Ink.icon : Ink.disabledIcon)
         }
+    }
+
+    func setPinnedButtons(_ buttons: [NSButton]) {
+        for previous in pinnedButtons where !buttons.contains(where: { $0 === previous }) { previous.removeFromSuperview() }
+        pinnedButtons = buttons
+        for button in buttons {
+            if button.superview !== self { addSubview(button) }
+            button.isHidden = false
+            if let button = button as? SiteControlButton {
+                button.usesURLPillStyle = false
+                button.toolbarForeground = foreground
+                button.toolbarHelp = (button.accessibilityLabel() ?? "", nil)
+                button.toolTip = nil
+            }
+        }
+        needsLayout = true
     }
 
     override func layout() {
@@ -186,11 +211,15 @@ final class BrowserOptionalToolbar: NSView {
         place(reload, Metrics.reload)
         place(site, CGPoint(x: bounds.width - Metrics.siteFromRight.x, y: Metrics.siteFromRight.y))
         place(split, CGPoint(x: bounds.width - Metrics.splitFromRight.x, y: Metrics.splitFromRight.y))
+        for (index, button) in pinnedButtons.enumerated() {
+            place(button, CGPoint(x: bounds.width - 94 - CGFloat(pinnedButtons.count - 1 - index) * 36, y: Metrics.centerY))
+        }
         let leading = Metrics.addressLeadingLimit
-        let trailing = max(leading, bounds.width - Metrics.addressTrailingLimit)
+        let trailing = max(leading, bounds.width - Metrics.addressTrailingLimit - CGFloat(pinnedButtons.count) * 36)
         let natural = address.naturalTextWidth
-        let width = min(natural, trailing - leading)
-        let x = max(leading, min((bounds.width - natural) / 2, trailing - width))
+        let inset = max(leading, bounds.width - trailing)
+        let width = min(natural, max(0, bounds.width - 2 * inset))
+        let x = (bounds.width - width) / 2
         address.frame = NSRect(x: x - Metrics.linkCenterFromText - 10, y: 0,
                                width: width + Metrics.linkCenterFromText + 10 + Metrics.pillPaddingX, height: Metrics.rowHeight)
         address.textInset = Metrics.linkCenterFromText + 10
@@ -205,6 +234,9 @@ final class BrowserToolbarAddressView: NSView {
     typealias Ink = BrowserOptionalToolbar.Ink
     typealias Motion = BrowserOptionalToolbar.Motion
 
+    var contextMenuBuilder: (() -> NSMenu?)?
+    override func menu(for event: NSEvent) -> NSMenu? { contextMenuBuilder?() }
+    var showsFullURL = true { didSet { if showsFullURL != oldValue { invalidateText() } } }
     var onActivate: (() -> Void)?
     var url: URL? {
         didSet {
@@ -255,14 +287,14 @@ final class BrowserToolbarAddressView: NSView {
     /// Scheme-less address: the host in semibold, the rest regular and lighter.
     var displayText: NSAttributedString {
         if let cachedText { return cachedText }
-        let text = Self.displayText(for: url, foreground: foreground)
+        let text = Self.displayText(for: url, foreground: foreground, showsFullURL: showsFullURL)
         cachedText = text
         return text
     }
 
     var naturalTextWidth: CGFloat { ceil(displayText.size().width) }
 
-    static func displayText(for url: URL?, foreground: NSColor) -> NSAttributedString {
+    static func displayText(for url: URL?, foreground: NSColor, showsFullURL: Bool = true) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let regular: [NSAttributedString.Key: Any] = [
@@ -270,7 +302,7 @@ final class BrowserToolbarAddressView: NSView {
             .foregroundColor: foreground.withAlphaComponent(Ink.path), .paragraphStyle: paragraph
         ]
         guard let url else { return NSAttributedString(string: "", attributes: regular) }
-        var full = url.absoluteString
+        var full = showsFullURL ? url.absoluteString : (url.host(percentEncoded: false) ?? url.absoluteString)
         if let scheme = url.scheme, full.lowercased().hasPrefix(scheme.lowercased() + "://") {
             full.removeFirst(scheme.count + 3)
         }
