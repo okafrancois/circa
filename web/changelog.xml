@@ -9,6 +9,47 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.73.0-nightly.10/</id>
+    <title>0.73.0-nightly.10 — Meeting reminders chime, and you choose when they appear.</title>
+    <link href="https://circabrowser.com/changelog/0.73.0-nightly.10/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Meeting reminders chime, and you choose when they appear.
+
+1 new
+
+## New
+
+- Meeting reminders now chime, and you choose when they appear (2, 5 or 10 minutes before, or never) from the Calendar Favorite's menu. When Circa is in the background, a macOS notification with a Join button appears instead. Turn the sound off in Settings &gt; Meeting reminder sound.
+
+## Known limits
+
+- Meetings you declined still get a reminder.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.73.0-nightly.10" data-version="0.73.0-nightly.10" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.73.0-nightly.10" aria-label="Link to version 0.73.0-nightly.10"&gt;0.73.0-nightly.10&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Meeting reminders chime, and you choose when they appear.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 new&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Meeting reminders now chime, and you choose when they appear (2, 5 or 10 minutes before, or never) from the Calendar Favorite&amp;#x27;s menu. When Circa is in the background, a macOS notification with a Join button appears instead. Turn the sound off in Settings &amp;gt; Meeting reminder sound.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Meetings you declined still get a reminder.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.73.0-nightly.10/meeting-reminders.jpg" aria-label="Choose when meeting reminders appear from the Calendar Favorite&amp;#x27;s menu."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.73.0-nightly.10/meeting-reminders.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.73.0-nightly.10/meeting-reminders.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Choose when meeting reminders appear from the Calendar Favorite&amp;#x27;s menu.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.73.0-nightly.10/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.73.0-nightly.9/</id>
     <title>0.73.0-nightly.9 — Live Calendar polish.</title>
     <link href="https://circabrowser.com/changelog/0.73.0-nightly.9/" />
