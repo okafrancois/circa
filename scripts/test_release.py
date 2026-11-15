@@ -284,7 +284,7 @@ class CloudProfileTests(unittest.TestCase):
             self.assertEqual(observed[-1][0], bundle)
             self.assertTrue(all(observed[-1][1][key] == value for key, value in expected.items()))
             self.assertTrue(all('com.apple.developer.icloud-services' not in values for path, values in observed[:-1]))
-            self.assertTrue(all(values['com.apple.security.cs.allow-jit'] for _, values in observed))
+            self.assertFalse(any(key.startswith('com.apple.security.cs.') for key in observed[-1][1]))
             for capability in ('com.apple.security.device.audio-input', 'com.apple.security.device.camera',
                                'com.apple.security.personal-information.location'):
                 self.assertIs(observed[-1][1][capability], True)
@@ -319,6 +319,123 @@ class CloudProfileTests(unittest.TestCase):
         self.assertIsNone(release.embed_cloud_profile(Path('/unused'), dict(self.config, provisioning_profile='/missing'), Path('/tmp/synthetic')))
         with self.assertRaises(ValueError):
             local_signing.sign_chromium_bundle(Path('/unused'), 'local', {'com.apple.developer.icloud-services': ['CloudKit']})
+
+
+class ScopedEntitlementTests(unittest.TestCase):
+    """Developer ID signatures scope runtime exceptions per process; local ones stay broad."""
+    JIT = 'com.apple.security.cs.allow-jit'
+    UNSIGNED = 'com.apple.security.cs.allow-unsigned-executable-memory'
+    NO_LIBRARY_VALIDATION = 'com.apple.security.cs.disable-library-validation'
+    HELPERS = ('', ' (Renderer)', ' (GPU)', ' (Plugin)', ' (Alerts)')
+
+    def synthetic_bundle(self, root):
+        import plistlib
+        bundle = Path(root) / 'Orbit.app'
+        for suffix in self.HELPERS:
+            name = 'Orbit Helper' + suffix
+            executable = bundle / 'Contents/Frameworks' / (name + '.app') / 'Contents/MacOS' / name
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b'\xcf\xfa\xed\xfe')
+        downloader = bundle / 'Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader'
+        downloader.parent.mkdir(parents=True)
+        downloader.write_bytes(b'\xcf\xfa\xed\xfe')
+        framework = bundle / 'Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework'
+        framework.parent.mkdir(parents=True)
+        framework.write_bytes(b'\xcf\xfa\xed\xfe')
+        return bundle
+
+    def sign(self, bundle, identity, main_entitlements=None):
+        from contextlib import nullcontext
+        import plistlib
+        observed, preserved = {}, []
+        def run(arguments, **kwargs):
+            target = Path(arguments[-1])
+            if '--entitlements' in arguments:
+                filename = Path(arguments[arguments.index('--entitlements') + 1])
+                observed[target] = plistlib.loads(filename.read_bytes())
+            elif '--preserve-metadata=entitlements' in arguments:
+                preserved.append(target)
+            elif arguments[1] == '--force':
+                observed[target] = {}
+            return b''
+        with patch.object(local_signing, 'configured_identity', return_value=nullcontext(['--sign', 'synthetic'])), \
+                patch.object(local_signing, 'run', side_effect=run):
+            local_signing.sign_chromium_bundle(bundle, identity, main_entitlements)
+        return observed, preserved
+
+    def code_signing(self, values):
+        return {key for key in values if key.startswith('com.apple.security.cs.')}
+
+    def test_developer_id_scopes_each_helper_and_keeps_the_host_validated(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = self.synthetic_bundle(temporary)
+            observed, preserved = self.sign(bundle, 'Developer ID Application: Synthetic (TEAM123456)')
+            self.assertEqual(self.code_signing(observed[bundle]), set())
+            for capability in ('com.apple.security.device.audio-input', 'com.apple.security.device.camera',
+                               'com.apple.security.personal-information.location'):
+                self.assertIs(observed[bundle][capability], True)
+            expected = {'': {self.NO_LIBRARY_VALIDATION}, ' (Renderer)': {self.JIT}, ' (GPU)': {self.JIT},
+                        ' (Plugin)': {self.UNSIGNED, self.NO_LIBRARY_VALIDATION}, ' (Alerts)': set()}
+            for suffix, values in expected.items():
+                name = 'Orbit Helper' + suffix
+                helper = bundle / 'Contents/Frameworks' / (name + '.app')
+                for target in (helper, helper / 'Contents/MacOS' / name):
+                    self.assertEqual(set(observed[target]), values, target)
+            framework = bundle / 'Contents/Frameworks/Chromium Embedded Framework.framework'
+            self.assertEqual(observed[framework], {})
+            self.assertEqual(observed[framework / 'Chromium Embedded Framework'], {})
+            self.assertTrue(all('Downloader' in str(path) for path in preserved) and len(preserved) == 2)
+
+    def test_local_identity_keeps_the_broad_set_everywhere(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = self.synthetic_bundle(temporary)
+            observed, _ = self.sign(bundle, 'local')
+            broad = {self.JIT, self.UNSIGNED, self.NO_LIBRARY_VALIDATION}
+            self.assertEqual(self.code_signing(observed[bundle]), broad)
+            for suffix in self.HELPERS:
+                helper = bundle / 'Contents/Frameworks' / ('Orbit Helper' + suffix + '.app')
+                self.assertEqual(set(observed[helper]), broad)
+
+    def test_unclassified_helpers_and_host_exceptions_are_refused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = self.synthetic_bundle(temporary)
+            unknown = bundle / 'Contents/Frameworks/Orbit Helper (EH).app/Contents/MacOS/Orbit Helper (EH)'
+            unknown.parent.mkdir(parents=True)
+            unknown.write_bytes(b'\xcf\xfa\xed\xfe')
+            with self.assertRaises(ValueError):
+                self.sign(bundle, 'Developer ID Application: Synthetic (TEAM123456)')
+            self.sign(bundle, 'local')
+        with self.assertRaises(ValueError):
+            local_signing.host_entitlements('Developer ID Application: Synthetic', {self.NO_LIBRARY_VALIDATION: True})
+
+    def signed_table(self, bundle, **overrides):
+        values = {bundle: {'com.apple.security.device.camera': True}}
+        allowed = local_signing.DEVELOPER_ID_HELPER_ENTITLEMENTS
+        for suffix in self.HELPERS:
+            values[bundle / 'Contents/Frameworks' / ('Orbit Helper' + suffix + '.app')] = dict.fromkeys(allowed[suffix], True)
+        for name, entitlements in overrides.items():
+            values[bundle if name == 'host' else bundle / 'Contents/Frameworks' / name] = entitlements
+        return values
+
+    def test_release_assertion_accepts_only_the_scoped_table(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = self.synthetic_bundle(temporary)
+            release.verify_scoped_entitlements(bundle, read=self.signed_table(bundle).__getitem__)
+            failures = [
+                {'host': {self.NO_LIBRARY_VALIDATION: True}},
+                {'host': {self.JIT: True, 'com.apple.security.device.camera': True}},
+                {'Orbit Helper.app': {self.NO_LIBRARY_VALIDATION: True, self.JIT: True}},
+                {'Orbit Helper (Renderer).app': {self.JIT: True, self.UNSIGNED: True}},
+                {'Orbit Helper (GPU).app': {self.JIT: True, self.NO_LIBRARY_VALIDATION: True}},
+                {'Orbit Helper (Alerts).app': {self.JIT: True}},
+            ]
+            for overrides in failures:
+                with self.subTest(overrides=overrides), self.assertRaises(RuntimeError):
+                    release.verify_scoped_entitlements(bundle, read=self.signed_table(bundle, **overrides).__getitem__)
+            import shutil
+            shutil.rmtree(bundle / 'Contents/Frameworks/Orbit Helper (Alerts).app')
+            with self.assertRaises(RuntimeError):
+                release.verify_scoped_entitlements(bundle, read=self.signed_table(bundle).__getitem__)
 
 
 class PreservationGateTests(unittest.TestCase):

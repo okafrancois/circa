@@ -214,6 +214,32 @@ def verify_passkey_launch(bundle):
         raise RuntimeError('Release launch verification did not admit system passkeys')
 
 
+def signed_entitlements(path):
+    output = run('codesign', '-d', '--entitlements', ':-', path, capture_output=True).stdout
+    return plistlib.loads(output) if output.strip() else {}
+
+
+def verify_scoped_entitlements(bundle, read=signed_entitlements):
+    """A Developer ID host keeps library validation; each helper stays within its own set."""
+    from local_signing import CODE_SIGNING_ENTITLEMENT_PREFIX, DEVELOPER_ID_HELPER_ENTITLEMENTS, helper_variant
+    host = read(bundle)
+    widened = sorted(key for key in host if key.startswith(CODE_SIGNING_ENTITLEMENT_PREFIX))
+    if widened:
+        raise RuntimeError('Developer ID host carries code-signing exceptions: ' + ', '.join(widened))
+    helpers = sorted((bundle / 'Contents/Frameworks').glob('*Helper*.app'))
+    seen = set()
+    for helper in helpers:
+        variant = helper_variant(helper.name)
+        if variant not in DEVELOPER_ID_HELPER_ENTITLEMENTS:
+            raise RuntimeError('Unclassified helper bundle: ' + helper.name)
+        seen.add(variant)
+        extra = sorted(set(read(helper)) - DEVELOPER_ID_HELPER_ENTITLEMENTS[variant])
+        if extra:
+            raise RuntimeError(helper.name + ' carries entitlements beyond its set: ' + ', '.join(extra))
+    if seen != set(DEVELOPER_ID_HELPER_ENTITLEMENTS):
+        raise RuntimeError('Expected exactly the classified Chromium helpers')
+
+
 def prepare_bundle(source, destination, config, version, build, local_test_root=None, feed_url=None):
     packager = load_packager()
     if local_test_root:
@@ -244,12 +270,16 @@ def prepare_bundle(source, destination, config, version, build, local_test_root=
     if entitlements:
         from local_signing import sign_chromium_bundle
         sign_chromium_bundle(destination, identity, main_entitlements=entitlements)
+    else:
+        packager.sign(destination, identity)
+    if identity != 'local':
+        # Checked on the signed result before anything executes it or packages it.
+        verify_scoped_entitlements(destination)
+    if entitlements:
         verify_cloud_signature(destination, entitlements)
         verify_cloud_launch(destination)
         if BROWSER_PASSKEY_ENTITLEMENT in entitlements:
             verify_passkey_launch(destination)
-    else:
-        packager.sign(destination, identity)
     if identity != 'local':
         details = run('codesign', '-dv', '--verbose=4', destination, capture_output=True, text=True).stderr
         if 'TeamIdentifier=' + config['team_id'] not in details.splitlines():
