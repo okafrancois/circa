@@ -62,6 +62,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     let recentDownloads = SidebarDownloadsView()
     private var downloadTracking: NSTrackingArea?
     let updateCard = SidebarUpdateCard()
+    /// Media still playing in tabs the user left, directly above the footer.
+    let mediaPlayer = SidebarMediaPlayerView()
     var updateReady = false { didSet { needsLayout = true } }
     private var showsUpdateCard: Bool { updateReady && !isPrivate && standaloneProfileName == nil }
 
@@ -260,7 +262,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         pageContainer.wantsLayer = true
         pageContainer.layer?.masksToBounds = true
         tooltip.isHidden = true
-        for view in [navigationContainer, addressContainer, pageContainer, footer, updateCard, tooltip, privateIndicator] {
+        for view in [navigationContainer, addressContainer, pageContainer, footer, mediaPlayer, updateCard, tooltip, privateIndicator] {
             addSubview(view)
         }
         errandStopButton.isHidden = true
@@ -337,7 +339,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         spaceSwipe.layoutChanged()
         let layout = page.list.displayedLayout
         geometry = OrbitSidebarGeometry.resolve(.init(
-            width: bounds.width, height: bounds.height - (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0) - (errandStopButton.isHidden ? 0 : 36),
+            width: bounds.width, height: bounds.height - (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0) - (errandStopButton.isHidden ? 0 : 36)
+                - mediaPlayer.restingHeight,
             favoriteCount: max(favoriteCount, favoritePreviewCount ?? 0, showsEmptyFavoritesDropZone ? 1 : 0),
             favoriteMinimumTileWidth: favoriteMinimumTileWidth,
             pinnedRowCount: layout.pinnedSlotCount, todayRowCount: layout.todaySlotCount,
@@ -388,8 +391,13 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         updateCard.frame.origin.y += errandHeight
         errandStopButton.frame = NSRect(x: Metrics.paddingX, y: geometry.footerFrame.minY + 2,
             width: min(errandStopButton.attributedTitle.size().width + 24, bounds.width - 2 * Metrics.paddingX), height: 26)
-        footer.frame = geometry.footerFrame.offsetBy(dx: 0, dy: (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0) + errandHeight)
+        footer.frame = geometry.footerFrame.offsetBy(dx: 0, dy: (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0) + errandHeight
+            + mediaPlayer.restingHeight)
         footer.apply(geometry)
+        // The resting card's bottom edge meets the footer; hover grows the stack over the list.
+        let playerHeight = mediaPlayer.expandedHeight
+        mediaPlayer.frame = NSRect(x: Metrics.paddingX, y: footer.frame.minY - playerHeight,
+                                   width: max(0, bounds.width - 2 * Metrics.paddingX), height: playerHeight)
         recentDownloads.frame = NSRect(x: 0, y: footer.frame.minY + footer.libraryButton.frame.midY - 14.5 - CGFloat(recentDownloads.items.count) * 56, width: bounds.width, height: CGFloat(recentDownloads.items.count) * 56)
         if isPrivate {
             footer.isHidden = true

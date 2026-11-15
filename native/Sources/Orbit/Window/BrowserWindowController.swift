@@ -130,8 +130,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     /// Tabs of this window with controllable media; see BrowserWindowController+BackgroundMedia.
     let backgroundMedia = BrowserBackgroundMediaSessions<Engine.Surface>()
     var backgroundMediaObserver: BrowserHookRegistration?
-    /// Future sidebar player binding: called when `backgroundMediaSessions` may have changed.
+    /// Sidebar player binding: called when `backgroundMediaSessions` may have changed.
     var onBackgroundMediaChange: (() -> Void)?
+    let mediaPlayerState = SidebarMediaPlayerState()
     let developerToolbar = BrowserDeveloperToolbar()
     var developerToolbarProfile: ProfileID?
     weak var developerTintSurface: Surface?
@@ -357,6 +358,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             }
         }
         installBackgroundMedia()
+        installSidebarMediaPlayer()
         if restoringWindowID == nil && opensInitialTab { openTab() }
     }
 
@@ -430,6 +432,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         sidebarActivityObserver = nil
         backgroundMediaObserver?.cancel()
         backgroundMediaObserver = nil
+        shutDownSidebarMediaPlayer()
         backgroundMedia.removeAll()
         sidebarIcons.clear()
         downloads.sourceWindowClosed(session.snapshot?.id)
@@ -608,6 +611,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         let pillSelectionChanged = displayedSpaceID != nil && displayedSpaceID != session.snapshot?.activeSpaceID
         if pillSelectionChanged { sidebar.addressContainer.beginSelectionUpdate() }
         siteControls.render()
+        renderSidebarMediaPlayer()
         renderDeveloperToolbar()
         extensionControls.render()
         SpaceSwipeTrace.interval("RenderFavorites") {
