@@ -145,7 +145,10 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "github-compatibility" {
+                if name == "automatic-pip" {
+                    application.confirmQuit = { .quit }
+                    result["automaticPiP"] = await OrbitAutomaticPiPProbe.run(owner, command: command)
+                } else if name == "github-compatibility" {
                     result["githubCompatibility"] = await OrbitGitHubCompatibilityProbe.run(application, root: root, action: command["action"] ?? "decode")
                 } else if name == "extension-import-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.extensions-import") {
                     application.confirmQuit = { .quit }

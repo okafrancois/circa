@@ -12,6 +12,12 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     let policy = BrowserSitePermissionPolicy(store: BrowserSitePermissionStore.ephemeral())
     var preferences = try! BrowserSitePreferenceStore()
     private weak var lastSelectedSurface: Surface?
+    private lazy var automaticPiPActivation = BrowserAutomaticPiPActivation(context: { [weak self] in
+        let window = self?.owner?.window
+        return .init(ownsActiveWindow: window != nil && window === (NSApp.keyWindow ?? NSApp.mainWindow),
+                     isHidden: NSApp.isHidden, isMiniaturized: window?.isMiniaturized != false,
+                     isActive: NSApp.isActive)
+    }, changed: { [weak self] in self?.render() })
     var onPreferencesChange: (() -> Void)?
     /// Built-in blocking of the window's environment; nil without it (private windows).
     var contentBlocking: BrowserContentBlockingCoordinator?
@@ -108,6 +114,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     }
 
     func install() {
+        _ = automaticPiPActivation
         if engineObserver == nil {
             engineObserver = owner?.engineEventHooks.observe { [weak self] surface, event in
                 guard let self else { return }
@@ -119,6 +126,13 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
             }
         }
         owner?.installSiteControlsButton(button)
+    }
+
+    func updateSelectedAutomaticPiP(isAway: Bool) {
+        guard let owner, !owner.siteControlsClosed, let surface = owner.siteControlSurface else { return }
+        let settings = preferences.preferences(url: surface.navigationState.committedURL, profileID: surface.profileID)
+        surface.updateAutomaticPictureInPicture(isSelected: !isAway,
+            allowed: settings.automaticPictureInPicture && owner.allowsAutomaticPictureInPicture)
     }
 
     func render() {
@@ -135,8 +149,8 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
                 previous.updateAutomaticPictureInPicture(isSelected: false, allowed: settings.automaticPictureInPicture && owner.allowsAutomaticPictureInPicture)
             }
             lastSelectedSurface = surface
-            surface?.updateAutomaticPictureInPicture(isSelected: true, allowed: true)
         }
+        updateSelectedAutomaticPiP(isAway: automaticPiPActivation.isAway)
         for background in owner.siteControlSurfaces where background !== surface {
             let settings = preferences.preferences(url: background.navigationState.committedURL, profileID: background.profileID)
             if !owner.allowsAutomaticPictureInPicture || !settings.automaticPictureInPicture {
