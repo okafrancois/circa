@@ -36,7 +36,7 @@ private final class CountingExtensionHost: BrowserExtensionHost {
     func installedExtensions(on surface: any BrowserEngineSurface) throws -> [BrowserExtensionSummary] {
         surfaceSnapshots += 1
         var items = try installedExtensions(in: surface.profileID)
-        items[0].actionState = .init(title: "Action", badgeText: badge, badgeBackgroundColor: 0xffff0000, isEnabled: true)
+        items[0].actionState = .init(title: "Action", badgeText: badge, badgeBackgroundColor: 0xFFFF_0000, isEnabled: true)
         return items
     }
     func setEnabled(_ enabled: Bool, extensionID: String, in profileID: ProfileID) throws {}

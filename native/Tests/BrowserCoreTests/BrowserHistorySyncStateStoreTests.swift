@@ -132,7 +132,7 @@ struct BrowserHistorySyncStateStoreTests {
     }
 
     @Test("After every cycle the stored rows equal the state the single JSON file held")
-    func parity() async throws {
+    func equivalence() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let destination = root.appendingPathComponent("history.cloudkit")
         let profile = ProfileID()
