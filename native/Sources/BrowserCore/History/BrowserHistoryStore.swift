@@ -14,7 +14,7 @@ public actor BrowserHistoryStore {
     var applyingHistorySync = false
     var lastHistoryJournalPrune = Date.distantPast
     /// Separate read-only WAL connection: suggestions and index snapshots bypass this actor.
-    private nonisolated let reader: HistoryReadConnection?
+    nonisolated let reader: HistoryReadConnection?
     private let profileDirectory: OrbitSecureDirectory?
     private let historyDirectory: OrbitSecureDirectory?
     private var profileRemoved = false
@@ -22,7 +22,10 @@ public actor BrowserHistoryStore {
     private nonisolated let pin: OrbitSQLiteGuard.Pin?
     public private(set) var maintenanceStatus: BrowserHistoryMaintenanceStatus = .idle
 
-    public init(profileID: ProfileID, policy: BrowserHistoryPolicy, directory: URL) throws {
+    /// `backfillsSearchIndex: false` leaves visits recorded before version ten unindexed until
+    /// `completeSearchIndexBackfill()` runs (tests only); searches fall back meanwhile.
+    public init(profileID: ProfileID, policy: BrowserHistoryPolicy, directory: URL,
+                backfillsSearchIndex: Bool = true) throws {
         self.profileID = profileID
         self.policy = policy
         guard policy == .persistent else {
@@ -47,6 +50,11 @@ public actor BrowserHistoryStore {
         do { reader = try HistoryReadConnection(url: file) }
         catch { try? database.close(); pin.release(); throw error }
         self.database = database
+        // Indexing older visits runs in bounded batches on this actor after launch; searches use
+        // the literal query until it completes, so opening a large history never waits for it.
+        if backfillsSearchIndex, (try? database.visitSearchBackfillPending()) == true {
+            Task(priority: .utility) { [weak self] in try? await self?.completeSearchIndexBackfill() }
+        }
     }
 
     public func close() throws {
@@ -174,7 +182,7 @@ public actor BrowserHistoryStore {
         guard let database else { return nil }
         guard faviconReference.map(BrowserHistoryFavicon.accepts) ?? true else { throw BrowserHistoryError.invalidVisit }
         return try database.routineTransaction { () throws -> BrowserHistoryIndexedPage? in
-            guard var visit = try readVisits(whereSQL: "id=?", values: [.text(visitID.uuidString)], limit: 1, offset: 0).first else { return nil }
+            guard var visit = try Self.readVisits(database, whereSQL: "id=?", values: [.text(visitID.uuidString)], limit: 1, offset: 0).first else { return nil }
             let titleChanged = visit.title != title
             visit.title = title
             if !applyingHistorySync { visit.faviconReference = faviconReference }
@@ -362,22 +370,20 @@ public actor BrowserHistoryStore {
     }
 
     /// Stable newest-first pagination, with an optional half-open date range and literal search.
-    public func visits(search: String = "", interval: DateInterval? = nil,
-                       limit: Int = 100, offset: Int = 0) throws -> [BrowserHistoryVisit] {
-        var clauses = ["1"]
-        var values: [HistoryValue] = []
-        if let interval { clauses += ["time>=? AND time<?"]; values += [.number(interval.start.timeIntervalSince1970), .number(interval.end.timeIntervalSince1970)] }
-        if !search.isEmpty {
-            // Library searches intentionally use the same Unicode folding as palette queries.
-            clauses += ["(url IN (SELECT url FROM pages WHERE instr(searchURL,?)>0) OR instr(searchTitle,?)>0)"]
-            values += [.text(Self.fold(search)), .text(Self.fold(search))]
+    /// Runs on the read-only connection, never behind writes; cancelling the calling task
+    /// interrupts the statement, so a superseded search never queues behind the next one.
+    public nonisolated func visits(search: String = "", interval: DateInterval? = nil,
+                                   limit: Int = 100, offset: Int = 0) async throws -> [BrowserHistoryVisit] {
+        guard let reader else { return [] }
+        try Task.checkCancellation()
+        return try await reader.perform { database in
+            try Self.queryVisits(database, search: search, interval: interval, limit: limit, offset: offset)
         }
-        return try readVisits(whereSQL: clauses.joined(separator: " AND "), values: values, limit: min(max(0, limit), 10000), offset: max(0, offset))
     }
 
-    public func days(search: String = "", interval: DateInterval? = nil, calendar: Calendar = .current,
-                     limit: Int = 100, offset: Int = 0) throws -> [BrowserHistoryDay] {
-        let records = try visits(search: search, interval: interval, limit: limit, offset: offset)
+    public nonisolated func days(search: String = "", interval: DateInterval? = nil, calendar: Calendar = .current,
+                                 limit: Int = 100, offset: Int = 0) async throws -> [BrowserHistoryDay] {
+        let records = try await visits(search: search, interval: interval, limit: limit, offset: offset)
         let grouped = Dictionary(grouping: records) { calendar.startOfDay(for: $0.visitedAt) }
         return grouped.keys.sorted(by: >).map { BrowserHistoryDay(day: $0, visits: grouped[$0]!) }
     }
@@ -474,8 +480,9 @@ public actor BrowserHistoryStore {
         return count
     }
 
-    private func readVisits(whereSQL: String, values: [HistoryValue], limit: Int, offset: Int) throws -> [BrowserHistoryVisit] {
-        guard let database, limit > 0 else { return [] }
+    static func readVisits(_ database: HistoryDatabase, whereSQL: String, values: [HistoryValue],
+                           limit: Int, offset: Int) throws -> [BrowserHistoryVisit] {
+        guard limit > 0 else { return [] }
         let statement = try database.prepare("SELECT payload FROM visits WHERE \(whereSQL) ORDER BY time DESC,rowid DESC LIMIT ? OFFSET ?")
         defer { sqlite3_finalize(statement) }
         try database.bind(statement, values + [.number(Double(limit)), .number(Double(offset))])
@@ -499,7 +506,7 @@ public actor BrowserHistoryStore {
     private static func isWebURL(_ url: URL) -> Bool {
         ["http", "https"].contains(url.scheme?.lowercased() ?? "") && url.host != nil && url.user == nil && url.password == nil
     }
-    private static func fold(_ text: String) -> String { text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX")).lowercased() }
+    static func fold(_ text: String) -> String { text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX")).lowercased() }
     private static func searchURL(_ url: URL) -> String {
         BrowserSuggestionText.searchableURL(url)
     }
@@ -519,7 +526,7 @@ final class HistoryDatabase: @unchecked Sendable {
     var faviconCollections = 0
     var changes: Int { Int(sqlite3_changes(handle)) }
 
-    static let currentVersion = 9
+    static let currentVersion = 10
 
     init(openingURL url: URL, flags: Int32) throws {
         // Checked ancestors, single-link database/sidecars, and directory identity before/after open.
@@ -564,6 +571,7 @@ final class HistoryDatabase: @unchecked Sendable {
                         case 6: try migrateToVersionSeven()
                         case 7: try migrateToVersionEight()
                         case 8: try migrateToVersionNine(profileID)
+                        case 9: try migrateToVersionTen()
                         default: throw BrowserHistoryError.unsupportedVersion
                         }
                         migratingVersion += 1
@@ -576,6 +584,8 @@ final class HistoryDatabase: @unchecked Sendable {
                 // Reclaim pages released by deduplication. A failed compaction is retryable and
                 // does not invalidate the already committed migration or its backup.
                 try? execute("VACUUM")
+                // Nothing is indexed yet; restart the backfill from the compacted row identities.
+                try resetVisitSearchBackfill()
                 try FileManager.default.removeItem(at: backup)
             }
             // A process may have stopped after committing version eight but before cleanup.
@@ -924,5 +934,6 @@ extension BrowserHistoryStore {
         }
         return rows("SELECT count(*) FROM search WHERE search MATCH 'orbit'") != nil
             && rows("SELECT count(*) FROM titleWords WHERE titleWords MATCH 'orbit'") != nil
+            && rows("SELECT count(*) FROM visitTitles WHERE visitTitles MATCH 'orbit'") != nil
     }
 }
