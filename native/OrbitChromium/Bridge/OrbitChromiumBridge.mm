@@ -5,6 +5,14 @@
 #import "OrbitApplicationLifecycle.h"
 #include "OrbitBridgeFiles.h"
 #include "OrbitContentBlockerFiles.h"
+// Build-time digests of the bundled content blocker (CMakeLists.txt); standalone compiles of this
+// file for review scripts leave them empty, which skips only that check.
+#ifndef ORBIT_CONTENT_BLOCKER_SHA256_0
+#define ORBIT_CONTENT_BLOCKER_SHA256_0 ""
+#define ORBIT_CONTENT_BLOCKER_SHA256_1 ""
+#define ORBIT_CONTENT_BLOCKER_SHA256_2 ""
+#define ORBIT_CONTENT_BLOCKER_SHA256_3 ""
+#endif
 #include "OrbitBridgePolicy.h"
 #include "OrbitCefApi.h"
 #include "OrbitExtensionPolicy.h"
@@ -266,6 +274,8 @@ struct State {
   uint32_t aborted_creations = 0;
   std::map<uint64_t, Host> hosts;                       // by surface token
   size_t developer_tool_count = 0;
+  // S-L13: Chrome-created tabs the shell declined, adopted by RefusedTabClient until they close.
+  size_t refused_tab_count = 0;
   std::map<uint64_t, uint64_t> pending_profiles;        // surface token -> profile token
   std::map<uint64_t, NSView*> pending_parents;          // retained until the browser exists
   std::set<uint64_t> closed_before_creation;
@@ -438,7 +448,7 @@ struct State {
     if (quitting && !loop_quit && hosts.empty() && pending_profiles.empty() && initializing)
       fprintf(stderr, "acr: quit waiting for request context initialization count=%zu\n", initializing);
     if (quitting && !loop_quit && orbit_bridge::QuitPolicy::CanFinish(
-            hosts.size() + developer_tool_count, pending_profiles.size(), initializing)) {
+            hosts.size() + developer_tool_count + refused_tab_count, pending_profiles.size(), initializing)) {
       loop_quit = true;
       CefQuitMessageLoop();
     }
@@ -573,6 +583,20 @@ void ConfigureSafeBrowsing(CefRefPtr<CefRequestContext> context) {
   }
 }
 
+// H-S4: Global Privacy Control for every profile, private ones included: `Sec-GPC: 1` on requests
+// and `navigator.globalPrivacyControl`. Chromium reads the profile's opt-out preference when the
+// GlobalPrivacyControlApi and UniversalOptOutSettings features are enabled (OnBeforeCommandLine).
+void ConfigurePrivacySignals(CefRefPtr<CefRequestContext> context) {
+  constexpr char kGlobalPrivacyControl[] = "universal_optout.enabled";
+  if (!context || !context->HasPreference(kGlobalPrivacyControl) || !context->CanSetPreference(kGlobalPrivacyControl))
+    return;
+  CefRefPtr<CefValue> value = CefValue::Create();
+  value->SetBool(true);
+  CefString error;
+  if (!context->SetPreference(kGlobalPrivacyControl, value, error))
+    fprintf(stderr, "acr: Global Privacy Control preference refused: %s\n", error.ToString().c_str());
+}
+
 class ProfileHandler final : public CefRequestContextHandler {
  public:
   explicit ProfileHandler(uint64_t token) : token_(token) {}
@@ -581,6 +605,7 @@ class ProfileHandler final : public CefRequestContextHandler {
     if (!g_state) return;
     g_state->ready_profiles.insert(token_);
     ConfigureSafeBrowsing(context);
+    ConfigurePrivacySignals(context);
     // Admitted persistent Orbit profiles may generate locally; Sync stays disabled.
     if (!context->GetCachePath().empty() && context->HasPreference("password_manager.local_generation_enabled")) {
       auto value = CefValue::Create(); value->SetBool(true);
@@ -1755,6 +1780,73 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
   IMPLEMENT_REFCOUNTING(Client);
 };
 
+// S-L13: a tab Chrome created by itself (tabs.create, an options page, a native command) that the
+// shell declined. A tab offered back without a client stays in its logical Browser, invisible and
+// alive (loading, running scripts, holding memory). Instead the bridge adopts it with this client
+// and a detached view it owns: every navigation, popup and new tab is cancelled, and the browser
+// is closed as soon as it exists.
+class RefusedTabClient final : public CefClient, public CefLifeSpanHandler, public CefRequestHandler {
+ public:
+  RefusedTabClient(NSView* view, std::string reason) : view_(view), reason_(std::move(reason)) {
+    if (g_state) ++g_state->refused_tab_count;
+  }
+  ~RefusedTabClient() override { Release(); }
+  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
+  CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
+    CEF_REQUIRE_UI_THREAD();
+    fprintf(stderr, "acr: closing a declined engine-created tab (%s)\n", reason_.c_str());
+    // Chrome may still be inserting and navigating this contents (Navigate runs the creation
+    // hook mid-call): close it on the next UI turn, never inside the creation.
+    PostUI([browser] { browser->GetHost()->CloseBrowser(true); });
+  }
+  bool OnBeforePopup(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int, const CefString&, const CefString&,
+                     WindowOpenDisposition, bool, const CefPopupFeatures&, CefWindowInfo&, CefRefPtr<CefClient>&,
+                     CefBrowserSettings&, CefRefPtr<CefDictionaryValue>&, bool*) override {
+    return true;
+  }
+  bool DoClose(CefRefPtr<CefBrowser> browser) override {
+    // Returning true keeps CEF from closing a window; the browser ends with its released view.
+    NSView* view = (__bridge NSView*)browser->GetHost()->GetWindowHandle();
+    if (view) [view removeFromSuperview];
+    return true;
+  }
+  void OnBeforeClose(CefRefPtr<CefBrowser>) override {
+    CEF_REQUIRE_UI_THREAD();
+    Release();
+  }
+  bool OnBeforeBrowse(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool) override {
+    return true;
+  }
+  bool OnOpenURLFromTab(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, const CefString&, WindowOpenDisposition,
+                        bool) override {
+    return true;
+  }
+
+ private:
+  void Release() {
+    view_ = nil;
+    if (!counted_) return;
+    counted_ = false;
+    if (!g_state) return;
+    --g_state->refused_tab_count;
+    g_state->MaybeFinishQuit();
+  }
+  NSView* view_;
+  const std::string reason_;
+  bool counted_ = true;
+  IMPLEMENT_REFCOUNTING(RefusedTabClient);
+};
+
+// The client and detached parent view that close a declined Chrome-created tab (S-L13).
+struct _cef_client_t* RefuseUnownedTab(void** parent_nsview, const char* reason) {
+  if (!parent_nsview || !g_state || !g_state->initialized) return nullptr;
+  NSView* view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 1, 1)];
+  view.hidden = YES;
+  *parent_nsview = (__bridge void*)view;
+  return orbit_bridge::WrapClientForFramework(new RefusedTabClient(view, reason));
+}
+
 // EXT-OUTCOME-R1: the profile token of a Chrome-created tab's logical Browser: an admitted,
 // ready, persistent or ephemeral request context of this runtime, never the global context or
 // a synthetic authenticated-import target. 0 when none matches.
@@ -1776,23 +1868,26 @@ uint64_t UnownedTabProfile(const char* path) {
 // that surface's client and parent view, exactly like a popup accepted in OnBeforePopup.
 // The shell callback can close the window, remove or unready the profile, clear the handler or
 // quit: every authority checked before it is captured and verified again afterwards, and a
-// refusal after the shell answered aborts that surface exactly once.
+// refusal after the shell answered aborts that surface exactly once. S-L13: every refusal closes
+// the tab (RefuseUnownedTab) instead of leaving it alive without a view.
 struct _cef_client_t* AdoptUnownedTab(void*, const orbit_unowned_tab_t* tab, void** parent_nsview) {
   if (parent_nsview) *parent_nsview = nullptr;
-  if (!NSThread.isMainThread || !g_state || !g_state->initialized || g_state->quitting || !tab ||
-      !parent_nsview || tab->struct_size < sizeof(orbit_unowned_tab_t) ||
-      !g_state->callbacks.adopt_engine_tab || !g_state->windows.contains(tab->window_token)) return nullptr;
+  if (!NSThread.isMainThread || !g_state || !g_state->initialized || !tab || !parent_nsview ||
+      tab->struct_size < sizeof(orbit_unowned_tab_t)) return nullptr;
+  if (g_state->quitting || !g_state->callbacks.adopt_engine_tab || !g_state->windows.contains(tab->window_token))
+    return RefuseUnownedTab(parent_nsview, "no-shell-window");
   auto* const runtime = g_state;
   const uint64_t lifetime = runtime->extension_lifetime;
   const uint64_t registration = runtime->unowned_handler_generation;
   const auto adopt = runtime->callbacks.adopt_engine_tab;
   const uint64_t window = tab->window_token;
   const auto handle = runtime->shell_window_handles.find(window);
-  if (handle == runtime->shell_window_handles.end() || !handle->second) return nullptr;
+  if (handle == runtime->shell_window_handles.end() || !handle->second)
+    return RefuseUnownedTab(parent_nsview, "no-native-window");
   void* const native_window = handle->second;
   const std::string path = tab->profile_path ? tab->profile_path : "";
   const uint64_t profile = UnownedTabProfile(path.c_str());
-  if (!profile) return nullptr;
+  if (!profile) return RefuseUnownedTab(parent_nsview, "profile-not-admitted");
   if (runtime->engine_tab_claim &&
       orbit_bridge::MatchesEngineTabClaim(runtime->engine_tab_claim->window, runtime->engine_tab_claim->profile,
                                           window, profile)) {
@@ -1801,7 +1896,8 @@ struct _cef_client_t* AdoptUnownedTab(void*, const orbit_unowned_tab_t* tab, voi
     const auto claim = *runtime->engine_tab_claim;
     runtime->engine_tab_claim.reset();
     const auto view = runtime->pending_parents.find(claim.token);
-    if (view == runtime->pending_parents.end() || !runtime->pending_profiles.contains(claim.token)) return nullptr;
+    if (view == runtime->pending_parents.end() || !runtime->pending_profiles.contains(claim.token))
+      return RefuseUnownedTab(parent_nsview, "claimed-surface-gone");
     if (tab->url && claim.url != tab->url)
       fprintf(stderr, "acr: engine tab url differs from the claimed link token=%llu\n", claim.token);
     CefRefPtr<Client> client = new Client(claim.token, profile);
@@ -1813,7 +1909,7 @@ struct _cef_client_t* AdoptUnownedTab(void*, const orbit_unowned_tab_t* tab, voi
   uint64_t token = 0;
   void* parent = adopt(runtime->context, window, profile, tab->url ? tab->url : "",
                        tab->active == 1 ? 1 : 0, &token);
-  if (!parent || !token) return nullptr;
+  if (!parent || !token) return RefuseUnownedTab(parent_nsview, "declined-by-shell");
   const auto authority_unchanged = [&] {
     if (g_state != runtime || runtime->extension_lifetime != lifetime || !runtime->initialized ||
         runtime->quitting || runtime->unowned_handler_generation != registration ||
@@ -1831,13 +1927,13 @@ struct _cef_client_t* AdoptUnownedTab(void*, const orbit_unowned_tab_t* tab, voi
       (!view.window || (__bridge void*)view.window == native_window);
   if (runtime->hosts.contains(token) || runtime->pending_profiles.contains(token)) {
     // A token already in use belongs to another surface: never abort or reuse it.
-    return nullptr;
+    return RefuseUnownedTab(parent_nsview, "token-in-use");
   }
   if (!authority_unchanged() || !view_ok) {
     if (g_state == runtime && runtime->extension_lifetime == lifetime) {
       runtime->NotifyAborted(token, profile, "unowned-tab-authority-revoked");
     }
-    return nullptr;
+    return RefuseUnownedTab(parent_nsview, "authority-revoked");
   }
   CefRefPtr<Client> client = new Client(token, profile);
   client->MarkAdopted(lifetime);
@@ -2048,7 +2144,10 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     if (!enabled.empty()) enabled += ",";
     // The user's page scrollbar choice selects the engine's existing overlay mode; otherwise the
     // feature keeps its default (follow the system scroller style).
-    command->AppendSwitchWithValue("enable-features", enabled + "WebContentsDiscard" +
+    // H-S4: GlobalPrivacyControlApi and UniversalOptOutSettings make Chromium send Global Privacy
+    // Control from each profile's preference (ConfigurePrivacySignals).
+    command->AppendSwitchWithValue("enable-features", enabled + "WebContentsDiscard,GlobalPrivacyControlApi,"
+        "UniversalOptOutSettings" +
         (g_state && g_state->overlay_scrollbars ? ",OverlayScrollbar:mode/overlay" : ""));
     // Disabled features of the allow-listed arguments, the extra switches and the policy, as one
     // value (the filtered argv carries none itself).
@@ -2202,6 +2301,7 @@ class App final : public CefApp, public CefBrowserProcessHandler {
       if (g_state->set_unowned_tab_handler(&AdoptUnownedTab, nullptr) != 1) g_state->set_unowned_tab_handler = nullptr;
     }
     ConfigureSafeBrowsing(CefRequestContext::GetGlobalContext());
+    ConfigurePrivacySignals(CefRequestContext::GetGlobalContext());
     g_state->Simple(ACR_EVENT_READY, 0);
   }
 
@@ -2391,8 +2491,12 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     state.anchor = orbit_bridge::AnchoredRoot::Open(state.root);
     if (!state.anchor) return 64;
     if (NSString* blocker = [[NSBundle mainBundle] pathForResource:@"ContentBlocker" ofType:nil]) {
+      // S-M8: the signed bundle stays read-only. Its files must match the digests computed when
+      // this app was built; Chromium indexes the verified copy in the data root.
       state.content_blocking_path = orbit_bridge::StageContentBlocker(
-          *state.anchor, blocker.stringByResolvingSymlinksInPath.fileSystemRepresentation);
+          *state.anchor, blocker.stringByResolvingSymlinksInPath.fileSystemRepresentation,
+          {ORBIT_CONTENT_BLOCKER_SHA256_0, ORBIT_CONTENT_BLOCKER_SHA256_1, ORBIT_CONTENT_BLOCKER_SHA256_2,
+           ORBIT_CONTENT_BLOCKER_SHA256_3});
       if (state.content_blocking_path.empty()) {
         fprintf(stderr, "acr: could not stage built-in content blocking in the engine data root\n");
         return 73;
@@ -2908,9 +3012,18 @@ extern "C" int32_t ACRSetAutomaticPiP(uint64_t token, int32_t automatic) {
   return g_state->orbit->set_automatic_pip(host->browser->GetIdentifier(), automatic);
 }
 
+// H-S7: the single gate of every DevTools protocol method the bridge sends (OrbitBridgePolicy.h).
+static bool DevToolsMethodAllowed(const char* method) {
+  if (!method) return false;
+  const bool laboratory = g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK;
+  if (orbit_bridge::AllowsDevToolsMethod(method, laboratory)) return true;
+  fprintf(stderr, "acr: refused DevTools method %.64s\n", method);
+  return false;
+}
+
 extern "C" int32_t ACRExecuteDevToolsMethod(uint64_t token, const char* method, const char* params) {
   ACR_HOST(token);
-  if (!method) return 0;
+  if (!DevToolsMethodAllowed(method)) return 0;
   CefRefPtr<CefDictionaryValue> dictionary;
   if (params && *params) {
     auto value = CefParseJSON(params, JSON_PARSER_RFC);
@@ -3328,6 +3441,7 @@ extern "C" int32_t ACRSafeBrowsingEnabled(uint64_t profile) {
   return value->GetBool() ? 1 : 0;
 }
 
+namespace { void RevealHostedContent(CefRefPtr<CefBrowser> browser); }
 static int32_t ActivateSurface(uint64_t token, std::string tab) {
   static os_log_t input_log = os_log_create("local.orbit", "sidebar-input");
   const auto trace = [token, tab](uint64_t ticket, const char* outcome) {
@@ -3348,6 +3462,7 @@ static int32_t ActivateSurface(uint64_t token, std::string tab) {
     if (current->window != window || current->browser != browser) { trace(0, "host-moved"); return int32_t{0}; }
     if (current->closing_by_shell) { trace(0, "host-closing"); return int32_t{0}; }
     const auto result = g_state->orbit->activate_tab(browser->GetIdentifier());
+    if (result == 1) RevealHostedContent(browser);
     if (result == 1 && g_state) {
       auto* live = g_state->Find(token);
       if (live && live->window == window && live->browser == browser && !live->closing_by_shell)
@@ -3479,6 +3594,16 @@ extern "C" int32_t ACRIsFullscreen(uint64_t token) {
 namespace {
 // Chrome resolves the target of window-level commands (DevTools opener, Chrome commands) from the
 // active tab of the logical Browser (chrome_browser_delegate.cc:65-66).
+// A tab Chrome created with a background disposition (Command-click, a context-menu "Open Link
+// in New Tab") starts with its WebContents view hidden (WebContentsViewMac::CreateView), and tab
+// strip activation never shows it in hosted mode. Once the shell activates the tab it is on
+// screen: unhide that view so Chromium reports the contents visible (viewDidUnhide -> WasShown).
+void RevealHostedContent(CefRefPtr<CefBrowser> browser) {
+  NSView* handle = (__bridge NSView*)browser->GetHost()->GetWindowHandle();
+  if (handle && handle.hidden && [NSStringFromClass([handle class]) containsString:@"WebContentsView"])
+    handle.hidden = NO;
+}
+
 void ActivateHosted(Host* host) {
   if (host->window && g_state->orbit) g_state->orbit->activate_tab(host->browser->GetIdentifier());
 }
@@ -3548,7 +3673,8 @@ void SelectDeveloperPanel(Host* host) {
   parameters->SetString("expression", "import('devtools://devtools/bundled/ui/legacy/legacy.js').then(m => "
       "m.InspectorView.InspectorView.instance().showPanel('" + host->developer_panel + "'))");
   parameters->SetBool("awaitPromise", true);
-  host->developer_browser->GetHost()->ExecuteDevToolsMethod(0, "Runtime.evaluate", parameters);
+  if (DevToolsMethodAllowed("Runtime.evaluate"))
+    host->developer_browser->GetHost()->ExecuteDevToolsMethod(0, "Runtime.evaluate", parameters);
 }
 
 class DeveloperPanelClient final : public CefClient, public CefLifeSpanHandler, public CefLoadHandler {

@@ -338,6 +338,12 @@ struct NativePageInteractionTests {
         #expect(edit[3][0].isEnabled == false && edit[4].map(\.isEnabled) == [false, false, true, true])
         #expect(BrowserPageContextCommands.engineCommand(for: .pageSpellingSuggestion1, request: editable) == .replaceMisspelling("help"))
         #expect(BrowserPageContextCommands.engineCommand(for: .pageAddToDictionary, request: editable) == .addToDictionary("helo"))
+        // Engines that open the menu's link themselves keep the document as initiator (Chromium).
+        let engineLink = BrowserContextMenuRequest(location: .zero, linkURL: URL(string: "https://b.test/l")!,
+                                                   documentGeneration: 1, availableCommands: [.openLink])
+        #expect(BrowserPageContextCommands.engineCommand(for: .pageOpenLinkInNewTab, request: engineLink) == .openLink(.newTab))
+        #expect(BrowserPageContextCommands.engineCommand(for: .pageOpenLinkInSplitView, request: engineLink) == .openLink(.splitView))
+        #expect(BrowserPageContextCommands.engineCommand(for: .pageOpenLinkInNewTab, request: editable) == nil)
         let page = BrowserContextMenuRequest(location: .zero, pageURL: URL(string: "https://b.test/")!, documentGeneration: 1,
                                              availableCommands: [.inspect])
         let pageGroups = BrowserPageContextMenuModel.groups(for: page, context: context)
@@ -379,11 +385,23 @@ struct NativePageInteractionTests {
         #expect(controller.session.snapshot?.tabs.contains { $0.url == link } == true)
         #expect(controller.session.snapshot?.selectedOccurrenceID == selected, "Open Link in New Tab stays in the background")
 
+        // An engine that opens the link from the document receives the command; nothing loads it by URL.
+        let tabsBefore = controller.session.snapshot?.tabs.count
+        let engineOpened = BrowserContextMenuRequest(location: .zero, pageURL: surface.navigationState.committedURL,
+                                                     linkURL: URL(string: "https://engine.test/")!,
+                                                     documentGeneration: surface.documentGeneration,
+                                                     availableCommands: [.openLink])
+        controller.surface(surface, showContextMenu: engineOpened)
+        controller.performPageContextCommand(.pageOpenLinkInNewTab)
+        await controller.session.waitForPendingCommands()
+        #expect(surface.performedContextMenuCommands == [.saveLink, .openLink(.newTab)])
+        #expect(controller.session.snapshot?.tabs.count == tabsBefore)
+
         // A newer document invalidates the captured menu.
         surface.navigate(to: URL(string: "https://page.test/other")!)
         try await waitForPage("other document") { surface.navigationState.committedURL?.path == "/other" }
         controller.performPageContextCommand(.pageInspect)
-        #expect(surface.performedContextMenuCommands == [.saveLink], "nothing reaches a newer document")
+        #expect(surface.performedContextMenuCommands == [.saveLink, .openLink(.newTab)], "nothing reaches a newer document")
 
         // Without the capability, no menu: the engine's native menu is released.
         engine.extraCapabilities = []

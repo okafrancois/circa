@@ -225,6 +225,10 @@ enum BrowserPageContextCommands {
             return .replaceMisspelling(request.spellingSuggestions[index])
         }
         switch id {
+        case .pageOpenLinkInNewTab:
+            return request.availableCommands.contains(.openLink) ? .openLink(.newTab) : nil
+        case .pageOpenLinkInSplitView:
+            return request.availableCommands.contains(.openLink) ? .openLink(.splitView) : nil
         case .pageSaveLinkAs: return .saveLink
         case .pageSaveImageAs: return .saveImage
         case .pageCopyImage: return .copyImage

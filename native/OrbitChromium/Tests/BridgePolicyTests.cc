@@ -157,8 +157,12 @@ void EssentialSurfacePolicies() {
   Check(unique.size() == names.size(), "context menu command names are unique");
   Check(unique.contains("IDC_CONTENT_CONTEXT_INSPECTELEMENT") && unique.contains("IDC_SPELLCHECK_SUGGESTION_0"),
         "inspect and spelling suggestions are offered");
-  Check(!unique.contains("IDC_VIEW_SOURCE") && !unique.contains("IDC_CONTENT_CONTEXT_OPENLINKNEWTAB"),
-        "commands that would add tabs Orbit does not own are never executed by Chrome");
+  Check(!unique.contains("IDC_VIEW_SOURCE") && !unique.contains("IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW") &&
+            !unique.contains("IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD") &&
+            !unique.contains("IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW"),
+        "commands that would add tabs or windows Orbit does not place are never executed by Chrome");
+  // Open Link in New Tab reaches OnOpenURLFromTab with the frame as initiator; the shell places it.
+  Check(unique.contains("IDC_CONTENT_CONTEXT_OPENLINKNEWTAB"), "Open Link in New Tab runs Chrome's own command");
   const std::set<int32_t> offered = {50150, 50162};
   Check(orbit_bridge::AcceptsContextMenuCommand(50150, offered), "an offered command is executed");
   Check(!orbit_bridge::AcceptsContextMenuCommand(50151, offered), "a command not offered for this request cancels");
@@ -392,7 +396,31 @@ void OpenURLFromTabKeepsInitiatorWherePossible() {
   Check(!orbit_bridge::MatchesEngineTabClaim(0, 0, 0, 0), "an empty claim matches nothing");
 }
 
+void DevToolsMethodsAreAllowListed() {
+  using orbit_bridge::AllowsDevToolsMethod;
+  for (bool laboratory : {false, true}) {
+    for (const char* method : {"Runtime.evaluate", "Page.getFrameTree", "Page.createIsolatedWorld",
+                               "Page.captureScreenshot", "DOM.getNodeForLocation", "Storage.clearDataForOrigin"})
+      Check(AllowsDevToolsMethod(method, laboratory), "a product method is allowed in every run");
+    for (const char* method : {"", "Browser.close", "Browser.crash", "Target.createTarget", "Target.attachToTarget",
+                               "Network.setCookies", "Fetch.enable", "Network.setRequestInterception",
+                               "Page.navigate", "Debugger.enable", "Runtime.evaluate ", "runtime.evaluate",
+                               "Runtime.evaluateX", "Storage.clearCookies", "Browser.grantPermissions"})
+      Check(!AllowsDevToolsMethod(method, laboratory), "an unlisted method is refused in every run");
+  }
+  for (const char* method : {"Network.setCookie", "Input.dispatchMouseEvent", "Security.setIgnoreCertificateErrors",
+                             "Page.crash", "Target.getTargets", "WebAuthn.addVirtualAuthenticator", "Tracing.start"}) {
+    Check(!AllowsDevToolsMethod(method, false), "a laboratory method is refused in a product run");
+    Check(AllowsDevToolsMethod(method, true), "a laboratory method is allowed in a synthetic run");
+  }
+  std::set<std::string_view> product(std::begin(orbit_bridge::kDevToolsProductMethods),
+                                     std::end(orbit_bridge::kDevToolsProductMethods));
+  for (const auto method : orbit_bridge::kDevToolsLaboratoryMethods)
+    Check(!product.contains(method), "a method is listed once");
+}
+
 int main() {
+  DevToolsMethodsAreAllowListed();
   OpenURLFromTabKeepsInitiatorWherePossible();
   RenderersRunWithoutXSLT();
   KeyReceiptsAreBoundedPerSurface();

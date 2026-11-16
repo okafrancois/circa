@@ -40,6 +40,13 @@ inline bool Read(int directory, const char* name, std::string& bytes) {
   close(fd);
   return ok;
 }
+inline std::string Sha256Hex(const std::string& bytes) {
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(bytes.data(), static_cast<CC_LONG>(bytes.size()), digest);
+  std::string hex;
+  for (auto byte : digest) { hex += "0123456789abcdef"[byte >> 4]; hex += "0123456789abcdef"[byte & 15]; }
+  return hex;
+}
 inline bool Matches(const AnchoredRoot& directory, const std::array<std::string, 5>& contents) {
   for (size_t i = 0; i < files.size(); ++i) {
     std::string bytes;
@@ -49,8 +56,14 @@ inline bool Matches(const AnchoredRoot& directory, const std::array<std::string,
 }
 }  // namespace content_blocker
 
-// Empty means startup must fail, never fall back to loading from the signed bundle.
-inline std::string StageContentBlocker(const AnchoredRoot& root, const std::string& source) {
+// SHA-256 (lowercase hex) of each entry of `files`, computed when the app was built. Empty entries
+// skip the check (laboratory callers without a build-time digest).
+using ExpectedDigests = std::array<const char*, 4>;
+
+// Empty means startup must fail, never fall back to loading from the signed bundle. With
+// `expected`, every bundled file must match its build-time digest before it is copied.
+inline std::string StageContentBlocker(const AnchoredRoot& root, const std::string& source,
+                                       const ExpectedDigests& expected = {}) {
   using namespace content_blocker;
   // Foundation abbreviates /private/tmp to /tmp even after resolving symlinks.
   // Canonicalize the trusted bundle source with the same POSIX rules as AnchoredRoot.
@@ -63,6 +76,7 @@ inline std::string StageContentBlocker(const AnchoredRoot& root, const std::stri
   CC_SHA256_Init(&hash);
   for (size_t i = 0; i < files.size(); ++i) {
     if (!Read(bundled->fd(), files[i], contents[i])) return {};
+    if (expected[i] && *expected[i] && Sha256Hex(contents[i]) != expected[i]) return {};
     const uint64_t size = contents[i].size();
     CC_SHA256_Update(&hash, &size, sizeof(size));
     CC_SHA256_Update(&hash, contents[i].data(), static_cast<CC_LONG>(size));

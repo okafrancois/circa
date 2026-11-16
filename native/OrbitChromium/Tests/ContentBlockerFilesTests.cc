@@ -42,6 +42,20 @@ int main() {
   fs::remove_all(work / "other/ContentBlocking");
   fs::create_directory_symlink(source, work / "other/ContentBlocking");
   assert(orbit_bridge::StageContentBlocker(*other, source.string()).empty());
+  // S-M8: build-time digests. Matching digests stage; a tampered bundled file is refused.
+  fs::remove_all(work / "other/ContentBlocking");
+  put(source / "rulesets/LICENSE.md", "changed license");
+  using orbit_bridge::content_blocker::Sha256Hex;
+  const std::string digests[4] = {Sha256Hex("manifest.json"), Sha256Hex("rulesets/easylist.json"),
+                                  Sha256Hex("rulesets/easyprivacy.json"), Sha256Hex("changed license")};
+  const orbit_bridge::ExpectedDigests expected = {digests[0].c_str(), digests[1].c_str(), digests[2].c_str(),
+                                                  digests[3].c_str()};
+  assert(Sha256Hex("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  assert(!orbit_bridge::StageContentBlocker(*other, source.string(), expected).empty());
+  const std::string wrong = Sha256Hex("tampered");
+  const orbit_bridge::ExpectedDigests mismatch = {digests[0].c_str(), digests[1].c_str(), wrong.c_str(),
+                                                  digests[3].c_str()};
+  assert(orbit_bridge::StageContentBlocker(*other, source.string(), mismatch).empty());
   chmod(source.c_str(), 0700);
   fs::remove(source / "manifest.json");
   assert(orbit_bridge::StageContentBlocker(*root, source.string()).empty());

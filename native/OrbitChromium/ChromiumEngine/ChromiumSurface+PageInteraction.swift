@@ -262,7 +262,10 @@ extension ChromiumSurface {
         .mediaPlayPause: "IDC_CONTENT_CONTEXT_PLAYPAUSE", .mediaMute: "IDC_CONTENT_CONTEXT_MUTE",
         .mediaLoop: "IDC_CONTENT_CONTEXT_LOOP", .mediaControls: "IDC_CONTENT_CONTEXT_CONTROLS",
         .mediaPictureInPicture: "IDC_CONTENT_CONTEXT_PICTUREINPICTURE", .lookUp: "IDC_CONTENT_CONTEXT_LOOK_UP",
-        .inspect: "IDC_CONTENT_CONTEXT_INSPECTELEMENT"
+        .inspect: "IDC_CONTENT_CONTEXT_INSPECTELEMENT",
+        // Chrome opens the link from the frame (initiator, referrer, SameSite context); the
+        // new-target request it causes is placed by `contextMenuLinkPlacement`.
+        .openLink: "IDC_CONTENT_CONTEXT_OPENLINKNEWTAB"
     ]
 
     /// Chrome command name for a contract command; spelling suggestions by their index (Chrome offers
@@ -351,7 +354,19 @@ extension ChromiumSurface {
             id = nativeID
         }
         openContextMenu = nil
-        guard ACRResolveContextMenu(menu.id, id) == 1 else { throw BrowserEngineError.unsupportedOperation }
+        if case .openLink(let placement) = command {
+            guard let link = request.linkURL else { throw BrowserEngineError.unsupportedOperation }
+            // Chrome runs the command synchronously (OnOpenURLFromTab -> decideNewSurface); a
+            // placement still pending after this turn was never asked for.
+            contextMenuLinkPlacement = (link, placement == .splitView ? [.option] : [.command])
+            Task { @MainActor [weak self] in
+                if self?.contextMenuLinkPlacement?.url == link { self?.contextMenuLinkPlacement = nil }
+            }
+        }
+        guard ACRResolveContextMenu(menu.id, id) == 1 else {
+            contextMenuLinkPlacement = nil
+            throw BrowserEngineError.unsupportedOperation
+        }
         onEngineEvent?("context-menu-command", ["command": command.kind.rawValue])
     }
 
