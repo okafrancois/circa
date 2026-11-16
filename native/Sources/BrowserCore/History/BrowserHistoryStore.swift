@@ -381,6 +381,14 @@ public actor BrowserHistoryStore {
         }
     }
 
+    /// One visit by identity (what a single-visit deletion targets), or nil.
+    public nonisolated func visit(id: UUID) async throws -> BrowserHistoryVisit? {
+        guard let reader else { return nil }
+        return try await reader.perform { database in
+            try Self.readVisits(database, whereSQL: "id=?", values: [.text(id.uuidString)], limit: 1, offset: 0).first
+        }
+    }
+
     public nonisolated func days(search: String = "", interval: DateInterval? = nil, calendar: Calendar = .current,
                                  limit: Int = 100, offset: Int = 0) async throws -> [BrowserHistoryDay] {
         let records = try await visits(search: search, interval: interval, limit: limit, offset: offset)

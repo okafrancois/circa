@@ -22,8 +22,8 @@ extension ChromiumBrowserEngine: BrowserSiteDataAccess {
         return webContentEngine
     }
 
-    private func siteDataCommand(_ method: String, parameters: [String: Any] = [:],
-                                 surface: ChromiumSurface, timeout: Duration = .seconds(8)) async throws -> [String: Any] {
+    func siteDataCommand(_ method: String, parameters: [String: Any] = [:],
+                         surface: ChromiumSurface, timeout: Duration = .seconds(8)) async throws -> [String: Any] {
         let encoded = try JSONSerialization.data(withJSONObject: parameters)
         let (ok, data) = await surface.devToolsCall(method, params: String(decoding: encoded, as: UTF8.self), timeout: timeout)
         guard ok, !surface.isDisposed,
@@ -89,6 +89,11 @@ extension ChromiumBrowserEngine: BrowserSiteDataAccess {
                 try await clearOriginData(origin, domain: domain, profileID: profileID, surface: surface)
             }
         }
+        // The site's cookies must not survive in the update recovery snapshots either.
+        let dataRoot = URL(fileURLWithPath: runtime.rootCachePath).deletingLastPathComponent()
+        await Task.detached(priority: .utility) {
+            _ = try? BrowserEngineMigrationBackup.prune(profile: profileID, .site(domain), dataRoot: dataRoot)
+        }.value
     }
 
     private func clearOriginData(_ origin: BrowserSiteOrigin, domain: String, profileID: ProfileID,
@@ -158,8 +163,8 @@ extension ChromiumBrowserEngine: BrowserSiteDataAccess {
         """
 
     /// A windowless page of `profileID` showing exactly `url`, disposed when `body` returns.
-    private func withHiddenSiteDataPage<T>(_ url: URL, profileID: ProfileID,
-                                           _ body: (ChromiumSurface) async throws -> T) async throws -> T {
+    func withHiddenSiteDataPage<T>(_ url: URL, profileID: ProfileID,
+                                   _ body: (ChromiumSurface) async throws -> T) async throws -> T {
         guard !isShutDown, !runtime.removingProfiles.contains(profileID), !refusedProfiles.contains(profileID) else {
             throw BrowserSiteDataError.removalIncomplete
         }
