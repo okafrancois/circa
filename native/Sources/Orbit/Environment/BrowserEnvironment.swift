@@ -859,6 +859,14 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         }
     }
 
+    /// Cancels a debounced background save and returns once none is writing. The next
+    /// mutation schedules a new one. Callers that replace the session file outside the
+    /// persistence layer (tests) use it so no save races their file operations.
+    func settleScheduledSave() async {
+        saveTask?.cancel()
+        await saveTask?.value
+    }
+
     /// Saves now and returns once the current model is durably written (used by the Orbit import,
     /// which records its ledger only after the merged session is on disk).
     func saveNow(fullSync: Bool = false) async throws {

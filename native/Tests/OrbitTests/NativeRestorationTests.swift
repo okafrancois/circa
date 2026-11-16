@@ -340,7 +340,11 @@ struct NativeRestorationTests {
         await controller.session.waitForPendingCommands()
         let surface = try #require(controller.session.selectedSurface)
         try await waitForRestoration { surface.webView.title == "First" }
-        try BrowserSessionFileStore().save(await environment.store.sessionDocument(), to: file)
+        let document = await environment.store.sessionDocument()
+        // The page load scheduled a background save 0.15 s later. Settle it, then replace the
+        // file without suspending, so no save can write the destination during the swap.
+        await environment.settleScheduledSave()
+        try BrowserSessionFileStore().save(document, to: file)
         try FileManager.default.moveItem(at: file, to: prior)
         try FileManager.default.createSymbolicLink(at: file, withDestinationURL: prior)
         controller.submitAddress("http://127.0.0.1:\(port)/drop")
@@ -350,6 +354,7 @@ struct NativeRestorationTests {
         await controller.session.waitForPendingCommands()
         await #expect(throws: BrowserSessionFileError.symbolicLink) { try await environment.finalize() }
         controller.cancelTerminationPreparation()
+        await environment.settleScheduledSave()
         try FileManager.default.removeItem(at: file)
         try FileManager.default.moveItem(at: prior, to: file)
         _ = try await surface.webView.evaluateJavaScript("location.href='/second'")
