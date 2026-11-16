@@ -284,6 +284,7 @@ extension BrowserWindowController {
               surface.documentGeneration == menu.request.documentGeneration else { return }
         let request = menu.request
         if let command = BrowserPageContextCommands.engineCommand(for: id, request: request) {
+            if id == .pageOpenLinkInSplitView, !canAddSplitPane { NSSound.beep(); return }
             if id == .pagePaste || id == .pagePasteAndMatchStyle { OrbitUnsavedInputGuard.paste(into: surface) }
             pageInteraction.menu?.deliveredEngineCommand = true
             do { try surface.performContextMenuCommand(command, for: request) } catch { NSSound.beep() }

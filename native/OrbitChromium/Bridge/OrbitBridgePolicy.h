@@ -10,6 +10,7 @@
 #include <deque>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -374,6 +375,7 @@ inline bool AllowsFolderChooser(bool hosted, uint32_t essentials_level) {
 // menu model for the request are offered to the shell.
 inline const std::vector<const char*>& ContextMenuCommandNames() {
   static const std::vector<const char*> names = {
+      "IDC_CONTENT_CONTEXT_OPENLINKNEWTAB",
       "IDC_CONTENT_CONTEXT_UNDO", "IDC_CONTENT_CONTEXT_REDO", "IDC_CONTENT_CONTEXT_CUT",
       "IDC_CONTENT_CONTEXT_COPY", "IDC_CONTENT_CONTEXT_PASTE", "IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE",
       "IDC_CONTENT_CONTEXT_DELETE", "IDC_CONTENT_CONTEXT_SELECTALL",
@@ -419,6 +421,50 @@ inline bool MatchesEngineTabClaim(uint64_t claim_window, uint64_t claim_profile,
 // that very request (present and enabled in Chrome's model); anything else cancels the menu.
 inline bool AcceptsContextMenuCommand(int32_t command_id, const std::set<int32_t>& offered) {
   return command_id > 0 && offered.contains(command_id);
+}
+
+// H-S7: the DevTools protocol methods the shell sends (ACRExecuteDevToolsMethod and the bridge's
+// own DevTools frontend call). Anything else is refused and logged, so a shell bug cannot reach
+// sensitive methods (Browser.*, Target.*, Network.setCookie, Storage.*ForOrigin on other origins...).
+// Keep both lists exact: scripts/test_devtools_allowlist.py compares them with the sources.
+// Product features (page reading, link geometry, site data, suspension, snapshots, Picture in
+// Picture, secure input, link reopen):
+inline constexpr std::string_view kDevToolsProductMethods[] = {
+    "DOM.getBoxModel", "DOM.getNodeForLocation", "DOM.resolveNode",
+    "DOMStorage.getDOMStorageItems",
+    "Network.deleteCookies", "Network.getAllCookies",
+    "Page.addScriptToEvaluateOnNewDocument", "Page.captureScreenshot", "Page.captureSnapshot",
+    "Page.createIsolatedWorld", "Page.enable", "Page.getFrameTree", "Page.getLayoutMetrics",
+    "Page.setLifecycleEventsEnabled",
+    "Runtime.addBinding", "Runtime.callFunctionOn", "Runtime.compileScript", "Runtime.enable",
+    "Runtime.evaluate", "Runtime.releaseObject",
+    "Storage.clearDataForOrigin", "Storage.getUsageAndQuota",
+    "WebAudio.enable",
+};
+// Laboratory probes and smoke scenarios only: accepted in synthetic runs (mock keychain), never
+// in a product run.
+inline constexpr std::string_view kDevToolsLaboratoryMethods[] = {
+    "Browser.getVersion",
+    "Emulation.setGeolocationOverride",
+    "Input.dispatchKeyEvent", "Input.dispatchMouseEvent", "Input.insertText",
+    "Memory.simulatePressureNotification",
+    "Network.setCookie",
+    "Page.crash", "Page.getNavigationHistory", "Page.resetNavigationHistory",
+    "Runtime.getIsolateId",
+    "Security.setIgnoreCertificateErrors",
+    "Target.getTargets",
+    "Tracing.end", "Tracing.start",
+    "WebAuthn.addVirtualAuthenticator", "WebAuthn.disable", "WebAuthn.enable", "WebAuthn.getCredentials",
+    "WebAuthn.removeVirtualAuthenticator",
+};
+
+inline bool AllowsDevToolsMethod(std::string_view method, bool laboratory) {
+  for (const auto allowed : kDevToolsProductMethods)
+    if (method == allowed) return true;
+  if (!laboratory) return false;
+  for (const auto allowed : kDevToolsLaboratoryMethods)
+    if (method == allowed) return true;
+  return false;
 }
 
 }  // namespace orbit_bridge

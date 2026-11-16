@@ -670,6 +670,9 @@ enum OrbitPerformanceProbe {
                     result["navigationGuard"] = await OrbitNavigationGuardProbe.run(owner, environment: environment, command: command)
                 } else if name == "navigation-history" {
                     result["navigationHistory"] = await OrbitNavigationHistoryProbe.run(owner, command: command, root: root)
+                } else if name == "bridge-hardening" {
+                    if Bundle.main.bundleIdentifier == OrbitBridgeHardeningProbe.bundleID { application.confirmQuit = { .quit } }
+                    result["bridgeHardening"] = await OrbitBridgeHardeningProbe.run(owner, command: command, root: root)
                 } else if name == "content-blocking" {
                     result["contentBlocking"] = await OrbitContentBlockingProbe.run(owner, environment: environment,
                         application: application, command: command, root: root)

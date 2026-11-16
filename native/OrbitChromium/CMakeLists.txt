@@ -61,6 +61,20 @@ target_compile_definitions(OrbitChromiumBridge PRIVATE ${CEF_COMPILER_DEFINES} C
 target_compile_options(OrbitChromiumBridge PRIVATE ${CEF_COMPILER_FLAGS} ${CEF_CXX_COMPILER_FLAGS}
   ${CEF_COMPILER_FLAGS_RELEASE} -fobjc-arc)
 set_target_properties(OrbitChromiumBridge PROPERTIES OBJCXX_STANDARD 20)
+# The bundled content blocker files (PackageApp.cmake) are verified at launch against these
+# build-time SHA-256 digests before the bridge copies them to the data root, in the order of
+# orbit_bridge::content_blocker::files.
+set(ORBIT_CONTENT_BLOCKER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/ContentBlocker/manifest.json"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/easylist/easylist.json"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/easylist/easyprivacy.json"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/easylist/LICENSE.md")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ORBIT_CONTENT_BLOCKER_SOURCES})
+set(ORBIT_CONTENT_BLOCKER_INDEX 0)
+foreach(SOURCE IN LISTS ORBIT_CONTENT_BLOCKER_SOURCES)
+  file(SHA256 "${SOURCE}" DIGEST)
+  target_compile_definitions(OrbitChromiumBridge PRIVATE "ORBIT_CONTENT_BLOCKER_SHA256_${ORBIT_CONTENT_BLOCKER_INDEX}=\"${DIGEST}\"")
+  math(EXPR ORBIT_CONTENT_BLOCKER_INDEX "${ORBIT_CONTENT_BLOCKER_INDEX} + 1")
+endforeach()
 target_link_libraries(OrbitChromiumBridge PUBLIC pinned_cef_wrapper ${CEF_STANDARD_LIBS} OrbitNetworkQoS)
 
 # A private linked image: dyld does not apply executable-local interpose tuples to CEF.
@@ -175,6 +189,7 @@ list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitAuthCookieProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitContentBlockingProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitBridgeHardeningProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitGitHubCompatibilityProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitGmailProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitCalendarProbe.swift"

@@ -35,7 +35,13 @@ final class OrbitAppIconController: ObservableObject {
             // Never modify a test runner or an unrelated host application.
             guard Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") as? String == "Orbit.icns",
                   Bundle.main.bundleURL.pathExtension == "app" else { return false }
-            return NSWorkspace.shared.setIcon(image, forFile: Bundle.main.bundlePath, options: [])
+            // The signed bundle is never written: a custom Finder icon adds a file inside it and
+            // breaks code signature verification. The choice applies to the Dock while running.
+            // A custom icon left by an earlier version is removed once, which restores the seal.
+            if FileManager.default.fileExists(atPath: Bundle.main.bundleURL.appendingPathComponent("Icon\r").path) {
+                _ = NSWorkspace.shared.setIcon(nil, forFile: Bundle.main.bundlePath, options: [])
+            }
+            return image == nil
         })
 
     @Published private(set) var current: OrbitAppIcon

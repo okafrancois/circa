@@ -305,6 +305,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
     /// itself, and the links reopened from it that wait for their new-target request.
     var linkDocumentContext: Int?
     var linkReopens = BrowserLinkReopenLedger()
+    /// The link of a context-menu "Open Link in New Tab / in Split View" that Chrome is opening
+    /// (IDC_CONTENT_CONTEXT_OPENLINKNEWTAB), and the modifiers that place it like a Command- or
+    /// Option-click. Consumed by the new-target request it causes.
+    var contextMenuLinkPlacement: (url: URL, modifiers: BrowserModifierKeys)?
 
     // ABI 9 page surfaces (CH-ESSENTIALS, `ChromiumSurface+PageInteraction.swift`).
     /// JavaScript dialogs, credentials and choosers handed to the delegate, by bridge request id.
@@ -1029,7 +1033,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
     func decideNewSurface(url: String?, disposition: Int32, userGesture: Bool, keepsOpener: Bool,
                           reopenable: Bool = false, engineTab: Bool = false) -> ChromiumSurface? {
         guard !isDisposed, let delegate, let engine else { return nil }
-        let modifiers = userGesture ? recentLinkModifiers ?? Self.modifiers(disposition) : Self.modifiers(disposition)
+        // A context-menu link (Chrome's own command, the frame as initiator) is placed as chosen.
+        let placement = contextMenuLinkPlacement.flatMap { pending in
+            url.flatMap(URL.init(string:)) == pending.url ? pending.modifiers : nil
+        }
+        if placement != nil { contextMenuLinkPlacement = nil }
+        let userGesture = userGesture || placement != nil
+        let modifiers = placement ?? (userGesture ? recentLinkModifiers ?? Self.modifiers(disposition) : Self.modifiers(disposition))
         if reopenable, let url, let target = URL(string: url),
            reopenLinkFromDocument(target, modifiers: modifiers, disposition: Self.disposition(disposition), fallback: { [weak self] in
                guard let self, !self.isDisposed else { return }

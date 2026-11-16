@@ -230,7 +230,15 @@ public enum BrowserContextMenuCommand: Sendable, Equatable {
         case replaceMisspelling, addToDictionary
         case copyImage, saveImage, saveLink, saveMedia
         case mediaPlayPause, mediaMute, mediaLoop, mediaControls, mediaPictureInPicture
-        case lookUp, inspect, extensionAction
+        case lookUp, inspect, extensionAction, openLink
+    }
+
+    /// Where the shell places a link the engine opens from the page's own context menu.
+    public enum LinkPlacement: String, Sendable, Equatable {
+        /// A background tab, as a Command-click would.
+        case newTab
+        /// A split pane beside the source, as an Option-click would.
+        case splitView
     }
 
     case undo, redo, cut, copy, paste, pasteAndMatchStyle, delete, selectAll
@@ -248,6 +256,9 @@ public enum BrowserContextMenuCommand: Sendable, Equatable {
     case inspect
     /// Native command ID, valid only in the exact context-menu request that supplied it.
     case extensionAction(Int32)
+    /// Opens the menu's link as a navigation of the document itself (initiator, referrer and
+    /// SameSite context kept), placed as asked through the shell's new-target routing.
+    case openLink(LinkPlacement)
 
     public var kind: Kind {
         switch self {
@@ -273,6 +284,7 @@ public enum BrowserContextMenuCommand: Sendable, Equatable {
         case .lookUp: .lookUp
         case .inspect: .inspect
         case .extensionAction: .extensionAction
+        case .openLink: .openLink
         }
     }
 }
