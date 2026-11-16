@@ -322,6 +322,9 @@ enum OrbitPerformanceProbe {
                 } else if name == "tab-open", Bundle.main.bundleIdentifier == OrbitTabOpenProbe.bundleID {
                     application.confirmQuit = { .quit }
                     result["tabOpen"] = await OrbitTabOpenProbe.run(owner, store: environment.store, command: command)
+                } else if name == "site-data-clear", Bundle.main.bundleIdentifier == OrbitSiteDataClearProbe.bundleID {
+                    application.confirmQuit = { .quit }
+                    result["siteDataClear"] = await OrbitSiteDataClearProbe.run(application, owner: owner, command: command, root: root)
                 } else if name == "passkeys", Bundle.main.bundleIdentifier == OrbitPasskeyProbe.bundleID {
                     result["passkeys"] = await OrbitPasskeyProbe.run(owner, command: command, root: root)
                 } else if name == "tab-freeze", Bundle.main.bundleIdentifier == OrbitTabFreezeProbe.bundleID {

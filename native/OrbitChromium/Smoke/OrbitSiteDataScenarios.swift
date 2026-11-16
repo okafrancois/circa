@@ -129,6 +129,108 @@ enum OrbitSiteDataScenarios {
         } catch { record("site.operation", "failed", ["error": String(describing: error)]) }
     }
 
+    /// Profile-wide clear (Settings "Clear Site Data for This Profile…") and profile removal:
+    /// every origin of the cleared profile loses cookies, storage and cached responses; another
+    /// profile keeps all of its data; open tabs keep working; a removed profile leaves no
+    /// directory (synthetic roots keep caches inside it).
+    static func runProfileWide(environment: OrbitEnvironment, window: OrbitWindowController, fixture: URL,
+                               engineRoot: URL, record: (String, String, [String: Any]) -> Void) async {
+        func check(_ name: String, _ value: Bool, _ evidence: [String: Any] = [:]) {
+            record("profile-site." + name, value ? "proven" : "failed", evidence)
+        }
+        let engine = environment.engine
+        let page = fixture.appendingPathComponent("site-fixture")
+        var components = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
+        components.host = "localhost"
+        let foreignPage = components.url!.appendingPathComponent("site-fixture")
+        window.submitAddress(page.absoluteString)
+        await window.session.waitForQueuedCommands()
+        guard let tab = window.session.selectedSurface, await loaded(tab) else { check("navigation", false); return }
+        let delegate = ProbeDelegate()
+        let foreign = engine.makeSurface(profileID: tab.profileID, delegate: delegate)
+        defer { foreign.dispose() }
+        foreign.navigate(to: foreignPage)
+        let otherProfile = ProfileID()
+        var other: ChromiumSurface? = engine.makeSurface(profileID: otherProfile, delegate: delegate)
+        defer { other?.dispose() }
+        other!.navigate(to: page)
+        guard await loaded(foreign), await loaded(other!) else { check("surfaces", false); return }
+        let seed = """
+            (async () => {
+              document.cookie='session=connected; path=/; max-age=3600';
+              localStorage.setItem('session','connected');
+              await new Promise((resolve,reject)=>{ const r=indexedDB.open('site-data-fixture',1);
+                r.onupgradeneeded=()=>r.result.createObjectStore('items'); r.onsuccess=()=>{r.result.close();resolve()}; r.onerror=reject; });
+              await (await caches.open('site-data-fixture')).put('/cached',new Response('fixture'));
+              await navigator.serviceWorker.register('/worker.js');
+              return true;
+            })()
+            """
+        let state = "(async()=>[await fetch('/cookie-state').then(r=>r.text()), localStorage.getItem('session'), (await indexedDB.databases()).length, (await caches.keys()).length, (await navigator.serviceWorker.getRegistrations()).length].join(','))()"
+        let httpCached = "fetch('/http-cached').then(r=>r.text())"
+        let seeded = [await evaluate(tab, seed), await evaluate(foreign, seed), await evaluate(other!, seed)]
+        check("seed", seeded.allSatisfy { $0 == "true" })
+        let full = "connected,connected,1,1,1"
+        let before = [await evaluate(tab, state), await evaluate(foreign, state), await evaluate(other!, state)]
+        check("seeded-state", before.allSatisfy { $0 == full }, ["states": before.map { $0 ?? "nil" }])
+        let cachedBefore = await evaluate(tab, httpCached)
+        let cachedAgain = await evaluate(tab, httpCached)
+        let otherCached = await evaluate(other!, httpCached)
+        check("http-cache-seeded", cachedBefore != nil && cachedBefore == cachedAgain && otherCached != nil)
+        let started = ContinuousClock.now
+        do {
+            try await engine.clearSiteData(profileID: tab.profileID)
+            check("clear", true, ["ms": Int(started.duration(to: .now) / .milliseconds(1))])
+        } catch { check("clear", false, ["error": String(describing: error)]) }
+        let empty = "disconnected,,0,0,0"
+        let afterTab = await evaluate(tab, state)
+        let afterForeign = await evaluate(foreign, state)
+        check("cleared-all-origins", afterTab == empty && afterForeign == empty,
+              ["tab": afterTab ?? "nil", "foreign": afterForeign ?? "nil"])
+        let cachedAfter = await evaluate(tab, httpCached)
+        check("http-cache-cleared", cachedAfter != nil && cachedAfter != cachedBefore,
+              ["before": cachedBefore ?? "nil", "after": cachedAfter ?? "nil"])
+        let afterOther = await evaluate(other!, state)
+        let otherCachedAfter = await evaluate(other!, httpCached)
+        check("other-profile-intact", afterOther == full && otherCachedAfter == otherCached, ["other": afterOther ?? "nil"])
+        // Open tabs keep working: the page reloads and signs in again.
+        tab.reload()
+        let reloaded = await loaded(tab)
+        let reseeded = await evaluate(tab, seed)
+        let resigned = await evaluate(tab, state)
+        check("tab-keeps-working", reloaded && reseeded == "true" && resigned == full)
+
+        // Settings can clear one site that no tab shows (windowless page of the same profile).
+        let foreignSeeded = await evaluate(foreign, seed)
+        foreign.dispose()
+        if let foreignOrigin = BrowserSiteOrigin(url: foreignPage) {
+            let domains = await engine.siteData(origin: foreignOrigin, profileID: tab.profileID).domains
+            do {
+                try await engine.clearSiteData(origin: foreignOrigin, profileID: tab.profileID, expectedDomains: domains)
+                let reopened = engine.makeSurface(profileID: tab.profileID, delegate: delegate)
+                defer { reopened.dispose() }
+                reopened.navigate(to: foreignPage)
+                let reopenedLoaded = await loaded(reopened)
+                let foreignAfter = await evaluate(reopened, state)
+                let tabAfter = await evaluate(tab, state)
+                check("origin-without-tab", foreignSeeded == "true" && reopenedLoaded
+                      && foreignAfter?.hasPrefix("disconnected,,0,0") == true && tabAfter == full,
+                      ["foreign": foreignAfter ?? "nil", "tab": tabAfter ?? "nil"])
+            } catch { check("origin-without-tab", false, ["error": String(describing: error)]) }
+        }
+
+        // Removing the other profile deletes its directory, caches included.
+        let directory = engineRoot.appendingPathComponent(BrowserEngineProfileCache.directoryName(otherProfile))
+        let hadCache = FileManager.default.fileExists(atPath: directory.appendingPathComponent("Cache").path)
+        check("synthetic-cache-inside-profile", BrowserEngineProfileCache.cacheRoot(engineRoot: engineRoot) == nil && hadCache)
+        other?.dispose()
+        other = nil
+        do {
+            try await engine.removeProfile(otherProfile)
+            check("profile-removed", !FileManager.default.fileExists(atPath: directory.path))
+        } catch { check("profile-removed", false, ["error": String(describing: error)]) }
+    }
+
     private static func loaded(_ surface: ChromiumSurface) async -> Bool {
         try? await Task.sleep(for: .milliseconds(150))
         let deadline = ContinuousClock.now + .seconds(5)

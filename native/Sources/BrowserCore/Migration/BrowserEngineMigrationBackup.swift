@@ -198,6 +198,76 @@ public enum BrowserEngineMigrationBackup {
         }.sorted { $0.created == $1.created ? $0.id < $1.id : $0.created < $1.created }
     }
 
+    /// What a profile-scoped prune removes from every snapshot.
+    public enum ProfileScope: Sendable { case allFiles, cookies }
+
+    static var cookieFiles: [String] { profileFiles.filter { $0.contains("Cookies") } }
+
+    /// Removes the copies of one profile from every snapshot: all of its files when the profile
+    /// is removed, its cookie databases when its cookies or site data are cleared. The manifest is
+    /// rewritten first (a crash then leaves a file the manifest no longer lists, which the next
+    /// prune deletes by its fixed name), then the files go. A snapshot left with no file is
+    /// deleted. Returns the number of snapshots changed.
+    @discardableResult
+    public static func prune(profile profileID: ProfileID, _ scope: ProfileScope, dataRoot: URL) throws -> Int {
+        let directory = dataRoot.appendingPathComponent(directoryName, isDirectory: true)
+        try requireConfined(directory, under: dataRoot)
+        let name = BrowserEngineProfileCache.directoryName(profileID)
+        let names = scope == .allFiles ? profileFiles : cookieFiles
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        var changed = 0
+        for manifest in snapshots(in: directory) {
+            let snapshot = directory.appendingPathComponent(manifest.id, isDirectory: true)
+            let profile = snapshot.appendingPathComponent("Chromium").appendingPathComponent(name, isDirectory: true)
+            // A restore safety copy keeps the cookie journals it set aside here.
+            let unrestored = snapshot.appendingPathComponent("Unrestored").appendingPathComponent(name, isDirectory: true)
+            let files = names.map { profile.appendingPathComponent($0) }
+            for url in files + [profile, unrestored] { try requireConfined(url, under: directory) }
+            let kept = manifest.files.filter { entry in !names.contains { entry.path == name + "/" + $0 } }
+            var leftovers = files.filter(isRegularFile)
+            var info = stat()
+            if lstat(unrestored.path, &info) == 0 { leftovers.append(unrestored) }
+            guard kept.count != manifest.files.count || !leftovers.isEmpty else { continue }
+            changed += 1
+            guard !kept.isEmpty else {
+                try FileManager.default.removeItem(at: snapshot)
+                continue
+            }
+            if kept.count != manifest.files.count {
+                var rewritten = manifest
+                rewritten.files = kept
+                let file = snapshot.appendingPathComponent("manifest.json")
+                try encoder.encode(rewritten).write(to: file, options: .atomic)
+                guard chmod(file.path, 0o600) == 0 else { try refuseUnsafePath("manifest-mode", code: errno) }
+            }
+            for url in leftovers { try FileManager.default.removeItem(at: url) }
+            if scope == .allFiles, lstat(profile.path, &info) == 0 { try FileManager.default.removeItem(at: profile) }
+        }
+        return changed
+    }
+
+    /// Launch counterpart of the removal prune: drops the copies of every `profile-<uuid>` that no
+    /// longer exists in the engine root. Nothing happens while the engine root itself is missing,
+    /// so a damaged installation keeps its recovery copies.
+    @discardableResult
+    public static func pruneRemovedProfiles(dataRoot: URL, engineRoot: URL) throws -> Int {
+        try validateRoots(dataRoot: dataRoot, engineRoot: engineRoot)
+        var info = stat()
+        guard lstat(engineRoot.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR else { return 0 }
+        let directory = dataRoot.appendingPathComponent(directoryName, isDirectory: true)
+        let present = Set((try? FileManager.default.contentsOfDirectory(atPath: engineRoot.path)) ?? [])
+        let referenced = Set(snapshots(in: directory).flatMap { manifest in
+            manifest.files.compactMap { $0.path.split(separator: "/").first.map(String.init) }
+        })
+        var changed = 0
+        for name in referenced.subtracting(present).sorted() {
+            guard let profileID = BrowserEngineProfileCache.profileID(directoryName: name) else { continue }
+            changed += try prune(profile: profileID, .allFiles, dataRoot: dataRoot)
+        }
+        return changed
+    }
+
     /// Snapshots in creation order (oldest first).
     public static func snapshots(dataRoot: URL) -> [Manifest] {
         snapshots(in: dataRoot.appendingPathComponent(directoryName, isDirectory: true))

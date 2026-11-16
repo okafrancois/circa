@@ -4,7 +4,7 @@ import Foundation
 import WebKitEngine
 
 /// DevTools commands execute on a browser of the captured profile, never the global context.
-extension ChromiumBrowserEngine: BrowserSiteOriginDataAccess {
+extension ChromiumBrowserEngine: BrowserSiteDataAccess {
     private func siteDataSurface(_ origin: BrowserSiteOrigin, profileID: ProfileID) throws -> ChromiumSurface {
         guard !isShutDown, let surface = runtime.registeredSurfaces.first(where: {
             $0.engine === self && $0.profileID == profileID && !$0.isDisposed && $0.isBrowserCreated &&
@@ -23,9 +23,9 @@ extension ChromiumBrowserEngine: BrowserSiteOriginDataAccess {
     }
 
     private func siteDataCommand(_ method: String, parameters: [String: Any] = [:],
-                                 surface: ChromiumSurface) async throws -> [String: Any] {
+                                 surface: ChromiumSurface, timeout: Duration = .seconds(8)) async throws -> [String: Any] {
         let encoded = try JSONSerialization.data(withJSONObject: parameters)
-        let (ok, data) = await surface.devToolsCall(method, params: String(decoding: encoded, as: UTF8.self))
+        let (ok, data) = await surface.devToolsCall(method, params: String(decoding: encoded, as: UTF8.self), timeout: timeout)
         guard ok, !surface.isDisposed,
               let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw BrowserSiteDataError.removalIncomplete
@@ -80,7 +80,19 @@ extension ChromiumBrowserEngine: BrowserSiteOriginDataAccess {
         }
         guard let url = URL(string: origin.value), let domain = BrowserPublicSuffixList.shared.site(of: url),
               expectedDomains == [domain] else { throw BrowserSiteDataError.scopeChanged }
-        let surface = try siteDataSurface(origin, profileID: profileID)
+        // Settings can clear a site no tab shows: a windowless blank page of the same profile
+        // reaches the same cookie store and storage partition.
+        if let surface = try? siteDataSurface(origin, profileID: profileID) {
+            try await clearOriginData(origin, domain: domain, profileID: profileID, surface: surface)
+        } else {
+            try await withHiddenSiteDataPage(URL(string: "about:blank")!, profileID: profileID) { surface in
+                try await clearOriginData(origin, domain: domain, profileID: profileID, surface: surface)
+            }
+        }
+    }
+
+    private func clearOriginData(_ origin: BrowserSiteOrigin, domain: String, profileID: ProfileID,
+                                 surface: ChromiumSurface) async throws {
         let cookies = try await siteCookies(domain: domain, surface: surface)
         // Enumerate origin-scoped stores: `all` can also purge profile-wide GPU caches.
         _ = try await siteDataCommand("Storage.clearDataForOrigin", parameters: [
@@ -105,4 +117,87 @@ extension ChromiumBrowserEngine: BrowserSiteOriginDataAccess {
             target.reload()
         }
     }
+
+    /// Profile-wide erase: cookies, HTTP cache, local and session storage, IndexedDB, service
+    /// workers, cache storage and file systems of this profile's own Chrome profile, through
+    /// Chrome's browsing-data remover (the engine's "clear browsing data" handler, all time, site
+    /// data and cached files only: history, passwords, form data and site settings stay). CEF has
+    /// no profile-wide storage API and DevTools only erases origin by origin, so the handler runs in
+    /// a windowless settings page of the profile, which binds it to that profile and no other.
+    /// The protected-streaming WebKit store of the profile is cleared too. Open tabs keep working:
+    /// Chrome invalidates their in-memory storage and the next request goes out without cookies.
+    public func clearSiteData(profileID: ProfileID) async throws {
+        guard persistence == .persistent, surfaceMode == .hosted else { throw BrowserSiteDataError.removalIncomplete }
+        try await withHiddenSiteDataPage(URL(string: "chrome://settings/")!, profileID: profileID) { surface in
+            let result = try await siteDataCommand("Runtime.evaluate", parameters: [
+                "expression": Self.profileClearScript, "returnByValue": true, "awaitPromise": true
+            ], surface: surface, timeout: .seconds(60))
+            // Resolved by the remover's completion; open tabs may legitimately set new cookies
+            // right after, so the result is not re-checked against a live cookie list.
+            guard result["exceptionDetails"] == nil, (result["result"] as? [String: Any])?["value"] as? Bool == true else {
+                throw BrowserSiteDataError.removalIncomplete
+            }
+        }
+        try await webContentEngine.clearExistingSiteData(profileID: profileID)
+        // Copies of the deleted cookies must not survive in the update recovery snapshots.
+        try? BrowserEngineMigrationBackup.prune(profile: profileID, .cookies,
+                                                dataRoot: URL(fileURLWithPath: runtime.rootCachePath).deletingLastPathComponent())
+    }
+
+    /// Initializes the handler (it must allow JavaScript before it can answer), then removes site
+    /// data (`browser.clear_data.cookies`) and cached files (`browser.clear_data.cache`) for all
+    /// time (period 4) and resolves once Chrome's remover finished.
+    static let profileClearScript = """
+        (async () => {
+          if (location.protocol !== 'chrome:' || location.host !== 'settings') throw Error('page');
+          const cr = await import('chrome://resources/js/cr.js');
+          await cr.sendWithPromise('initializeClearBrowsingData');
+          await cr.sendWithPromise('clearBrowsingData', ['browser.clear_data.cookies', 'browser.clear_data.cache'], 4);
+          return true;
+        })()
+        """
+
+    /// A windowless page of `profileID` showing exactly `url`, disposed when `body` returns.
+    private func withHiddenSiteDataPage<T>(_ url: URL, profileID: ProfileID,
+                                           _ body: (ChromiumSurface) async throws -> T) async throws -> T {
+        guard !isShutDown, !runtime.removingProfiles.contains(profileID), !refusedProfiles.contains(profileID) else {
+            throw BrowserSiteDataError.removalIncomplete
+        }
+        let page = ChromiumSiteDataPage(url: url)
+        let surface = makeSurface(profileID: profileID, delegate: page)
+        defer { surface.dispose() }
+        surface.navigate(to: url)
+        let deadline = ContinuousClock.now + .seconds(15)
+        while !page.finished && !page.failed && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        guard page.finished, !page.failed, !surface.isDisposed, surface.isBrowserCreated else {
+            throw BrowserSiteDataError.removalIncomplete
+        }
+        return try await body(surface)
+    }
+}
+
+/// Allows only the navigation it was made for; never opens windows, downloads or permissions.
+@MainActor
+private final class ChromiumSiteDataPage: BrowserEngineSurfaceDelegate {
+    let url: URL
+    var finished = false
+    var failed = false
+    init(url: URL) { self.url = url }
+    func surfaceDidStartNavigation(_ surface: ChromiumSurface) { finished = false }
+    func surfaceDidCommitNavigation(_ surface: ChromiumSurface) {}
+    func surfaceDidFinishNavigation(_ surface: ChromiumSurface) { finished = true }
+    func surfaceDidFailNavigation(_ surface: ChromiumSurface) { failed = true }
+    func surfaceDidRequestClose(_ surface: ChromiumSurface) { failed = true }
+    func surface(_ surface: ChromiumSurface, decidePolicyFor action: BrowserNavigationAction,
+                 decision: BrowserPolicyDecision<BrowserNavigationActionPolicy>) {
+        let allowed = action.url == url && action.httpMethod != "POST"
+        if !allowed { failed = true }
+        decision.decide(allowed ? .allow : .cancel)
+    }
+    func surface(_ surface: ChromiumSurface, createSurfaceFor request: BrowserNewSurfaceRequest,
+                 make: () -> ChromiumSurface) -> ChromiumSurface? { nil }
+    func surface(_ surface: ChromiumSurface, didStartDownload download: any BrowserEngineDownload) { download.cancel(); failed = true }
+    func surface(_ surface: ChromiumSurface, requestsPermission request: BrowserPermissionRequest) async -> BrowserPermissionDecision { .deny }
 }

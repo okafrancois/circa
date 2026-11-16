@@ -80,6 +80,17 @@ public final class WebKitBrowserEngine: BrowserPrivateEngine {
     /// (a Chromium window removing a profile) has none, and the answer would crash.
     private static let webKitInitialization: Void = { _ = WKWebsiteDataStore.nonPersistent() }()
 
+    /// Profile-wide erase for a host engine (Chromium's protected-streaming content): never
+    /// creates a persistent store that this run did not open and that does not exist on disk.
+    public func clearExistingSiteData(profileID: ProfileID) async throws {
+        if dataStores[profileID] == nil {
+            guard persistence == .persistent else { return }
+            _ = Self.webKitInitialization
+            guard await WKWebsiteDataStore.allDataStoreIdentifiers.contains(profileID.rawValue) else { return }
+        }
+        try await clearSiteData(profileID: profileID)
+    }
+
     public func removeProfile(_ profileID: ProfileID) async throws {
         guard !permissionSurfaces.contains(where: { $0.surface.map { $0.profileID == profileID && !$0.isDisposed } == true }) else {
             throw BrowserEngineError.profileInUse

@@ -147,6 +147,7 @@ enum OrbitLauncher {
                 BrowserPerformance.mark(.authentication)
                 try prepareEngineMigrationBackup(configuration)
                 purgeEngineHistory(configuration)
+                sweepRemovedProfileData(configuration)
                 processSiteSessionImport(configuration)
                 runtimeStatus = startRuntime(configuration)
             }
@@ -226,6 +227,27 @@ enum OrbitLauncher {
         } catch {
             FileHandle.standardError.write(Data("orbit: engine history purge deferred category=\(error)\n".utf8))
         }
+    }
+
+    /// Removed profiles leave nothing behind outside their directory: their caches under the
+    /// user's Caches folder (personal data roots only; synthetic roots keep caches inside the
+    /// profile directory) and their copies in the migration backups. Runs before CEF opens any
+    /// profile; orphan cache trees are renamed now and deleted in the background. A failure
+    /// never blocks startup and is reported with a fixed category only.
+    private static func sweepRemovedProfileData(_ configuration: OrbitProductConfiguration) {
+        do {
+            try BrowserEngineMigrationBackup.pruneRemovedProfiles(dataRoot: configuration.dataRoot,
+                                                                  engineRoot: configuration.engineRoot)
+        } catch {
+            FileHandle.standardError.write(Data("orbit: engine backup prune deferred category=\(error)\n".utf8))
+        }
+        guard let cacheRoot = BrowserEngineProfileCache.cacheRoot(engineRoot: configuration.engineRoot) else { return }
+        do {
+            try BrowserEngineProfileCache.sweep(cacheRoot: cacheRoot, engineRoot: configuration.engineRoot)
+        } catch {
+            FileHandle.standardError.write(Data("orbit: engine cache sweep deferred category=\(error)\n".utf8))
+        }
+        Task.detached(priority: .background) { try? BrowserEngineProfileCache.purgeRetired(cacheRoot: cacheRoot) }
     }
 
     private static func processSiteSessionImport(_ configuration: OrbitProductConfiguration) {
