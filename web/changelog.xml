@@ -4,10 +4,119 @@
   <title>Circa releases</title>
   <link href="https://circabrowser.com/changelog.xml" rel="self" />
   <link href="https://circabrowser.com/changelog" rel="alternate" />
-  <updated>2026-11-16T00:00:00Z</updated>
+  <updated>2026-11-17T00:00:00Z</updated>
   <author>
     <name>Circa</name>
   </author>
+  <entry>
+    <id>https://circabrowser.com/changelog/0.75.0-nightly.3/</id>
+    <title>0.75.0-nightly.3 — Encrypted iCloud sync, a separate passwords switch, and history that is really gone.</title>
+    <link href="https://circabrowser.com/changelog/0.75.0-nightly.3/" />
+    <updated>2026-11-17T00:00:00Z</updated>
+    <published>2026-11-17T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Encrypted iCloud sync, a separate passwords switch, and history that is really gone.
+
+3 new · 5 faster · 12 fixed
+
+## New
+
+- **Sync passwords** is a separate switch under Settings › General. It is off on new setups and stays on if you already synced; turning it off stops password sync on this Mac and leaves the copies already in iCloud.
+- Private windows are hidden from window captures by other apps.
+- Every profile now sends Global Privacy Control, asking sites not to sell or share your data.
+
+## Faster
+
+- History sync writes only what changed: about 33 KB per sync instead of rewriting about 160 MB for a 200,000-visit history (disk write per cycle 2.7 s → 2 ms).
+- Retyping a letter you just deleted shows search suggestions in 275–306 ms → 2–4 ms.
+- Toggling a site permission costs 9.1 ms → 0.007 ms on the main thread.
+- Refreshing 100 sidebar rows without a cached icon takes 3 ms → 0.1 ms.
+- Session saves during sustained activity: 6.3 → 1.1 per second.
+
+## Fixed
+
+- Spaces, tabs, settings and history now sync end-to-end encrypted in iCloud, like passwords already did.
+- Deleting a password no longer leaves its secret in the sync record that tells other Macs to delete it.
+- Turning iCloud sync off deletes its local caches.
+- Deleting history for a time range, a site or a single visit also removes it from the engine's own history.
+- Clearing one site's data also removes its cookies from migration backups.
+- Open Link in New Tab and Open Link in Split View from the context menu keep the originating page, so sites no longer receive their strict same-site cookies on cross-site opens.
+- Tabs opened in the background with ⌘-click no longer appear blank when you select them.
+- Circa no longer writes inside its own app bundle, so its code signature stays valid.
+- The Safe Browsing key no longer stays in the environment of processes Circa starts later.
+- Password exports read during an import stay in memory instead of a temporary file.
+- macOS no longer keeps its own snapshots of browser windows.
+- Space switches no longer write settings during the swipe.
+
+## Known limits
+
+- An older Circa cannot read the newly encrypted sync records until it updates.
+- The app icon you choose in Settings now applies to the Dock while Circa runs; Finder keeps the default icon.
+- The engine deletes a URL's visits for a whole day, so deleting one visit can remove other visits of that URL the same day from the engine's history; Circa keeps them.
+- History deletions received from another Mac through sync are not yet removed from the engine's history.
+- The private window protection was checked with window captures; screen recording apps were not tested.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.0-nightly.3" data-version="0.75.0-nightly.3" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.0-nightly.3" aria-label="Link to version 0.75.0-nightly.3"&gt;0.75.0-nightly.3&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-17"&gt;November 17, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Encrypted iCloud sync, a separate passwords switch, and history that is really gone.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;3 new · 5 faster · 12 fixed&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;Sync passwords&lt;/strong&gt; is a separate switch under Settings › General. It is off on new setups and stays on if you already synced; turning it off stops password sync on this Mac and leaves the copies already in iCloud.&lt;/li&gt;
+    &lt;li&gt;Private windows are hidden from window captures by other apps.&lt;/li&gt;
+    &lt;li&gt;Every profile now sends Global Privacy Control, asking sites not to sell or share your data.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Faster&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;History sync writes only what changed: about 33 KB per sync instead of rewriting about 160 MB for a 200,000-visit history (disk write per cycle 2.7 s → 2 ms).&lt;/li&gt;
+    &lt;li&gt;Retyping a letter you just deleted shows search suggestions in 275–306 ms → 2–4 ms.&lt;/li&gt;
+    &lt;li&gt;Toggling a site permission costs 9.1 ms → 0.007 ms on the main thread.&lt;/li&gt;
+    &lt;li&gt;Refreshing 100 sidebar rows without a cached icon takes 3 ms → 0.1 ms.&lt;/li&gt;
+    &lt;li&gt;Session saves during sustained activity: 6.3 → 1.1 per second.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Spaces, tabs, settings and history now sync end-to-end encrypted in iCloud, like passwords already did.&lt;/li&gt;
+    &lt;li&gt;Deleting a password no longer leaves its secret in the sync record that tells other Macs to delete it.&lt;/li&gt;
+    &lt;li&gt;Turning iCloud sync off deletes its local caches.&lt;/li&gt;
+    &lt;li&gt;Deleting history for a time range, a site or a single visit also removes it from the engine&amp;#x27;s own history.&lt;/li&gt;
+    &lt;li&gt;Clearing one site&amp;#x27;s data also removes its cookies from migration backups.&lt;/li&gt;
+    &lt;li&gt;Open Link in New Tab and Open Link in Split View from the context menu keep the originating page, so sites no longer receive their strict same-site cookies on cross-site opens.&lt;/li&gt;
+    &lt;li&gt;Tabs opened in the background with ⌘-click no longer appear blank when you select them.&lt;/li&gt;
+    &lt;li&gt;Circa no longer writes inside its own app bundle, so its code signature stays valid.&lt;/li&gt;
+    &lt;li&gt;The Safe Browsing key no longer stays in the environment of processes Circa starts later.&lt;/li&gt;
+    &lt;li&gt;Password exports read during an import stay in memory instead of a temporary file.&lt;/li&gt;
+    &lt;li&gt;macOS no longer keeps its own snapshots of browser windows.&lt;/li&gt;
+    &lt;li&gt;Space switches no longer write settings during the swipe.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;An older Circa cannot read the newly encrypted sync records until it updates.&lt;/li&gt;
+    &lt;li&gt;The app icon you choose in Settings now applies to the Dock while Circa runs; Finder keeps the default icon.&lt;/li&gt;
+    &lt;li&gt;The engine deletes a URL&amp;#x27;s visits for a whole day, so deleting one visit can remove other visits of that URL the same day from the engine&amp;#x27;s history; Circa keeps them.&lt;/li&gt;
+    &lt;li&gt;History deletions received from another Mac through sync are not yet removed from the engine&amp;#x27;s history.&lt;/li&gt;
+    &lt;li&gt;The private window protection was checked with window captures; screen recording apps were not tested.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0-nightly.3/sync-privacy.jpg" aria-label="Choose whether passwords sync, separately from the rest of iCloud sync."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0-nightly.3/sync-privacy.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0-nightly.3/sync-privacy.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Choose whether passwords sync, separately from the rest of iCloud sync.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0-nightly.3/private-window-capture.jpg" aria-label="A private window cannot be captured by another app; a normal window still can."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0-nightly.3/private-window-capture.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0-nightly.3/private-window-capture.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;A private window cannot be captured by another app; a normal window still can.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0-nightly.3/history-engine-purge.jpg" aria-label="Deleting history in Circa also removes it from the engine&amp;#x27;s own history."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0-nightly.3/history-engine-purge.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0-nightly.3/history-engine-purge.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Deleting history in Circa also removes it from the engine&amp;#x27;s own history.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.0-nightly.3/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
   <entry>
     <id>https://circabrowser.com/changelog/0.75.0-nightly.2/</id>
     <title>0.75.0-nightly.2 — Removed profiles finish cleaning up their old backups after an interruption.</title>
