@@ -257,9 +257,19 @@ public enum BrowserEngineMigrationBackup {
         guard lstat(engineRoot.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR else { return 0 }
         let directory = dataRoot.appendingPathComponent(directoryName, isDirectory: true)
         let present = Set((try? FileManager.default.contentsOfDirectory(atPath: engineRoot.path)) ?? [])
-        let referenced = Set(snapshots(in: directory).flatMap { manifest in
-            manifest.files.compactMap { $0.path.split(separator: "/").first.map(String.init) }
-        })
+        var referenced = Set<String>()
+        for manifest in snapshots(in: directory) {
+            referenced.formUnion(manifest.files.compactMap { $0.path.split(separator: "/").first.map(String.init) })
+            // A crash after the manifest rewrite can leave copies it no longer lists. Include
+            // the on-disk profile names, including journals set aside by a restore, so launch
+            // cleanup still finds removed profiles. Refuse linked ancestors before enumerating.
+            for container in ["Chromium", "Unrestored"] {
+                let folder = directory.appendingPathComponent(manifest.id).appendingPathComponent(container)
+                try requireConfined(folder, under: directory)
+                do { referenced.formUnion(try FileManager.default.contentsOfDirectory(atPath: folder.path)) }
+                catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError { continue }
+            }
+        }
         var changed = 0
         for name in referenced.subtracting(present).sorted() {
             guard let profileID = BrowserEngineProfileCache.profileID(directoryName: name) else { continue }

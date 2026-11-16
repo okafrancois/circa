@@ -1,27 +1,56 @@
 {
   "generated": {
     "easylist": {
-      "rules": 3737,
-      "sha256": "66ab93eff0be6892a5ebb5d97263b611e88fd84ec768fd2fd10739196652d877",
-      "version": "202611142043"
+      "rules": 3739,
+      "sha256": "e996a4d933c167a80c340f597010780d06beae12d152a14db662c765a93f484c",
+      "version": "202611160508"
     },
     "easyprivacy": {
       "rules": 9205,
-      "sha256": "7cf73e623dfd6933698e7a333ef60a3e4c1264bf26b9e97ef4612e1cddef8dba",
-      "version": "202611142043"
+      "sha256": "2bb95953c492ef4f4ee30aba4572f7116651013a5abc6951ab5ecc43b1b77e45",
+      "version": "202611160508"
+    }
+  },
+  "previous": {
+    "generated": {
+      "easylist": {
+        "rules": 3737,
+        "sha256": "66ab93eff0be6892a5ebb5d97263b611e88fd84ec768fd2fd10739196652d877",
+        "version": "202611142043"
+      },
+      "easyprivacy": {
+        "rules": 9205,
+        "sha256": "7cf73e623dfd6933698e7a333ef60a3e4c1264bf26b9e97ef4612e1cddef8dba",
+        "version": "202611142043"
+      }
+    },
+    "source": {
+      "branch": "gh-pages",
+      "commit": "48ee7c0bbd2bc16e49e192e4e54bf9ed9ee0c177",
+      "lists": {
+        "easylist": {
+          "path": "easylist.txt",
+          "sha256": "1af964fed2119e41c976eca6b70b510189197afafe3d806dfd3ee1a011f31669"
+        },
+        "easyprivacy": {
+          "path": "easyprivacy.txt",
+          "sha256": "c6e91542f1b3f536d6bdc15fb28004411b10aa98d504054854258937299bbb49"
+        }
+      },
+      "repository": "easylist/easylist"
     }
   },
   "source": {
     "branch": "gh-pages",
-    "commit": "48ee7c0bbd2bc16e49e192e4e54bf9ed9ee0c177",
+    "commit": "fd7771846bc3bed3b5b6225de036652542817789",
     "lists": {
       "easylist": {
         "path": "easylist.txt",
-        "sha256": "1af964fed2119e41c976eca6b70b510189197afafe3d806dfd3ee1a011f31669"
+        "sha256": "27340fc2d7c5e135480fd20cf5bf35641c8224b355b95f9f6fff4f88dec56f85"
       },
       "easyprivacy": {
         "path": "easyprivacy.txt",
-        "sha256": "c6e91542f1b3f536d6bdc15fb28004411b10aa98d504054854258937299bbb49"
+        "sha256": "2dab305cd4bfa06a27b8f5633e75625815b99822e58375f58012e7978adf16a3"
       }
     },
     "repository": "easylist/easylist"

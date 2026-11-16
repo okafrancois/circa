@@ -168,6 +168,41 @@ struct BrowserEngineProfileLeftoversTests {
         #expect(BrowserEngineMigrationBackup.snapshots(dataRoot: dataRoot).count == 1)
     }
 
+    @Test("Launch pruning removes files left after an interrupted manifest rewrite", arguments: [false, true])
+    func interruptedPrune(journalsOnly: Bool) throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manifest = try seedBackup()
+        // Simulate a crash after publishing the pruned manifest but before unlinking its files.
+        var rewritten = manifest
+        rewritten.files.removeAll { $0.path.hasPrefix(name(removed) + "/") }
+        let manifestURL = dataRoot.appendingPathComponent("EngineMigrationBackups/" + manifest.id + "/manifest.json")
+        try JSONEncoder().encode(rewritten).write(to: manifestURL, options: .atomic)
+        let unrestored = dataRoot.appendingPathComponent("EngineMigrationBackups/" + manifest.id + "/Unrestored/" + name(removed))
+        try write(unrestored.appendingPathComponent("Network/Cookies-wal"), "journal")
+        if journalsOnly { try FileManager.default.removeItem(at: snapshotFile(manifest, name(removed))) }
+        try FileManager.default.removeItem(at: engine.appendingPathComponent(name(removed)))
+        #expect(try BrowserEngineMigrationBackup.pruneRemovedProfiles(dataRoot: dataRoot, engineRoot: engine) == 1)
+        #expect(!exists(snapshotFile(manifest, name(removed))))
+        #expect(exists(snapshotFile(manifest, name(kept) + "/Network/Cookies")))
+        #expect(!exists(unrestored))
+        #expect(BrowserEngineMigrationBackup.snapshots(dataRoot: dataRoot).first?.files == rewritten.files)
+    }
+
+    @Test("Launch pruning refuses linked backup containers")
+    func launchPruneRefusesLinkedContainer() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manifest = try seedBackup()
+        let container = snapshotFile(manifest, name(removed)).deletingLastPathComponent()
+        let outside = root.appendingPathComponent("outside")
+        try write(outside.appendingPathComponent(name(removed) + "/Network/Cookies"), "keep")
+        try FileManager.default.removeItem(at: container)
+        try FileManager.default.createSymbolicLink(at: container, withDestinationURL: outside)
+        #expect(throws: BrowserEngineMigrationBackup.Failure.unsafePath) {
+            try BrowserEngineMigrationBackup.pruneRemovedProfiles(dataRoot: dataRoot, engineRoot: engine)
+        }
+        #expect(try String(contentsOf: outside.appendingPathComponent(name(removed) + "/Network/Cookies"), encoding: .utf8) == "keep")
+    }
+
     @Test("A snapshot holding nothing but the removed profile is deleted")
     func emptySnapshotIsDeleted() throws {
         defer { try? FileManager.default.removeItem(at: root) }

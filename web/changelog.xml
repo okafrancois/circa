@@ -9,6 +9,45 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.0-nightly.2/</id>
+    <title>0.75.0-nightly.2 — Removed profiles finish cleaning up their old backups after an interruption.</title>
+    <link href="https://circabrowser.com/changelog/0.75.0-nightly.2/" />
+    <updated>2026-11-16T00:00:00Z</updated>
+    <published>2026-11-16T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Removed profiles finish cleaning up their old backups after an interruption.
+
+1 fixed · 1 smaller
+
+## Fixed
+
+- Removing a profile now resumes cleanup of its old migration backups after an interrupted cleanup, while preserving other profiles' backups.
+
+## Smaller
+
+- Refreshed the bundled ad and tracker blocking lists.
+
+Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24; EasyList / EasyPrivacy pin fd7771846bc3bed3b5b6225de036652542817789
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.0-nightly.2" data-version="0.75.0-nightly.2" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.0-nightly.2" aria-label="Link to version 0.75.0-nightly.2"&gt;0.75.0-nightly.2&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-16"&gt;November 16, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Removed profiles finish cleaning up their old backups after an interruption.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 fixed · 1 smaller&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Removing a profile now resumes cleanup of its old migration backups after an interrupted cleanup, while preserving other profiles&amp;#x27; backups.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Smaller&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Refreshed the bundled ad and tracker blocking lists.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;p class="release-engine"&gt;Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24; EasyList / EasyPrivacy pin fd7771846bc3bed3b5b6225de036652542817789&lt;/p&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.0-nightly.2/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.0-nightly.1/</id>
     <title>0.75.0-nightly.1 — Clear a whole profile's website data, and search history faster.</title>
     <link href="https://circabrowser.com/changelog/0.75.0-nightly.1/" />
