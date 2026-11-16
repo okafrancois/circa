@@ -109,13 +109,26 @@ final class BrowserContentCardView: NSView {
     private var emptyArtworkWidth: NSLayoutConstraint?
     private var emptyArtworkHeight: NSLayoutConstraint?
     private var emptyPlacement: [NSLayoutConstraint] = []
+    /// Decoded once per process; every projection of an empty tab re-asserts the state.
+    private static var emptyArtworkImages: [String: NSImage] = [:]
+    static func emptyArtworkImage(_ name: String) -> NSImage? {
+        if let image = emptyArtworkImages[name] { return image }
+        let image = BrowserText.secondaryBrandResource(name, extension: "png").flatMap { NSImage(contentsOf: $0) }
+        emptyArtworkImages[name] = image
+        return image
+    }
+    /// The state the empty-state views were last configured for. The window renders this on
+    /// every projection without a selected tab; only the first value and a change apply.
+    private var appliedEmptyStateIsPrivate: Bool?
     var emptyStateIsPrivate = false {
         didSet {
+            guard appliedEmptyStateIsPrivate != emptyStateIsPrivate else { return }
+            appliedEmptyStateIsPrivate = emptyStateIsPrivate
             let name = emptyStateIsPrivate ? "page-private" : "empty-space"
             emptyArtwork.isHidden = !emptyStateIsPrivate
             emptyArtworkWidth?.constant = emptyStateIsPrivate ? 240 : 0
             emptyArtworkHeight?.constant = emptyStateIsPrivate ? 122 : 0
-            emptyArtwork.image = BrowserText.secondaryBrandResource(name, extension: "png").flatMap { NSImage(contentsOf: $0) }
+            emptyArtwork.image = Self.emptyArtworkImage(name)
             emptyDetail.textColor = emptyStateIsPrivate ? BrandPalette.paper.withAlphaComponent(0.8) : OrbitTokens.Color.Text.tertiary
             emptyState.alignment = emptyStateIsPrivate ? .leading : .centerX
             if emptyStateIsPrivate {
@@ -367,6 +380,7 @@ final class BrowserContentCardView: NSView {
         set { emptyDetail.stringValue = newValue }
     }
 
+    var emptyStateArtwork: NSImageView { emptyArtwork }
     /// The empty-state title while it is displayed, nil while a page is presented.
     var displayedEmptyTitle: String? { presentedView === emptyState ? emptyTitle.stringValue : nil }
 

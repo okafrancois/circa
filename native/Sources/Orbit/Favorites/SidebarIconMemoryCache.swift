@@ -10,8 +10,14 @@ final class SidebarIconMemoryCache {
         let origin: URL
     }
     private var images: BrowserCostCache<Key, NSImage>
-    private var diskStore: FavoriteIconStore?
+    private var diskStore: FavoriteIconStore? { didSet { if diskStore !== oldValue { misses.removeAll() } } }
     private var removedProfiles = Set<ProfileID>()
+    /// Keys with no usable file on disk, valid for `missGeneration` of the disk store only.
+    /// A sidebar refresh re-asks for every row; without this, each icon-less row paid a
+    /// SHA-256 file name and a failed open on the main thread on every render.
+    private var misses = Set<Key>()
+    private var missGeneration: UInt64 = 0
+    private static let missLimit = 4096
 
     init(store: FavoriteIconStore? = nil, budget: Int = 4 * 1024 * 1024) {
         diskStore = store
@@ -22,26 +28,46 @@ final class SidebarIconMemoryCache {
         guard !removedProfiles.contains(profile), let origin = FavoriteIconStore.origin(home) else { return nil }
         let key = Key(profile: profile, origin: origin)
         if let image = images.value(for: key) { return image }
+        guard let diskStore else { return nil }
+        let generation = diskStore.diskGeneration.load(ordering: .acquiring)
+        if generation != missGeneration {
+            misses.removeAll()
+            missGeneration = generation
+        }
+        if misses.contains(key) { return nil }
         // A cold known icon must be available in this same render, including the first hover
         // of a collapsed folder. Only a cache miss pays the bounded local thumbnail decode.
-        guard let file = diskStore?.cachedFile(profile: profile, home: home),
+        guard let file = diskStore.cachedFile(profile: profile, home: home),
               let data = try? Data(contentsOf: file, options: .mappedIfSafe), data.count <= 131_072,
-              let image = BrowserIconRaster.image(data: data) else { return nil }
+              let image = BrowserIconRaster.image(data: data) else {
+            if misses.count >= Self.missLimit { misses.removeAll() }
+            misses.insert(key)
+            return nil
+        }
         put(image, profile: profile, home: home)
         return image
     }
 
     func put(_ image: NSImage, profile: ProfileID, home: URL) {
         guard !removedProfiles.contains(profile), let origin = FavoriteIconStore.origin(home) else { return }
-        images.insert(image, for: Key(profile: profile, origin: origin), cost: BrowserIconRaster.cost(image) + origin.absoluteString.utf8.count + 64)
+        let key = Key(profile: profile, origin: origin)
+        misses.remove(key)
+        images.insert(image, for: key, cost: BrowserIconRaster.cost(image) + origin.absoluteString.utf8.count + 64)
     }
 
     func remove(profile: ProfileID) {
         removedProfiles.insert(profile)
         for key in images.keys where key.profile == profile { images.remove(key) }
+        misses = misses.filter { $0.profile != profile }
     }
 
-    func releaseMemory() { images.removeAll() }
+    func releaseMemory() {
+        images.removeAll()
+        misses.removeAll()
+    }
+
+    /// Remembered missing icons (diagnostics and tests).
+    var missCount: Int { misses.count }
 
     var cacheStatistics: [String: Int] {
         ["entries": images.count, "bytes": images.cost, "representations": images.values.reduce(0) { $0 + $1.representations.count }]
