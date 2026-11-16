@@ -119,6 +119,19 @@ final class OrbitUnsavedInputGuard: NSObject {
 final class OrbitBrowserWindow: NSWindow {
     private weak var middleClickTarget: NSView?
 
+    /// Browser windows never hand their state or contents to macOS window restoration: Circa
+    /// restores its own sessions. A private window also stays out of screenshots and screen
+    /// recordings made by other applications, and so do the panels it presents.
+    func applyContentPrivacy(isPrivate: Bool) {
+        isRestorable = false
+        sharingType = isPrivate ? .none : .readOnly
+    }
+
+    override func addChildWindow(_ childWindow: NSWindow, ordered place: NSWindow.OrderingMode) {
+        if sharingType == .none { childWindow.sharingType = .none }
+        super.addChildWindow(childWindow, ordered: place)
+    }
+
     override func sendEvent(_ event: NSEvent) {
         OrbitUnsavedInputGuard.keyDown(in: self, event: event)
         // AppKit routes auxiliary buttons to the first responder. Sidebar middle clicks

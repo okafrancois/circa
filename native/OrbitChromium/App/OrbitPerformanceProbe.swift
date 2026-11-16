@@ -317,6 +317,9 @@ enum OrbitPerformanceProbe {
                     result["sidebarClick3"] = await sidebarClick3(application, environment: environment, owner: owner, command: command)
                 } else if name == "window-freeze-2", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
                     result["windowFreeze2"] = await windowFreeze2(application, environment: environment, owner: owner, command: command)
+                } else if name == "content-privacy", Bundle.main.bundleIdentifier == OrbitContentPrivacyProbe.bundleID {
+                    application.confirmQuit = { .quit }
+                    result["contentPrivacy"] = await OrbitContentPrivacyProbe.run(application, owner: owner, command: command)
                 } else if name == "window-freeze", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
                     result["windowFreeze"] = await windowFreeze(owner, store: environment.store, command: command)
                 } else if name == "tab-open", Bundle.main.bundleIdentifier == OrbitTabOpenProbe.bundleID {
@@ -985,6 +988,12 @@ extension OrbitPerformanceProbe {
                 "systemIdleSignal": systemSignals.idleSeconds.isFinite,
                 "version": BrowserSettingsAbout.versionDescription(info: Bundle.main.infoDictionary ?? [:]),
                 "nativeLifecycle": surface.pagePerformance?.lifecycle() != nil]
+    }
+
+    /// Presence only: the live process environment, which `ProcessInfo` would cache.
+    private static func engineCredentialsInEnvironment() -> Bool {
+        let names: [String] = ["GOOGLE_API_KEY", "GOOGLE_DEFAULT_CLIENT_ID", "GOOGLE_DEFAULT_CLIENT_SECRET"]
+        return names.contains { name in getenv(name) != nil }
     }
 
     private static func ownsWindow(_ owner: OrbitWindowController, bundleID: String = "lab.orbit.orbit.perf-core-3") -> Bool {
@@ -2663,7 +2672,9 @@ extension OrbitPerformanceProbe {
             var result: [String: Any] = ["launchEnabled": browsing.enabledAtLaunch,
                 "settingEnabled": environment.settings.document.safeBrowsingEnabled, "hasKey": browsing.hasKey,
                 "globalPreference": environment.engine.safeBrowsingPreference(for: nil) as Any,
-                "profilePreference": environment.engine.safeBrowsingPreference(for: owner.session.activeProfileID) as Any]
+                "profilePreference": environment.engine.safeBrowsingPreference(for: owner.session.activeProfileID) as Any,
+                // Presence only, never the value: the engine credentials must have left the environment.
+                "credentialsInEnvironment": Self.engineCredentialsInEnvironment()]
             if command["navigation"] == "test", let surface = owner.session.selectedSurface {
                 guard ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing") else { return ["refused": true] }
                 surface.navigate(to: URL(string: "https://testsafebrowsing.appspot.com/s/phishing.html")!)

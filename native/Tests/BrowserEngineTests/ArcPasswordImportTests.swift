@@ -90,6 +90,37 @@ struct ArcPasswordImportTests {
         var equal = Self.record(values[1]); equal.primaryKey.usernameElement = "different-form-element"
         store.rows[Self.profile] = [equal, changed]
     }
+    @Test("Launch sweep erases only stale journals that no job or undo point references")
+    func orphanedJournalsAreSwept() throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("ArcPasswordImport")
+        func file(_ job: ArcPasswordImportJournal) -> URL { directory.appendingPathComponent(job.id.uuidString + ".sealed") }
+        let staleOrphan = try job(root), freshOrphan = try job(root), active = try job(root), scheduled = try job(root)
+        try active.activate()
+        let importer = ArcSiteSessionImport(dataRoot: root)
+        try FileManager.default.createDirectory(at: importer.directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(ArcSiteSessionRequest(sourceRoot: URL(fileURLWithPath: "/private/tmp/synthetic-source"), profiles: [],
+                                                       passwordJobID: scheduled.id)).write(to: importer.pendingFile)
+        let quarantine = directory.appendingPathComponent("quarantine")
+        try FileManager.default.createDirectory(at: quarantine, withIntermediateDirectories: true)
+        try Data("sealed evidence".utf8).write(to: quarantine.appendingPathComponent(UUID().uuidString + ".sealed"))
+        let old = Date().addingTimeInterval(-8 * 24 * 60 * 60)
+        for job in [staleOrphan, active, scheduled] { try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: file(job).path) }
+        let referenced = try importer.referencedPasswordJobIDs()
+        #expect(referenced == [scheduled.id])
+        #expect(try ArcPasswordImportJournal.sweepOrphans(root: root, referenced: referenced) == [staleOrphan.id])
+        #expect(!FileManager.default.fileExists(atPath: file(staleOrphan).path))
+        for job in [freshOrphan, active, scheduled] { #expect(FileManager.default.fileExists(atPath: file(job).path)) }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: quarantine.path).count == 1)
+        // A fresh orphan ages out on a later launch.
+        #expect(try ArcPasswordImportJournal.sweepOrphans(root: root, referenced: referenced, now: Date().addingTimeInterval(8 * 24 * 60 * 60))
+                == [freshOrphan.id])
+        // An unreadable startup pointer stops the sweep before anything is removed.
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: file(scheduled).path)
+        try Data("not a job".utf8).write(to: directory.appendingPathComponent("active.json"))
+        #expect(throws: (any Error).self) { try ArcPasswordImportJournal.sweepOrphans(root: root, referenced: []) }
+        #expect(FileManager.default.fileExists(atPath: file(scheduled).path))
+    }
     @Test func conflictsUndoAndEncryption() async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
         let store = ImportPasswordStore(); try seed(store)

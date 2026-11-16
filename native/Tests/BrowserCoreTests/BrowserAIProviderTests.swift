@@ -107,6 +107,15 @@ struct BrowserAIWireTests {
         #expect(environment["PATH"] == "/opt/x/bin:/usr/bin:/bin:/usr/sbin:/sbin")
         #expect(environment["CLAUDECODE"] == nil && environment["CODEX_SANDBOX"] == nil && environment["HOME"] == "/Users/x")
     }
+
+    @Test("Child environment never carries engine credentials")
+    func environmentDropsEngineCredentials() {
+        let environment = BrowserAIEnvironment.make(base: ["HOME": "/Users/x", "GOOGLE_API_KEY": "synthetic-key",
+            "GOOGLE_DEFAULT_CLIENT_ID": "synthetic-id", "GOOGLE_DEFAULT_CLIENT_SECRET": "synthetic-secret"], searchPath: [])
+        #expect(environment["GOOGLE_API_KEY"] == nil)
+        #expect(environment["GOOGLE_DEFAULT_CLIENT_ID"] == nil && environment["GOOGLE_DEFAULT_CLIENT_SECRET"] == nil)
+        #expect(environment["HOME"] == "/Users/x")
+    }
 }
 
 @Suite("AI program discovery")

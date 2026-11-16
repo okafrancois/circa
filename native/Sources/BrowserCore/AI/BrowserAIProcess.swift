@@ -18,11 +18,13 @@ public struct BrowserAICommand: Equatable, Sendable {
 
 /// Environment for a child program. The app's PATH differs from the user's shell (Finder
 /// launches), so the search path is explicit. Markers of a parent agent session are removed so
-/// the program does not believe it runs nested inside another one.
+/// the program does not believe it runs nested inside another one. Engine credentials (the Safe
+/// Browsing API key and OAuth client values) never reach a child program.
 public enum BrowserAIEnvironment {
     static let removedKeys: Set<String> = [
         "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_SESSION_ID",
         "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID", "CODEX_CI",
+        "GOOGLE_API_KEY", "GOOGLE_DEFAULT_CLIENT_ID", "GOOGLE_DEFAULT_CLIENT_SECRET",
     ]
     public static let systemPath = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
 

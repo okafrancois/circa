@@ -12,6 +12,11 @@ final class BrowserScriptingController {
     var createWindow: (String) async throws -> CircaScriptWindow = { _ in throw BrowserScriptError.unavailable }
     var allowsJavaScript: () -> Bool = { false }
     var targetWindowID: String?
+    /// Private windows exist in the Apple Events model only while "Allow JavaScript from Apple
+    /// Events" is on; even then their content stays redacted until targeted and focused.
+    var exposesPrivateWindows: Bool { allowsJavaScript() }
+    /// The windows Apple Events can see.
+    var exposedWindows: [CircaScriptWindow] { exposesPrivateWindows ? windows : windows.filter { !$0.incognito } }
     // NSCreateCommand's synchronous factory/insertion phase is followed by the ordered
     // asynchronous session mutation before the command resumes with the canonical object.
     var creation: (() async throws -> NSObject)?
@@ -124,11 +129,12 @@ final class BrowserScriptingController {
 }
 
 enum BrowserScriptError: Error, Equatable {
-    case unavailable, invalidURL, javaScriptDisabled, privateContent, unsupported
-    var code: Int { switch self { case .javaScriptDisabled, .privateContent: -1743; case .unavailable: -1728; case .invalidURL: -1700; case .unsupported: -1708 } }
+    case unavailable, invalidURL, javaScriptDisabled, privateContent, privateWindowsHidden, unsupported
+    var code: Int { switch self { case .javaScriptDisabled, .privateContent, .privateWindowsHidden: -1743; case .unavailable: -1728; case .invalidURL: -1700; case .unsupported: -1708 } }
     @MainActor var message: String {
         switch self {
         case .javaScriptDisabled: uiText("Enable “Allow JavaScript from Apple Events” in Settings to run JavaScript.")
+        case .privateWindowsHidden: uiText("Enable “Allow JavaScript from Apple Events” in Settings to script private windows.")
         case .privateContent: uiText("Target and focus the private window before accessing its content.")
         case .unavailable: uiText("The scripting object is no longer available.")
         case .invalidURL: uiText("The URL is invalid.")
@@ -288,7 +294,7 @@ private extension Array where Element == CircaScriptTab {
 }
 
 extension NSApplication {
-    @objc var appleScriptWindows: [CircaScriptWindow] { (delegate as? OrbitApplication)?.scripting.windows ?? [] }
+    @objc var appleScriptWindows: [CircaScriptWindow] { (delegate as? OrbitApplication)?.scripting.exposedWindows ?? [] }
     @objc var appleScriptSpaces: [CircaScriptSpace] { appleScriptWindows.filter { !$0.incognito }.first?.appleScriptSpaces ?? [] }
     @objc var appleScriptTabs: [CircaScriptTab] { appleScriptWindows.flatMap(\.appleScriptTabs) }
     @objc(valueInAppleScriptWindowsWithUniqueID:)
@@ -330,12 +336,15 @@ extension NSApplication {
             guard let scripting = (delegate as? OrbitApplication)?.scripting else { return nil }
             if objectClass == CircaScriptWindow.self, key == "appleScriptWindows" {
                 let mode = BrowserScriptingController.decodedScriptValue(arguments.properties["mode"]) as? String ?? "normal"
-                scripting.creation = { try await scripting.createWindow(mode) }
+                scripting.creation = {
+                    guard mode != "incognito" || scripting.exposesPrivateWindows else { throw BrowserScriptError.privateWindowsHidden }
+                    return try await scripting.createWindow(mode)
+                }
                 return CircaScriptWindow(id: UUID().uuidString, mode: mode, scripting: scripting,
                                          isFocused: { false }, title: { "" })
             }
             guard objectClass == CircaScriptTab.self, key == "appleScriptTabs",
-                  let window = scripting.windows.first else { return nil }
+                  let window = scripting.exposedWindows.first else { return nil }
             return window.newScriptingObject(of: objectClass, forValueForKey: key,
                                              withContentsValue: arguments.contents, properties: arguments.properties)
         }

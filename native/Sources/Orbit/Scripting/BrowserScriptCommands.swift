@@ -123,7 +123,14 @@ final class CircaMakeScriptCommand: NSCreateCommand {
 
     @MainActor
     func makeValue(_ scripting: BrowserScriptingController) async throws -> NSScriptObjectSpecifier {
-        if arguments?["Location"] == nil, scripting.windows.isEmpty,
+        // A hidden private window is refused before Cocoa inserts a provisional object it could
+        // not reference afterwards.
+        if createClassDescription.implementationClassName == NSStringFromClass(CircaScriptWindow.self),
+           BrowserScriptingController.decodedScriptValue(resolvedKeyDictionary["mode"]) as? String == "incognito",
+           !scripting.exposesPrivateWindows {
+            throw BrowserScriptError.privateWindowsHidden
+        }
+        if arguments?["Location"] == nil, scripting.exposedWindows.isEmpty,
            createClassDescription.implementationClassName == NSStringFromClass(CircaScriptTab.self) {
             _ = try await scripting.createWindow("normal")
         }

@@ -27,6 +27,8 @@ struct OrbitProductConfigurationTests {
     private var personal: URL { support.appendingPathComponent("Orbit", isDirectory: true) }
     /// The packaged product signed with the stable local identity.
     private let stable = OrbitBuildIdentity.stableProductForTests
+    /// A bare executable without a bundle identity (automated runs).
+    private let bare = OrbitBuildIdentity(bundleIdentifier: nil, signature: nil)
 
     @Test("Without arguments the product uses the personal data root and the real Keychain item")
     func productDefaults() throws {
@@ -42,25 +44,49 @@ struct OrbitProductConfigurationTests {
     @Test("Automated runs need the mock Keychain with an explicit synthetic root")
     func syntheticRuns() throws {
         let synthetic = try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain", "--orbit-data-root=/private/tmp/orbit-run/data"],
-                                                     applicationSupport: support, build: stable)
+                                                     applicationSupport: support, build: bare)
         #expect(synthetic.secureStorage == .mockKeychain)
         #expect(synthetic.dataRoot.path == "/private/tmp/orbit-run/data")
         #expect(synthetic.engineRoot.path == "/private/tmp/orbit-run/data/Chromium")
         #expect(throws: OrbitProductConfiguration.Failure.mockKeychainNeedsSyntheticRoot) {
-            try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain"], applicationSupport: support, build: stable)
+            try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain"], applicationSupport: support, build: bare)
         }
         for root in [personal.path, personal.path + "/nested", support.path + "/ORBIT/x"] {
             #expect(throws: OrbitProductConfiguration.Failure.mockKeychainOnPersonalRoot) {
                 try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain", "--orbit-data-root=" + root],
+                                             applicationSupport: support, build: bare)
+            }
+        }
+    }
+
+    @Test("The signed product refuses a synthetic run request instead of opening another root")
+    func productRefusesSyntheticRun() {
+        for arguments in [["Orbit", "--use-mock-keychain", "--orbit-data-root=/private/tmp/orbit-run/data"],
+                          ["Orbit", "--orbit-data-root=/private/tmp/orbit-run/data", "--use-mock-keychain"]] {
+            #expect(throws: OrbitProductConfiguration.Failure.self) {
+                try OrbitProductConfiguration(arguments: arguments, applicationSupport: support, build: stable)
+            }
+            #expect(throws: OrbitProductConfiguration.Failure.self) {
+                try OrbitProductConfiguration(arguments: arguments, infoDictionary: ["CFBundleIdentifier": "io.github.okatech.orbit"],
                                              applicationSupport: support, build: stable)
             }
         }
     }
 
-    @Test("A configurable product root keeps the real Keychain; malformed options refuse")
+    @Test("The signed product ignores a redirected data root; malformed options refuse")
     func productRootAndRefusals() throws {
         let custom = try OrbitProductConfiguration(arguments: ["Orbit", "--orbit-data-root=/Volumes/Data/Orbit"], applicationSupport: support, build: stable)
         #expect(custom.secureStorage == .keychain(service: "Orbit Safe Storage", account: "Orbit"))
+        #expect(custom.dataRoot == personal.standardizedFileURL)
+        #expect(custom.sessionFile.path == personal.path + "/session.json")
+        let launched = try OrbitProductConfiguration(arguments: ["Orbit", "--orbit-data-root=/private/tmp/attacker"],
+            infoDictionary: ["CFBundleIdentifier": "io.github.okatech.orbit"], applicationSupport: support, build: stable)
+        #expect(launched.dataRoot == personal.standardizedFileURL && !launched.usesMockKeychain)
+        // A test bundle signed like the product still follows its runner's synthetic root.
+        let test = try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain", "--orbit-data-root=/private/tmp/orbit-run/data"],
+            infoDictionary: ["CFBundleIdentifier": "io.github.okatech.orbit.test.orbit.redirect-test", "OrbitDataRoot": "/private/tmp/orbit-baked/data",
+                             "OrbitUseMockKeychain": true, "OrbitSyntheticBundle": true], applicationSupport: support, build: stable)
+        #expect(test.usesMockKeychain && test.dataRoot.path == "/private/tmp/orbit-run/data")
         #expect(throws: OrbitProductConfiguration.Failure.dataRootNotAbsolute) {
             try OrbitProductConfiguration(arguments: ["Orbit", "--orbit-data-root=relative"], applicationSupport: support, build: stable)
         }
@@ -75,15 +101,15 @@ struct OrbitProductConfigurationTests {
     @Test("Info.plist settings of a synthetic bundle follow the same rules, never doubled by an argument")
     func infoDictionarySettings() throws {
         let info: [String: Any] = ["OrbitDataRoot": "/private/tmp/orbit-plist/data", "OrbitUseMockKeychain": true]
-        let configuration = try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: info, applicationSupport: support, build: stable)
+        let configuration = try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: info, applicationSupport: support, build: bare)
         #expect(configuration.secureStorage == .mockKeychain)
         #expect(configuration.dataRoot.path == "/private/tmp/orbit-plist/data")
         #expect(throws: OrbitProductConfiguration.Failure.repeatedOption("--orbit-data-root")) {
             try OrbitProductConfiguration(arguments: ["Orbit", "--orbit-data-root=/private/tmp/other"], infoDictionary: info,
-                                         applicationSupport: support, build: stable)
+                                         applicationSupport: support, build: bare)
         }
         #expect(throws: OrbitProductConfiguration.Failure.mockKeychainNeedsSyntheticRoot) {
-            try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: ["OrbitUseMockKeychain": true], applicationSupport: support, build: stable)
+            try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: ["OrbitUseMockKeychain": true], applicationSupport: support, build: bare)
         }
     }
 

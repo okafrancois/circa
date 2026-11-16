@@ -144,6 +144,7 @@ def phase_run(args):
     enabled = args.phase == 'on'
     assert outputs and outputs[0]['launchEnabled'] == enabled
     assert all(check['globalPreference'] == enabled and check['profilePreference'] == enabled for check in outputs)
+    assert not any(check.get('credentialsInEnvironment', True) for check in outputs), 'Engine credentials remain in the environment'
     requests = summary['safeBrowsingRequests']
     if enabled:
         assert requests and any(request['keyMatchesFixture'] for request in requests), 'Runtime key path did not take effect'

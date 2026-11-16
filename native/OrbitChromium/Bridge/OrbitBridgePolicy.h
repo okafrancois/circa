@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <set>
 #include <string>
@@ -14,6 +15,16 @@
 #include <vector>
 
 namespace orbit_bridge {
+
+// Engine API credentials. The opt-in Safe Browsing key is placed in the environment only for
+// the engine's own read during initialization; afterwards the bridge removes these variables so
+// later helpers and spawned programs never inherit them.
+inline constexpr const char* kEngineCredentialVariables[] = {
+    "GOOGLE_API_KEY", "GOOGLE_DEFAULT_CLIENT_ID", "GOOGLE_DEFAULT_CLIENT_SECRET"};
+
+inline void RemoveEngineCredentialsFromEnvironment() {
+  for (const char* name : kEngineCredentialVariables) unsetenv(name);
+}
 
 // ABI 7 page-first keys (CHROMIUM-APP-R2, review M1). A key down sent to the page as a shortcut
 // candidate keeps a receipt until the page's unhandled answer comes back. The page consumes most

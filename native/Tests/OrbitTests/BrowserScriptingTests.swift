@@ -356,8 +356,11 @@ struct BrowserScriptingTests {
         #expect((tabSpecifier.objectsByEvaluatingSpecifier as? CircaScriptTab)?.id == "created")
         #expect(command.commandDescription.appleEventCodeForReturnType == typeObjectSpecifier)
         #expect(tabSpecifier.descriptor?.descriptorType == eventCode("obj "))
-        app.scripting.createWindow = { mode in #expect(mode == "incognito"); return window }
+        app.scripting.createWindow = { _ in Issue.record("A hidden private window must not be created"); return window }
         command.arguments = ["ObjectClass": eventCode("WiND"), "KeyDictionary": ["mode": "incognito"]]
+        await #expect(throws: BrowserScriptError.privateWindowsHidden) { _ = try await command.makeValue(app.scripting) }
+        app.scripting.allowsJavaScript = { true }
+        app.scripting.createWindow = { mode in #expect(mode == "incognito"); return window }
         let windowSpecifier = try await command.makeValue(app.scripting)
         #expect(windowSpecifier.objectsByEvaluatingSpecifier as? CircaScriptWindow === window)
         #expect(windowSpecifier.descriptor?.descriptorType == eventCode("obj "))
@@ -365,6 +368,35 @@ struct BrowserScriptingTests {
             let reply = try #require(try BrowserScriptingController.replyValue(object, resultCode: typeObjectSpecifier) as? NSScriptObjectSpecifier)
             #expect(reply.descriptor?.descriptorType == eventCode("obj "))
         }
+    }
+
+    @Test("Private windows stay out of the Apple Events model unless JavaScript from Apple Events is allowed")
+    func privateWindowsHidden() throws {
+        try loadDictionary()
+        _ = NSApplication.shared
+        let app = OrbitApplication()
+        let previous = NSApp.delegate
+        NSApp.delegate = app
+        NSScriptExecutionContext.shared().topLevelObject = NSApp
+        defer { withExtendedLifetime(app) {}; NSApp.delegate = previous }
+        let normal = CircaScriptWindow(id: "normal", mode: "normal", scripting: app.scripting, isFocused: { true }, title: { "Normal" })
+        let hidden = CircaScriptWindow(id: "private", mode: "incognito", scripting: app.scripting, isFocused: { true }, title: { "Private" })
+        for (window, tabID) in [(normal, "normal-tab"), (hidden, "private-tab")] {
+            let space = CircaScriptSpace(id: window.id + "-space", title: "Space", window: window)
+            space.appleScriptTabs = [CircaScriptTab(id: tabID, title: "Page", url: "about:blank#" + tabID, location: "unpinned", loading: false, space: space)]
+            window.appleScriptSpaces = [space]
+        }
+        app.scripting.windows = [hidden, normal]
+        #expect(NSApp.appleScriptWindows.map(\.id) == ["normal"])
+        #expect(NSApp.scriptWindow(withID: "private") == nil)
+        #expect(NSApp.appleScriptTabs.map(\.id) == ["normal-tab"])
+        #expect(NSApp.scriptTab(withID: "private-tab") == nil)
+        let byIndex = NSIndexSpecifier(containerClassDescription: try #require(BrowserScriptingController.applicationClassDescription(for: NSApplication.self)),
+                                       containerSpecifier: nil, key: "appleScriptWindows", index: 0)
+        #expect((byIndex.objectsByEvaluatingSpecifier as? CircaScriptWindow)?.id == "normal")
+        app.scripting.allowsJavaScript = { true }
+        #expect(NSApp.appleScriptWindows.map(\.id) == ["private", "normal"])
+        #expect(NSApp.scriptTab(withID: "private-tab") != nil)
     }
 
     @Test("Retained scripting children become unavailable when their inventory parents disappear")

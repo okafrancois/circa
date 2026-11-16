@@ -16,6 +16,8 @@ import Foundation
 /// its Info.plist (`OrbitDataRoot`, `OrbitUseMockKeychain`, for packaged synthetic test bundles
 /// only), under the same rules. Packaged test defaults allow an explicit synthetic run root;
 /// legacy plist settings and arguments for the same option refuse.
+/// The shipping product identity ignores `--orbit-data-root` and refuses `--use-mock-keychain`:
+/// only test bundles and builds without a product identity can be redirected.
 /// Product mode is reserved to the packaged daily and Live product identities with a valid signature anchored
 /// on the stable local identity (`OrbitBuildIdentity.productRefusal`): a bare executable, an ad hoc
 /// or unsigned copy, the inert `io.github.okatech.orbit.test.orbit.unpackaged` or a test bundle refuses to start in
@@ -142,13 +144,16 @@ struct OrbitProductConfiguration: Equatable {
            !(bakedTest && arguments.contains(where: { $0 == Self.mockKeychainOption || $0.hasPrefix(Self.mockKeychainOption + "=") })) {
             effective.append(Self.mockKeychainOption)
         }
-        try self.init(arguments: effective, applicationSupport: applicationSupport, build: build)
+        try self.init(arguments: effective, applicationSupport: applicationSupport, build: build, testBundle: testBundle)
         // Only a baked synthetic test bundle may opt in; the run is still mock Keychain and confined.
         syntheticProductNetwork = bakedTest && usesMockKeychain
             && infoDictionary[Self.syntheticProductNetworkInfoKey] as? Bool == true
     }
 
-    init(arguments: [String], applicationSupport: URL, build: OrbitBuildIdentity) throws {
+    /// `testBundle`: the bundle's own identifier is a packaged test identity (see the
+    /// Info.plist initializer); only such a bundle, or a build without a product identity, may be
+    /// redirected by launch arguments.
+    init(arguments: [String], applicationSupport: URL, build: OrbitBuildIdentity, testBundle: Bool = false) throws {
         if let retired = arguments.first(where: { $0.hasPrefix("--orbit-chromium-root=") }) {
             throw Failure.retiredOption(String(retired.prefix { $0 != "=" }))
         }
@@ -164,6 +169,16 @@ struct OrbitProductConfiguration: Equatable {
         if let path = roots.first {
             guard path.hasPrefix("/") else { throw Failure.dataRootNotAbsolute }
             root = URL(fileURLWithPath: path, isDirectory: true)
+        }
+        // The shipping product keeps its fixed data root: launch arguments (`open --args`, a
+        // crafted launcher) cannot point it at another root. A redirect is ignored; a synthetic
+        // run request refuses rather than silently opening the personal data instead.
+        let shippingProduct = !testBundle && build.bundleIdentifier == OrbitBuildIdentity.productBundleIdentifier
+        if shippingProduct {
+            guard mock.isEmpty else {
+                throw Failure.productBuildRefused("synthetic runs need a test bundle; the product keeps its own data root")
+            }
+            root = personal
         }
         if mock.isEmpty {
             if let refusal = build.productRefusal { throw Failure.productBuildRefused(refusal) }

@@ -212,6 +212,20 @@ bool ExtensionOk(const std::string& path) {
          && lstat((path + "/manifest.json").c_str(), &manifest) == 0 && S_ISREG(manifest.st_mode);
 }
 
+void EngineCredentialsLeaveTheEnvironment() {
+  setenv("GOOGLE_API_KEY", "synthetic-key", 1);
+  setenv("GOOGLE_DEFAULT_CLIENT_ID", "synthetic-id", 1);
+  setenv("GOOGLE_DEFAULT_CLIENT_SECRET", "synthetic-secret", 1);
+  setenv("ORBIT_BRIDGE_POLICY_UNRELATED", "kept", 1);
+  orbit_bridge::RemoveEngineCredentialsFromEnvironment();
+  Check(!getenv("GOOGLE_API_KEY"), "the Safe Browsing key leaves the environment after initialization");
+  Check(!getenv("GOOGLE_DEFAULT_CLIENT_ID") && !getenv("GOOGLE_DEFAULT_CLIENT_SECRET"),
+        "OAuth client values leave the environment after initialization");
+  const char* unrelated = getenv("ORBIT_BRIDGE_POLICY_UNRELATED");
+  Check(unrelated && std::string(unrelated) == "kept", "unrelated variables stay");
+  unsetenv("ORBIT_BRIDGE_POLICY_UNRELATED");
+}
+
 void ArgumentsAreAllowListed() {
   const std::string base = TemporaryDirectory("arguments");
   Check(!base.empty(), "temporary directory");
@@ -399,6 +413,7 @@ int main() {
   InitialProfileStaysPinned();
   EssentialSurfacePolicies();
   ArgumentsAreAllowListed();
+  EngineCredentialsLeaveTheEnvironment();
   ExtensionUpdateSmokeIsConfined();
   OwnedUserDataDirIsBridgeOnly();
   ComponentExtensionIsBridgeOnly();

@@ -39,7 +39,7 @@ public struct SafariBrowserImportAdapter: BrowserImportSourceAdapter {
         do {
             let root = try OrbitSecureDirectory.open(copy.directory, create: false)
             try OrbitDiskSpace.require(Int64(SafariExportArchive.maximumBytes), at: parent, probe: diskSpace)
-            var inventory = Inventory(), histories: [String: URL] = [:], recognized = 0
+            var inventory = Inventory(), histories: [String: URL] = [:], recognized = 0, passwordExport: Data?
             try SafariExportArchive.read(copy.directory.appendingPathComponent(source.lastPathComponent), entry: { name, read in
                 let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
                 if ext == "html" {
@@ -59,7 +59,8 @@ public struct SafariBrowserImportAdapter: BrowserImportSourceAdapter {
                     inventory.counts["otp"] = result.unrepresentedOTP
                     inventory.counts["passkeys"] = result.unrepresentedPasskeys
                     inventory.counts["unsupportedPasswords"] = result.unsupported
-                    try root.write(data, to: "Passwords.csv"); inventory.passwords = true; recognized += 1
+                    // Plaintext credentials stay in memory; nothing is staged on disk.
+                    passwordExport = data; inventory.passwords = true; recognized += 1
                 } else if ext == "json" {
                     var aggregate = 0
                     var database: AuthenticationSQLite?
@@ -111,6 +112,7 @@ public struct SafariBrowserImportAdapter: BrowserImportSourceAdapter {
             try root.write(JSONEncoder().encode(inventory), to: "Inventory.json")
             try root.removeChecked(source.lastPathComponent)
             copy.historyDatabases = histories
+            copy.passwordExport = passwordExport
             return copy
         } catch { copy.remove(); throw error }
     }
@@ -140,9 +142,7 @@ public struct SafariBrowserImportAdapter: BrowserImportSourceAdapter {
         try ArcChromiumHistoryReader(snapshotFile: file, directory: directory, identity: .init(namespace: registration.namespace))
     }
     public func passwords(snapshot: ArcSourceSnapshot) throws -> ChromiumPasswordReadResult {
-        let root = try OrbitSecureDirectory.open(snapshot.directory, create: false)
-        guard includeSharedData, root.exists("Passwords.csv") else { return .init() }
-        guard let data = root.read("Passwords.csv", limit: 32 * 1024 * 1024) else { throw BrowserAuthenticationImportError.invalidCSV }
+        guard includeSharedData, let data = snapshot.passwordExport else { return .init() }
         return try BrowserPasswordCSV.read(data)
     }
 }
