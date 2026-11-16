@@ -17,7 +17,7 @@ extension BrowserHistoryStore {
         return try Self.readVisits(database, whereSQL: clauses.joined(separator: " AND "), values: values, limit: min(max(0, limit), 10000), offset: max(0, offset))
     }
 
-    /// One forced strategy on the writer connection, for strategy-by-strategy parity.
+    /// One forced strategy on the writer connection, so each strategy can be compared.
     func libraryVisits(search: String, plan: LibrarySearchPlan, interval: DateInterval? = nil,
                        limit: Int = 100, offset: Int = 0) throws -> [BrowserHistoryVisit] {
         guard let database else { return [] }
@@ -143,7 +143,7 @@ struct BrowserHistorySearchIndexTests {
         #expect(await !store.searchBackfillPending)
         #expect(try await store.librarySearchPlan("kestrel") == .candidates)
         let terms = randomTerms(visits, seed: 0xBEEF, count: 120)
-        // Matches exist for most terms; a parity test over empty results would prove nothing.
+        // Matches exist for most terms; an equivalence test over empty results would prove nothing.
         var matched = 0
         for term in terms where try await !store.legacyLibraryVisits(search: term).isEmpty { matched += 1 }
         #expect(matched > terms.count * 3 / 4)
