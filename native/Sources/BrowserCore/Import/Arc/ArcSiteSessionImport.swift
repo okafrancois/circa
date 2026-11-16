@@ -60,6 +60,20 @@ public struct ArcSiteSessionImport {
 
     public var latestPasswordJobID: UUID? { get throws { try readBackup(latestBackup()).passwordJobID } }
 
+    /// Password jobs still named by a scheduled request or by any undo point. Throws when one of
+    /// them cannot be read, so a caller never treats an unknown reference as absent.
+    public func referencedPasswordJobIDs() throws -> Set<UUID> {
+        var ids = Set<UUID>()
+        if manager.fileExists(atPath: pendingFile.path) {
+            let request = try JSONDecoder().decode(ArcSiteSessionRequest.self, from: Data(contentsOf: pendingFile))
+            if let id = request.passwordJobID { ids.insert(id) }
+        }
+        for url in try backupDirectories() {
+            if let id = try readBackup(url).passwordJobID { ids.insert(id) }
+        }
+        return ids
+    }
+
     public func schedule(_ request: ArcSiteSessionRequest) throws {
         try validate(request)
         try ArcImportFiles.writePrivate(JSONEncoder().encode(request), to: pendingFile)

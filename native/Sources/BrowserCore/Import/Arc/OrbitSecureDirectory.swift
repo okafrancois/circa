@@ -100,6 +100,13 @@ final class OrbitSecureDirectory {
         return info.st_nlink
     }
 
+    /// Last content modification of an entry, without following it; nil when absent.
+    func modificationDate(_ name: String) -> Date? {
+        var info = stat()
+        guard Self.validName(name), fstatat(descriptor, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec) + TimeInterval(info.st_mtimespec.tv_nsec) / 1e9)
+    }
+
     func size(_ name: String) -> Int64 {
         var info = stat()
         guard fstatat(descriptor, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { return 0 }

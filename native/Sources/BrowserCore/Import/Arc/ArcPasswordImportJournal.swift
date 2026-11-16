@@ -120,6 +120,29 @@ public final class ArcPasswordImportJournal: @unchecked Sendable {
             try parent.rename("ArcPasswordImport", to: parent, "ArcPasswordImport-quarantine-" + UUID().uuidString)
         }
     }
+    /// A journal holds imported credentials until its job finishes. One that neither the pending
+    /// startup job nor a caller-supplied reference (a scheduled import, an undo point) names, and
+    /// that was last written more than `orphanMaximumAge` ago, is erased. Quarantined evidence is
+    /// left alone. An unreadable startup pointer stops the sweep: nothing is removed.
+    public static let orphanMaximumAge: TimeInterval = 7 * 24 * 60 * 60
+    @discardableResult
+    public static func sweepOrphans(root: URL, referenced: Set<UUID>, now: Date = Date(),
+                                    maximumAge: TimeInterval = orphanMaximumAge) throws -> [UUID] {
+        let parent = try OrbitSecureDirectory.open(root, create: false)
+        guard parent.exists("ArcPasswordImport") else { return [] }
+        let directory = try parent.directory("ArcPasswordImport", create: false)
+        var kept = referenced
+        if let active = try activeID(root: root) { kept.insert(active) }
+        var removed: [UUID] = []
+        for name in try directory.checkedEntries().sorted() where name.hasSuffix(".sealed") {
+            guard let id = UUID(uuidString: String(name.dropLast(".sealed".count))), !kept.contains(id),
+                  try directory.checkedKind(name) == S_IFREG, let modified = directory.modificationDate(name),
+                  now.timeIntervalSince(modified) > maximumAge else { continue }
+            try directory.removeChecked(name)
+            removed.append(id)
+        }
+        return removed
+    }
     public func hash(_ password: String) -> Data {
         Data(HMAC<SHA256>.authenticationCode(for: Data(("password-value-v1:" + password).utf8), using: key))
     }

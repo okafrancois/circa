@@ -1709,6 +1709,7 @@
 
 // Browser automation
 "Enable “Allow JavaScript from Apple Events” in Settings to run JavaScript." = "Enable “Allow JavaScript from Apple Events” in Settings to run JavaScript.";
+"Enable “Allow JavaScript from Apple Events” in Settings to script private windows." = "Enable “Allow JavaScript from Apple Events” in Settings to script private windows.";
 "Target and focus the private window before accessing its content." = "Target and focus the private window before accessing its content.";
 "The scripting object is no longer available." = "The scripting object is no longer available.";
 "The URL is invalid." = "The URL is invalid.";

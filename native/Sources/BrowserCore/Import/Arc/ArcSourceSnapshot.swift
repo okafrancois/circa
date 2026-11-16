@@ -21,6 +21,13 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
     public var passwordDatabases: [String: [URL]] = [:]
     private let lock = NSLock()
     private var removed = false
+    private var heldPasswordExport: Data?
+    /// Plaintext password export read from an archive. Held in memory only, never written below
+    /// `directory`, and wiped when the snapshot is removed.
+    public var passwordExport: Data? {
+        get { lock.withLock { heldPasswordExport } }
+        set { lock.withLock { heldPasswordExport = removed ? nil : newValue } }
+    }
 
     private init(directory: URL, sidebar: URL, archive: URL?, localState: URL?, historyDatabases: [String: URL]) {
         self.directory = directory
@@ -35,6 +42,10 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
     public func remove() {
         let shouldRemove = lock.withLock { () -> Bool in
             defer { removed = true }
+            if var held = heldPasswordExport {
+                heldPasswordExport = nil
+                held.resetBytes(in: 0..<held.count)
+            }
             return !removed
         }
         if shouldRemove { try? FileManager.default.removeItem(at: directory) }

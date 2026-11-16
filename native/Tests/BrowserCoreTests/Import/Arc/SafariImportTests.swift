@@ -180,6 +180,27 @@ struct SafariImportTests {
             #expect(try FileManager.default.contentsOfDirectory(atPath: f.base.snapshots.path).isEmpty)
         }
     }
+    @Test("Exported passwords stay in memory: no file below the snapshot or its parent holds them")
+    func passwordExportIsNeverStaged() throws {
+        let f = try Fixture(); defer { f.base.remove() }
+        let snapshot = try f.snapshot()
+        let marker = Data("quoted,\"\"secret\"\"".utf8)
+        var files: [URL] = []
+        if let walker = FileManager.default.enumerator(at: f.base.snapshots, includingPropertiesForKeys: [.isRegularFileKey]) {
+            for case let url as URL in walker where (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true { files.append(url) }
+        }
+        #expect(!files.isEmpty)
+        for file in files {
+            #expect(try Data(contentsOf: file).range(of: marker) == nil, "\(file.lastPathComponent) holds exported passwords")
+            #expect(file.pathExtension.lowercased() != "csv")
+        }
+        let read = try f.adapter().passwords(snapshot: snapshot)
+        #expect(read.passwords.count == 1 && read.passwords[0].password == "quoted,\"secret\"")
+        #expect(try f.adapter(shared: false).passwords(snapshot: snapshot).passwords.isEmpty)
+        snapshot.remove()
+        #expect(snapshot.passwordExport == nil)
+        #expect(try f.adapter().passwords(snapshot: snapshot).passwords.isEmpty)
+    }
     @Test func deflatedExportLimitsAndSnapshotPermissions() throws {
         let f = try Fixture(); defer { f.base.remove() }
         try Self.zip(Self.entries(), deflated: true).write(to: f.source)

@@ -274,6 +274,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             backing: .buffered,
             defer: false
         )
+        window.applyContentPrivacy(isPrivate: isPrivateWindow)
         window.title = isPrivateWindow ? uiText("Private") : uiText("Circa")
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true

@@ -149,6 +149,7 @@ enum OrbitLauncher {
                 purgeEngineHistory(configuration)
                 sweepRemovedProfileData(configuration)
                 processSiteSessionImport(configuration)
+                sweepOrphanedPasswordJournals(configuration)
                 runtimeStatus = startRuntime(configuration)
             }
         } catch {
@@ -248,6 +249,17 @@ enum OrbitLauncher {
             FileHandle.standardError.write(Data("orbit: engine cache sweep deferred category=\(error)\n".utf8))
         }
         Task.detached(priority: .background) { try? BrowserEngineProfileCache.purgeRetired(cacheRoot: cacheRoot) }
+    }
+
+    /// Erases encrypted password import journals that no job or undo point still needs.
+    /// A failure never blocks startup and is reported with a fixed category only.
+    private static func sweepOrphanedPasswordJournals(_ configuration: OrbitProductConfiguration) {
+        do {
+            let referenced = try ArcSiteSessionImport(dataRoot: configuration.dataRoot).referencedPasswordJobIDs()
+            try ArcPasswordImportJournal.sweepOrphans(root: configuration.dataRoot, referenced: referenced)
+        } catch {
+            FileHandle.standardError.write(Data("orbit: password journal sweep deferred category=\(type(of: error))\n".utf8))
+        }
     }
 
     private static func processSiteSessionImport(_ configuration: OrbitProductConfiguration) {

@@ -262,7 +262,9 @@ struct SyntheticDataGuardTests {
         defer { fixture.remove() }
         let elsewhere = fixture.base.appendingPathComponent("elsewhere", isDirectory: true)
         try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
-        let chromium = fixture.syntheticRoot.appendingPathComponent("Chromium", isDirectory: true)
+        // The product ignores a redirected root and uses its personal root.
+        let chromium = fixture.personalChromium
+        try FileManager.default.removeItem(at: chromium)
         try FileManager.default.createSymbolicLink(at: chromium, withDestinationURL: elsewhere)
         let product = try fixture.configuration(mock: false)
         let rejected = refusal { try product.prepareDirectories() }

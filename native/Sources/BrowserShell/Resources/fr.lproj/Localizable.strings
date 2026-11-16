@@ -1402,6 +1402,7 @@
 "Are you sure you'd like to Clear Archive?" = "Voulez-vous vraiment vider les archives ?";
 "This action is permanent." = "Cette action est définitive.";
 "Enable “Allow JavaScript from Apple Events” in Settings to run JavaScript." = "Activez « Autoriser JavaScript depuis les événements Apple » dans les réglages pour exécuter JavaScript.";
+"Enable “Allow JavaScript from Apple Events” in Settings to script private windows." = "Activez « Autoriser JavaScript depuis les événements Apple » dans les réglages pour piloter les fenêtres privées par script.";
 "Target and focus the private window before accessing its content." = "Ciblez et activez la fenêtre privée avant d’accéder à son contenu.";
 "The scripting object is no longer available." = "L’objet de script n’est plus disponible.";
 "The URL is invalid." = "L’URL n’est pas valide.";

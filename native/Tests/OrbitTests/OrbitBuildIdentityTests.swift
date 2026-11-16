@@ -120,7 +120,7 @@ struct OrbitBuildIdentityTests {
         let product = try OrbitProductConfiguration(arguments: ["Orbit"], applicationSupport: support, build: .stableProductForTests)
         #expect(product.usesProductNetwork)
         let synthetic = try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain", "--orbit-data-root=/private/tmp/orbit-net/data"],
-                                                     applicationSupport: support, build: .stableProductForTests)
+                                                     applicationSupport: support, build: OrbitBuildIdentity(bundleIdentifier: nil, signature: nil))
         #expect(!synthetic.usesProductNetwork)
         let baked = try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: [
             "CFBundleIdentifier": "io.github.okatech.orbit.test.orbit.net-test", "OrbitDataRoot": "/private/tmp/orbit-net/plist",

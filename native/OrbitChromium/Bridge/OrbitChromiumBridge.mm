@@ -2429,8 +2429,13 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     for (auto& argument : state.browser_arguments) browser_argv.push_back(argument.data());
     browser_argv.push_back(nullptr);
     if (g_startup_timing) g_startup_timing(1);
-    if (!CefInitialize(CefMainArgs(static_cast<int>(browser_argv.size()) - 1, browser_argv.data()), settings, app,
-                       nullptr)) {
+    const bool cef_initialized = CefInitialize(CefMainArgs(static_cast<int>(browser_argv.size()) - 1,
+                                                           browser_argv.data()), settings, app, nullptr);
+    // The engine reads its API credentials once, while it creates the initial profile during
+    // initialization, and keeps them for the process lifetime. Helpers and programs started
+    // from now on must not inherit them.
+    orbit_bridge::RemoveEngineCredentialsFromEnvironment();
+    if (!cef_initialized) {
       g_state = nullptr;
       return CefGetExitCode();
     }
