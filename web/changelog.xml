@@ -4,10 +4,91 @@
   <title>Circa releases</title>
   <link href="https://circabrowser.com/changelog.xml" rel="self" />
   <link href="https://circabrowser.com/changelog" rel="alternate" />
-  <updated>2026-11-15T00:00:00Z</updated>
+  <updated>2026-11-16T00:00:00Z</updated>
   <author>
     <name>Circa</name>
   </author>
+  <entry>
+    <id>https://circabrowser.com/changelog/0.75.0-nightly.1/</id>
+    <title>0.75.0-nightly.1 — Clear a whole profile's website data, and search history faster.</title>
+    <link href="https://circabrowser.com/changelog/0.75.0-nightly.1/" />
+    <updated>2026-11-16T00:00:00Z</updated>
+    <published>2026-11-16T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Clear a whole profile's website data, and search history faster.
+
+1 new · 3 faster · 9 fixed
+
+## New
+
+- **Clear Site Data for This Profile…** now works with the Chromium engine. It removes cookies, cache, local storage, IndexedDB and service workers for that profile only; history, passwords and site permissions stay. Clearing one site's data also works when no tab shows that site.
+
+## Faster
+
+- Library history search no longer blocks visit recording or sync: searching 200,000 visits for a common word takes 18.5 ms → 1.8 ms, and for a site name 62 ms → 0.8 ms.
+- While the assistant writes, each new word costs 24 ms → 1.0 ms of main-thread time on a 30-message conversation (peaks 52–134 ms → 1.2 ms).
+- Opening the assistant panel on a 120 Hz display draws 20 → 47 frames, with no frozen frames.
+
+## Fixed
+
+- Links opened with ⌘-click, ⌥-click into a split or ⇧-click into Peek now keep their originating page: sites see where the click came from, and their strict same-site cookies are no longer sent on cross-site opens.
+- Browser-internal debug pages and `javascript:` addresses can no longer be loaded from session restore, AppleScript, link routing or other apps.
+- AppleScript can no longer run JavaScript in a private window by setting a tab's URL to `javascript:`.
+- Link routing rules now match only a link's site and path, so a rule cannot be triggered by text in the query string.
+- Links opened from other apps have embedded user names and passwords removed.
+- Removing a profile now also deletes its web cache and its cookie backups.
+- Link previews refuse local-network and private addresses, including after redirects.
+- Update checks no longer send cookies.
+- Assistant animations, the Today sidebar accessory and palette transitions follow the display's refresh rate.
+
+## Known limits
+
+- Clearing one site's data does not remove that site's cookies from migration backups; they expire within 30 days.
+- The context menu commands Open Link in New Tab and Open Link in Split View still drop the originating page.
+- Going back manually to 0.74.0 leaves history unavailable (not deleted) until the next update.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.0-nightly.1" data-version="0.75.0-nightly.1" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.0-nightly.1" aria-label="Link to version 0.75.0-nightly.1"&gt;0.75.0-nightly.1&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-16"&gt;November 16, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Clear a whole profile&amp;#x27;s website data, and search history faster.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 new · 3 faster · 9 fixed&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;Clear Site Data for This Profile…&lt;/strong&gt; now works with the Chromium engine. It removes cookies, cache, local storage, IndexedDB and service workers for that profile only; history, passwords and site permissions stay. Clearing one site&amp;#x27;s data also works when no tab shows that site.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Faster&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Library history search no longer blocks visit recording or sync: searching 200,000 visits for a common word takes 18.5 ms → 1.8 ms, and for a site name 62 ms → 0.8 ms.&lt;/li&gt;
+    &lt;li&gt;While the assistant writes, each new word costs 24 ms → 1.0 ms of main-thread time on a 30-message conversation (peaks 52–134 ms → 1.2 ms).&lt;/li&gt;
+    &lt;li&gt;Opening the assistant panel on a 120 Hz display draws 20 → 47 frames, with no frozen frames.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Links opened with ⌘-click, ⌥-click into a split or ⇧-click into Peek now keep their originating page: sites see where the click came from, and their strict same-site cookies are no longer sent on cross-site opens.&lt;/li&gt;
+    &lt;li&gt;Browser-internal debug pages and &lt;code&gt;javascript:&lt;/code&gt; addresses can no longer be loaded from session restore, AppleScript, link routing or other apps.&lt;/li&gt;
+    &lt;li&gt;AppleScript can no longer run JavaScript in a private window by setting a tab&amp;#x27;s URL to &lt;code&gt;javascript:&lt;/code&gt;.&lt;/li&gt;
+    &lt;li&gt;Link routing rules now match only a link&amp;#x27;s site and path, so a rule cannot be triggered by text in the query string.&lt;/li&gt;
+    &lt;li&gt;Links opened from other apps have embedded user names and passwords removed.&lt;/li&gt;
+    &lt;li&gt;Removing a profile now also deletes its web cache and its cookie backups.&lt;/li&gt;
+    &lt;li&gt;Link previews refuse local-network and private addresses, including after redirects.&lt;/li&gt;
+    &lt;li&gt;Update checks no longer send cookies.&lt;/li&gt;
+    &lt;li&gt;Assistant animations, the Today sidebar accessory and palette transitions follow the display&amp;#x27;s refresh rate.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Clearing one site&amp;#x27;s data does not remove that site&amp;#x27;s cookies from migration backups; they expire within 30 days.&lt;/li&gt;
+    &lt;li&gt;The context menu commands Open Link in New Tab and Open Link in Split View still drop the originating page.&lt;/li&gt;
+    &lt;li&gt;Going back manually to 0.74.0 leaves history unavailable (not deleted) until the next update.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0-nightly.1/site-data-clear.jpg" aria-label="Clear every website&amp;#x27;s data for one profile from Privacy &amp;amp; Site Settings."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0-nightly.1/site-data-clear.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0-nightly.1/site-data-clear.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Clear every website&amp;#x27;s data for one profile from Privacy &amp;amp; Site Settings.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.0-nightly.1/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
   <entry>
     <id>https://circabrowser.com/changelog/0.74.0/</id>
     <title>0.74.0 — Extensions in the Command Bar, a volume slider for each tab and faster private windows.</title>
