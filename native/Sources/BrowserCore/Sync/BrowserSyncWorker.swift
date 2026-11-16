@@ -68,6 +68,11 @@ public actor BrowserSyncWorker {
         state.enabled = enabled
         try persist()
     }
+    public var syncsPasswords: Bool { state.syncsPasswords }
+    public func setPasswordsEnabled(_ enabled: Bool) throws {
+        state.passwords = enabled
+        try persist()
+    }
     public func admit(_ identity: String?) throws {
         do { try state.account.admit(identity) }
         catch { try persist(); throw error }

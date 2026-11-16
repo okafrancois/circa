@@ -94,9 +94,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var general: some View {
         Group {
             if model.environment.sync.showsSettings {
-                BrowserSyncSettingsRow(runtime: model.environment.sync) { value in
+                BrowserSyncSettingsRow(runtime: model.environment.sync, save: { value in
                     model.perform { try await model.environment.sync.setEnabled(value) }
-                }
+                }, savePasswords: { value in
+                    model.perform { try await model.environment.sync.setPasswordsEnabled(value) }
+                })
             }
             panel {
                 settingRow("Default browser", subtitle: "Links from other apps open in Circa") {
@@ -636,7 +638,9 @@ private struct BrowserAutomaticUpdateToggle: View {
 private struct BrowserSyncSettingsRow: View {
     @ObservedObject var runtime: BrowserSyncRuntime
     let save: (Bool) -> Void
+    let savePasswords: (Bool) -> Void
     var body: some View {
+      VStack(alignment: .leading, spacing: 0) {
         HStack(spacing: 12) {
             OrbitIcon.view(sfName: "arrow.clockwise", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
             VStack(alignment: .leading, spacing: 2) {
@@ -647,9 +651,22 @@ private struct BrowserSyncSettingsRow: View {
                 Spacer()
                 Toggle(uiText("Sync with iCloud"), isOn: Binding(get: { runtime.enabled }, set: save))
                     .labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
-                    .disabled(!runtime.available).accessibilityIdentifier("settings-icloud-sync").settingsSearchItem(uiText("Sync with iCloud"), section: .general, id: "settings-sync")
+                    .disabled(!runtime.canChangeSettings).accessibilityIdentifier("settings-icloud-sync").settingsSearchItem(uiText("Sync with iCloud"), section: .general, id: "settings-sync")
         }
         .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50).frame(maxWidth: .infinity, alignment: .leading)
+        SettingsRule()
+        // Password sync is its own disclosed choice; remote copies are never deleted from here.
+        HStack(spacing: 12) {
+            SettingsRowLabel(title: uiText("Sync passwords"),
+                subtitle: uiText("Saved passwords are end-to-end encrypted in your iCloud account. Turning this off stops password sync on this Mac; passwords already in iCloud stay available to your other devices."))
+            Spacer(minLength: 8)
+            Toggle(uiText("Sync passwords"), isOn: Binding(get: { runtime.passwordsEnabled }, set: savePasswords))
+                .labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
+                .disabled(!runtime.canChangeSettings || !runtime.enabled).accessibilityIdentifier("settings-icloud-sync-passwords")
+                .settingsSearchItem(uiText("Sync passwords"), section: .general, id: "settings-sync-passwords")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9).frame(minHeight: 38).frame(maxWidth: .infinity, alignment: .leading)
+      }
         .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
         .alert(uiText("Use a different iCloud account?"), isPresented: $runtime.needsAccountDecision) {

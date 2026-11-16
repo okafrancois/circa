@@ -1265,7 +1265,7 @@
 "Browsers to import from" = "Navigateurs à importer";
 "Profile to import" = "Profil à importer";
 "Take your Spaces everywhere." = "Emportez vos espaces partout.";
-"Circa can keep your Spaces, tabs and settings in sync through your private iCloud account. No Circa account needed." = "Circa peut synchroniser vos espaces, onglets et réglages via votre compte iCloud privé. Aucun compte Circa requis.";
+"Circa can keep your Spaces, tabs, history and settings in sync through your private iCloud account. Passwords sync only if you turn it on in Settings. No Circa account needed." = "Circa peut synchroniser vos espaces, onglets, historique et réglages via votre compte iCloud privé. Les mots de passe ne sont synchronisés que si vous l’activez dans les Réglages. Aucun compte Circa requis.";
 "iCloud sync isn’t available in this copy of Circa. You can keep everything on this Mac." = "La synchronisation iCloud n’est pas disponible dans cette copie de Circa. Vous pouvez tout conserver sur ce Mac.";
 "Sign in to iCloud in System Settings to sync. You can turn sync on later in Circa Settings." = "Connectez-vous à iCloud dans les Réglages Système pour synchroniser. Vous pourrez activer la synchronisation plus tard dans les réglages de Circa.";
 "YES," = "OUI,";
@@ -1810,3 +1810,5 @@
 "Extension · %@" = "Extension · %@";
 
 "Volume %ld%%" = "Volume : %ld%%";
+"Sync passwords" = "Synchroniser les mots de passe";
+"Saved passwords are end-to-end encrypted in your iCloud account. Turning this off stops password sync on this Mac; passwords already in iCloud stay available to your other devices." = "Les mots de passe enregistrés sont chiffrés de bout en bout dans votre compte iCloud. Désactiver cette option arrête la synchronisation des mots de passe sur ce Mac ; ceux déjà présents dans iCloud restent disponibles sur vos autres appareils.";

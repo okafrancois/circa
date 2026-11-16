@@ -10,10 +10,17 @@ import Foundation
 final class BrowserSyncRuntime: ObservableObject {
     enum Status { case unavailable, off, on, syncing, synced(Date), signedOut, accountChanged }
     @Published private(set) var enabled = false
+    /// Separate, disclosed password sync choice (off for new setups).
+    @Published private(set) var passwordsEnabled = false
     @Published private(set) var status = Status.unavailable
     @Published var needsAccountDecision = false
     let available: Bool
     let showsSettings: Bool
+    /// Synthetic GUI checks only: the switches persist to the confined local state file, while
+    /// no CloudKit container, transport or cycle is ever created (`available` stays false).
+    let localSettingsOnly: Bool
+    /// The switches can be changed (a signed build, or the synthetic local-only seam).
+    var canChangeSettings: Bool { available || localSettingsOnly }
     private var worker: BrowserSyncWorker?
     private var destination: URL?
     private var transport: (any BrowserSyncTransport)?
@@ -41,11 +48,17 @@ final class BrowserSyncRuntime: ObservableObject {
     private var waitGeneration = 0
     private var admission = BrowserSyncAdmission()
     private var signalsObserved = false
+    /// Set when sync is turned off while a cycle may still be unwinding: the cycle's exit
+    /// removes the local caches again, after its last write.
+    private var removesCachesWhenStopped = false
+    /// Same for password caches when only password sync was turned off.
+    private var removesPasswordCachesOnNextCycle = false
 
     init() {
         available = BrowserSyncEntitlement.isAvailable()
-        showsSettings = available || (Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true
-            && ProcessInfo.processInfo.environment["ORBIT_SYNTHETIC_SYNC_SETTINGS"] == "1")
+        localSettingsOnly = !available && Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true
+            && ProcessInfo.processInfo.environment["ORBIT_SYNTHETIC_SYNC_SETTINGS"] == "1"
+        showsSettings = available || localSettingsOnly
     }
 
     /// A local-only scheduler seam: tests never construct a CloudKit container.
@@ -53,6 +66,7 @@ final class BrowserSyncRuntime: ObservableObject {
          observesSignals: Bool = false, cycle: @escaping () async throws -> Void) {
         available = true
         showsSettings = true
+        localSettingsOnly = false
         self.destination = destination
         worker = BrowserSyncWorker(state: BrowserSyncState(), destination: destination)
         self.interval = interval
@@ -80,7 +94,7 @@ final class BrowserSyncRuntime: ObservableObject {
 
     func configure<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>, destination: URL,
                                           onError: @escaping @MainActor (any Error) -> Void) {
-        guard available, !environment.isPrivate else { return }
+        guard canChangeSettings, !environment.isPrivate else { return }
         self.destination = destination
         cycle = { [weak self, weak environment] in
             guard let self, let environment, !environment.isFinalizing, !environment.settingsRemovalIsRunning else { return }
@@ -99,11 +113,13 @@ final class BrowserSyncRuntime: ObservableObject {
             do {
                 let worker = try await Task.detached(priority: .utility) { try BrowserSyncWorker(loading: destination) }.value
                 let enabled = await worker.enabled
+                let passwordsEnabled = await worker.syncsPasswords
                 guard let self else { return }
                 self.worker = worker
                 self.enabled = enabled; status = enabled ? .on : .off
+                self.passwordsEnabled = passwordsEnabled
                 loading = nil
-                if enabled { NSApp?.registerForRemoteNotifications() }
+                if enabled, available { NSApp?.registerForRemoteNotifications() }
                 start()
             } catch {
                 self?.loading = nil
@@ -170,12 +186,59 @@ final class BrowserSyncRuntime: ObservableObject {
 
     func setEnabled(_ value: Bool) async throws {
         await loading?.value
-        guard available, let worker else { return }
+        guard canChangeSettings, let worker else { return }
         if !value { task?.cancel() }
         try await worker.setEnabled(value)
         enabled = value
-        if !value { task?.cancel(); await transport?.stop(); await historyTransport?.stop(); transport = nil; historyTransport = nil; await stopPasswords(); status = .off }
-        else { status = .on; NSApp?.registerForRemoteNotifications(); start() }
+        if !value {
+            task?.cancel(); await transport?.stop(); await historyTransport?.stop(); transport = nil; historyTransport = nil; await stopPasswords(); status = .off
+            removeLocalCaches()
+        }
+        else { status = .on; if available { NSApp?.registerForRemoteNotifications() }; start() }
+    }
+
+    /// Password sync has its own switch. Turning it off stops password exchange on this Mac and
+    /// deletes this Mac's password sync caches; copies already in iCloud stay for other devices.
+    func setPasswordsEnabled(_ value: Bool) async throws {
+        await loading?.value
+        guard canChangeSettings, let worker else { return }
+        try await worker.setPasswordsEnabled(value)
+        passwordsEnabled = value
+        if value { wake(refresh: true); return }
+        await stopPasswords()
+        if let destination { Self.removePasswordCaches(destination) }
+        removesPasswordCachesOnNextCycle = task != nil
+    }
+
+    /// Turning sync off deletes what this Mac cached for it: CloudKit record caches, engine
+    /// tokens, the history transport store and the sealed password caches. The sync state file
+    /// itself stays (this Mac's own outbox, the account marker and the on/off choices); remote
+    /// data is never deleted here.
+    private func removeLocalCaches() {
+        guard let destination else { return }
+        Self.removeCaches(destination)
+        if task != nil { removesCachesWhenStopped = true }
+    }
+
+    nonisolated static func cacheFiles(_ destination: URL) -> [URL] {
+        let directory = destination.deletingLastPathComponent()
+        let prefix = destination.lastPathComponent + "."
+        // The durable clock record belongs to the kept sync state file.
+        let kept: Set<String> = [prefix + "clock"]
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        return names.filter { $0.hasPrefix(prefix) && !kept.contains($0) }
+            .map { directory.appendingPathComponent($0) }
+    }
+
+    nonisolated static func removeCaches(_ destination: URL) {
+        for url in cacheFiles(destination) { try? FileManager.default.removeItem(at: url) }
+    }
+
+    nonisolated static func removePasswordCaches(_ destination: URL) {
+        let prefix = destination.lastPathComponent + ".passwords."
+        for url in cacheFiles(destination) where url.lastPathComponent.hasPrefix(prefix) {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     func prepareForTermination() async {
@@ -196,11 +259,15 @@ final class BrowserSyncRuntime: ObservableObject {
     }
 
     private func start() {
-        guard enabled, !isTerminating, task == nil else { return }
+        guard enabled, available, !isTerminating, task == nil else { return }
         task = Task(priority: .utility) { [weak self] in
             guard let self else { return }
             defer {
                 task = nil
+                if removesCachesWhenStopped {
+                    removesCachesWhenStopped = false
+                    if !enabled { removeLocalCaches() }
+                }
                 // An enable may arrive while the cancelled cycle is still unwinding.
                 start()
             }
@@ -313,16 +380,21 @@ final class BrowserSyncRuntime: ObservableObject {
             historyRetryAfter = Date().addingTimeInterval(min(300, 5 * pow(2, Double(historyFailures))))
         }
         var deferred: (any Error)?
-        do { try await synchronizePasswords(environment, session: session, identity: identity, destination: destination, refresh: refresh) }
-        catch BrowserSyncError.signedOut { throw BrowserSyncError.signedOut }
-        catch BrowserSyncError.accountChanged { throw BrowserSyncError.accountChanged }
-        catch let error where BrowserSyncRetry.isTransient(error) {
-            // Keep the password transport; retry with the runtime backoff after this cycle.
-            deferred = error
-        }
-        catch {
-            // Password schema/key/engine failures are isolated from the other sync zones.
+        if !passwordsEnabled {
             await stopPasswords()
+            if removesPasswordCachesOnNextCycle { removesPasswordCachesOnNextCycle = false; Self.removePasswordCaches(destination) }
+        } else {
+            do { try await synchronizePasswords(environment, session: session, identity: identity, destination: destination, refresh: refresh) }
+            catch BrowserSyncError.signedOut { throw BrowserSyncError.signedOut }
+            catch BrowserSyncError.accountChanged { throw BrowserSyncError.accountChanged }
+            catch let error where BrowserSyncRetry.isTransient(error) {
+                // Keep the password transport; retry with the runtime backoff after this cycle.
+                deferred = error
+            }
+            catch {
+                // Password schema/key/engine failures are isolated from the other sync zones.
+                await stopPasswords()
+            }
         }
         let settings = await environment.settings.store.snapshot()
         var boostDocuments: [BrowserBoostDocument] = []
@@ -411,7 +483,7 @@ final class BrowserSyncRuntime: ObservableObject {
 
     private func synchronizePasswords<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>,
         session: BrowserSessionDocument, identity: String, destination: URL, refresh: Bool) async throws {
-        guard enabled, !environment.isPrivate, let store = environment.engine.passwordStore else { return }
+        guard enabled, passwordsEnabled, !environment.isPrivate, let store = environment.engine.passwordStore else { return }
         if passwords == nil || passwordTransport == nil {
             let key = try await Task.detached(priority: .utility) { try BrowserPasswordSyncCache.systemKey() }.value
             let local: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.localStateChanged() } }

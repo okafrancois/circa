@@ -70,6 +70,7 @@ enum BrowserSettingsSearchCatalog {
             .init(id: "settings-app-icon", section: .appearance, title: uiText("App Icon")),
             .init(id: "settings-enables-boosts", section: .advanced, title: uiText("Enable Boosts on websites you visit")),
             .init(id: "settings-sync", section: .general, title: uiText("Sync with iCloud")),
+            .init(id: "settings-sync-passwords", section: .general, title: uiText("Sync passwords")),
             .init(id: "settings-create-space", section: .spaces, title: uiText("New Space")),
             .init(id: "settings-archived-spaces", section: .spaces, title: uiText("Archived Spaces")),
             .init(id: "settings-space-name", section: .spaces, title: uiText("Name")),

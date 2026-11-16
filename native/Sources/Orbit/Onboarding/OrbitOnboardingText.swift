@@ -34,7 +34,7 @@ enum OrbitOnboardingText {
     static var profileListLabel: String { uiText("Profile to import") }
 
     static var syncTitle: String { uiText("Take your Spaces everywhere.") }
-    static var syncBody: String { uiText("Circa can keep your Spaces, tabs and settings in sync through your private iCloud account. No Circa account needed.") }
+    static var syncBody: String { uiText("Circa can keep your Spaces, tabs, history and settings in sync through your private iCloud account. Passwords sync only if you turn it on in Settings. No Circa account needed.") }
     static var syncUnavailable: String { uiText("iCloud sync isn’t available in this copy of Circa. You can keep everything on this Mac.") }
     static var syncSignedOut: String { uiText("Sign in to iCloud in System Settings to sync. You can turn sync on later in Circa Settings.") }
     static var syncYesStrong: String { uiText("YES,") }

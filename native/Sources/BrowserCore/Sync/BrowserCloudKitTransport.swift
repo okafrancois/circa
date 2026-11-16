@@ -41,6 +41,9 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
     private var exchanging = false
     private var zoneQueued = false
     private let onRemoteChange: @Sendable () -> Void
+    private var sealedRewrite: BrowserSyncSealedRewrite
+    /// Records queued by the one-time sealed rewrite (observable by tests).
+    private(set) var sealedRewrites = 0
     private(set) var explicitExchanges = 0
     private(set) var accountQueries = 0
 
@@ -50,6 +53,7 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
         guard BrowserSyncEntitlement.isAvailable() else { throw BrowserSyncError.unavailable }
         container = CKContainer(identifier: BrowserSyncSchema.container)
         self.destination = destination; self.identity = identity; self.onRemoteChange = onRemoteChange
+        sealedRewrite = BrowserSyncSealedRewrite(cache: destination)
         if let bytes = try BrowserPermissionFile.load(destination, maximumBytes: 64 * 1024 * 1024) {
             state = try JSONDecoder().decode(State.self, from: bytes)
         } else { state = State() }
@@ -59,12 +63,14 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
     init(testDestination: URL, identity: String = "synthetic") throws {
         container = nil
         destination = testDestination; self.identity = identity; onRemoteChange = {}
+        sealedRewrite = BrowserSyncSealedRewrite(cache: testDestination)
         if let bytes = try BrowserPermissionFile.load(testDestination, maximumBytes: 64 * 1024 * 1024) {
             state = try JSONDecoder().decode(State.self, from: bytes)
         } else { state = State() }
     }
 
     func persistenceWrites() -> Int { persistence.writes }
+    var dirtyRecordIDs: Set<String> { state.dirty }
 
     public func account() async throws -> String? {
         if let cached = admission.identity() { return cached }
@@ -102,6 +108,11 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
     func exchange(_ records: [BrowserSyncRecord], now: Date) async throws -> [BrowserSyncRecord] {
         try await admitted()
         try throwLatchedFailure()
+        if !sealedRewrite.isDone {
+            // Records cached before the sealed format may still be plaintext on the server:
+            // save each once more so `record(_:)` replaces the plaintext field.
+            for record in records where state.records[record.id] != nil { sealedRewrites += 1; state.dirty.insert(record.id) }
+        }
         let unchanged = try records.allSatisfy { record in
             guard let old = state.records[record.id] else { return false }
             var merged = old
@@ -152,6 +163,7 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
         }
         try throwLatchedFailure()
         try await admitted()
+        if !sealedRewrite.isDone { try persist(); try sealedRewrite.markDone() }
         gate.exchanged(at: now, remoteRevision: remoteRevision)
         return Array(state.records.values)
     }
@@ -173,9 +185,9 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
         try persistence.save(BrowserSyncReplica.encodeValue(state), to: destination, maximumBytes: 64 * 1024 * 1024)
     }
 
-    private func accept(_ record: CKRecord) throws {
+    func accept(_ record: CKRecord) throws {
         guard record.recordID.zoneID == zone, record.recordType == BrowserSyncSchema.recordType,
-              let bytes = record["payload"] as? Data else { throw BrowserSyncError.invalidRecord }
+              let bytes = BrowserSyncSealedPayload.read(record) else { throw BrowserSyncError.invalidRecord }
         let incoming = try JSONDecoder().decode(BrowserSyncRecord.self, from: bytes)
         guard incoming.id == record.recordID.recordName else { throw BrowserSyncError.invalidRecord }
         let old = state.records[incoming.id]
@@ -183,7 +195,8 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
         try merged.merge(incoming)
         if merged != old { remoteRevision += 1 }
         state.records[incoming.id] = merged
-        if merged != incoming { state.dirty.insert(incoming.id) }
+        // A plaintext record written by an older build is saved again in sealed form.
+        if merged != incoming || BrowserSyncSealedPayload.isLegacy(record) { state.dirty.insert(incoming.id) }
         let archiver = NSKeyedArchiver(requiringSecureCoding: true)
         record.encodeSystemFields(with: archiver); archiver.finishEncoding()
         state.systemFields[incoming.id] = archiver.encodedData
@@ -214,7 +227,7 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
                 try await admitted()
                 for record in event.savedRecords {
                     try accept(record)
-                    if let bytes = record["payload"] as? Data,
+                    if let bytes = BrowserSyncSealedPayload.read(record), !BrowserSyncSealedPayload.isLegacy(record),
                        let sent = try? JSONDecoder().decode(BrowserSyncRecord.self, from: bytes),
                        state.records[sent.id] == sent { state.dirty.remove(sent.id) }
                 }
@@ -259,7 +272,7 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
         }
     }
 
-    private func record(_ recordID: CKRecord.ID) -> CKRecord? {
+    func record(_ recordID: CKRecord.ID) -> CKRecord? {
         do {
             guard !stopped, recordID.zoneID == zone, let value = state.records[recordID.recordName] else { return nil }
             let record: CKRecord
@@ -269,7 +282,7 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
                 guard let decoded = CKRecord(coder: decoder) else { throw BrowserSyncError.invalidRecord }
                 decoder.finishDecoding(); record = decoded
             } else { record = CKRecord(recordType: BrowserSyncSchema.recordType, recordID: recordID) }
-            record["payload"] = try BrowserSyncReplica.encodeValue(value) as CKRecordValue
+            BrowserSyncSealedPayload.write(try BrowserSyncReplica.encodeValue(value), to: record)
             return record
         } catch { failure = error; return nil }
     }
@@ -278,9 +291,13 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
 public struct BrowserSyncState: Codable, Sendable {
     public var version = BrowserSyncSchema.version
     public var enabled = false
+    /// Password sync is a separate, disclosed choice: off for a new setup. A state written by
+    /// an earlier build has no value and keeps what that build did (passwords followed `enabled`).
+    public var passwords: Bool?
     public var replica = BrowserSyncReplica()
     public var account = BrowserSyncAccountMarker()
-    public init() {}
+    public init() { passwords = false }
+    public var syncsPasswords: Bool { passwords ?? enabled }
     public static func load(_ destination: URL) throws -> Self {
         try loadWithBytes(destination).state
     }
@@ -289,6 +306,7 @@ public struct BrowserSyncState: Codable, Sendable {
         guard let bytes = try BrowserPermissionFile.load(destination, maximumBytes: 64 * 1024 * 1024) else { return (Self(), nil) }
         var value = try JSONDecoder().decode(Self.self, from: bytes)
         guard value.version == BrowserSyncSchema.version, value.replica.version == BrowserSyncSchema.version else { throw BrowserSyncError.unsupportedVersion }
+        if value.passwords == nil { value.passwords = value.enabled }
         value.replica.tick = max(value.replica.tick, BrowserSyncClockPersistence.loadTick(for: bytes, at: destination) ?? value.replica.tick)
         return (value, bytes)
     }
