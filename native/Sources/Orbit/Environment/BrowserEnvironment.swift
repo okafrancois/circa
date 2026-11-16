@@ -234,6 +234,12 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             Task { await environment.favoriteIcons?.releaseMemory() }
         }
         environment.history.onIssue = { [weak environment] profileID, issue in environment?.onHistoryIssue?(profileID, issue) }
+        if let engineHistory = engine as? any BrowserEngineHistoryAccess {
+            environment.history.removeEngineHistory = { [weak engineHistory] removal, profileID in
+                guard let engineHistory else { throw BrowserEngineHistoryError.unavailable }
+                try await engineHistory.removeEngineHistory(removal, profileID: profileID)
+            }
+        }
         do {
             environment.sitePreferences = try BrowserSitePreferenceStore(destination: sessionFile.appendingPathExtension("site-preferences.json"))
         } catch {
@@ -892,6 +898,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         await windowActivitySave?.value
         await settings.flushExtensionPinOrders()
         await history.flush()
+        history.deferUnfinishedEngineRemovals()
         do {
             for controller in liveControllers { await controller.session.waitForPendingCommands() }
             guard await themeEditors.finishAll() else { throw BrowserTerminationPreparationError.themeCommitFailed }

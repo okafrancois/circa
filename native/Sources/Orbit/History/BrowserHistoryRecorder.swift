@@ -46,6 +46,14 @@ final class BrowserHistoryRecorder {
     private(set) var issues: [ProfileID: BrowserHistoryIssue] = [:]
     /// Emits once on entering an incident, and once on recovery; never routed to session alerts.
     var onIssue: ((ProfileID, BrowserHistoryIssue?) -> Void)?
+    /// Removes the matching visits from the engine's own history of a persistent profile. Set by
+    /// the environment for engines that keep one; nil for the others and for fixtures.
+    var removeEngineHistory: (@MainActor (BrowserEngineHistoryRemoval, ProfileID) async throws -> Void)?
+    /// Engine removals run one at a time, in deletion order (the engine refuses overlapping
+    /// history deletions), and never delay the shell deletion that started them.
+    private var engineRemovals: Task<Void, Never>?
+    /// Profiles with an engine removal not finished yet; closing purges them at the next launch.
+    private var unfinishedEngineRemovals: [ProfileID: Int] = [:]
     private static let logger = Logger(subsystem: "local.orbit", category: "history")
 
     init(directory: URL? = nil,
@@ -311,6 +319,11 @@ final class BrowserHistoryRecorder {
 
     func delete(for profileID: ProfileID, _ deletion: BrowserHistoryDeletion) async throws -> Int {
         await flush()
+        // A single visit is matched in the engine by its URL and time, read before it goes.
+        var target: BrowserHistoryVisit?
+        if case .visit(let id) = deletion, removeEngineHistory != nil, isPersistent(profileID) {
+            target = try? await access(profileID: profileID, disabled: nil as BrowserHistoryVisit?) { try await $0.visit(id: id) }
+        }
         // Deleted pages disappear from keystroke results before the write starts.
         let wasWarm = beginBulkMutation(for: profileID)
         defer { endBulkMutation(for: profileID, rebuild: wasWarm) }
@@ -323,11 +336,44 @@ final class BrowserHistoryRecorder {
             }
             return count
         }
-        // The engine's own history goes too, at the next launch (it holds those files open).
-        // Narrower deletions leave the engine's history as is (see the history purge notes).
+        // The engine's own history follows now; an all-time clear also deletes its files at the
+        // next launch (the engine holds them open), which covers a removal that fails.
         if case .all = deletion, isPersistent(profileID) { scheduleEngineHistoryPurge(profileID) }
+        if let removal = BrowserEngineHistoryRemoval.routing(deletion, visit: target) {
+            enqueueEngineRemoval(removal, profileID: profileID)
+        }
         return count
     }
+
+    /// Runs `removal` against the engine's history after the removals before it. A failure never
+    /// fails the user's deletion: the engine's history files of the profile are then deleted at
+    /// the next launch, so nothing the user deleted survives there.
+    func enqueueEngineRemoval(_ removal: BrowserEngineHistoryRemoval, profileID: ProfileID) {
+        guard let remove = removeEngineHistory, isPersistent(profileID), !removedProfiles.contains(profileID) else { return }
+        let previous = engineRemovals
+        unfinishedEngineRemovals[profileID, default: 0] += 1
+        engineRemovals = Task { [weak self] in
+            await previous?.value
+            do { try await remove(removal, profileID) }
+            catch {
+                Self.logger.error("engine history removal failed; purge scheduled: \(String(describing: error), privacy: .public)")
+                self?.scheduleEngineHistoryPurge(profileID)
+            }
+            guard let self else { return }
+            unfinishedEngineRemovals[profileID, default: 1] -= 1
+            if unfinishedEngineRemovals[profileID] == 0 { unfinishedEngineRemovals.removeValue(forKey: profileID) }
+        }
+    }
+
+    /// Quitting does not wait for the engine: what it has not removed yet goes at next launch.
+    func deferUnfinishedEngineRemovals() {
+        for profileID in unfinishedEngineRemovals.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+            scheduleEngineHistoryPurge(profileID)
+        }
+    }
+
+    /// Waits for every engine removal started so far (tests and diagnostics).
+    func flushEngineRemovals() async { await engineRemovals?.value }
 
     /// Records that the engine's history files of `profileID` must be deleted before the engine
     /// opens it again. A failure never fails the user's deletion; it is reported without paths.
@@ -341,7 +387,9 @@ final class BrowserHistoryRecorder {
         await flush()
         let wasWarm = beginBulkMutation(for: profileID)
         defer { endBulkMutation(for: profileID, rebuild: wasWarm) }
-        return try await access(profileID: profileID, disabled: 0) { try await $0.deleteSuggestions(url: url) }
+        let count = try await access(profileID: profileID, disabled: 0) { try await $0.deleteSuggestions(url: url) }
+        enqueueEngineRemoval(.url(url), profileID: profileID)
+        return count
     }
 
     /// Clears the cooldown and attempt budget for an explicit user retry.
@@ -423,6 +471,7 @@ final class BrowserHistoryRecorder {
         pressure = nil
         await flush()
         isClosed = true
+        deferUnfinishedEngineRemovals()
         let builds = Array(indexBuilds.values)
         for build in builds { build.cancel() }
         for build in builds { await build.value }

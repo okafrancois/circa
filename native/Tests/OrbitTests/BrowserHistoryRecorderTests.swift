@@ -72,6 +72,84 @@ struct BrowserHistoryRecorderTests {
         try await recorder.close()
     }
 
+    @Test("Every history deletion kind reaches the engine's own history with its scope")
+    func engineHistoryRouting() async throws {
+        let data = URL(fileURLWithPath: "/private/tmp/history-engine-routing-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: data) }
+        let recorder = BrowserHistoryRecorder(directory: data.appendingPathComponent("History", isDirectory: true),
+                                              resolveProfile: { .init(profileID: $0, persistence: .persistent) })
+        var calls: [(BrowserEngineHistoryRemoval, ProfileID)] = []
+        recorder.removeEngineHistory = { calls.append(($0, $1)) }
+        let profile = ProfileID()
+        let now = Date()
+        let visits = [
+            BrowserHistoryVisit(url: URL(string: "https://one.synthetic.test/a")!, visitedAt: now.addingTimeInterval(-60)),
+            BrowserHistoryVisit(url: URL(string: "https://Two.Synthetic.test/b")!, visitedAt: now.addingTimeInterval(-120)),
+            BrowserHistoryVisit(url: URL(string: "https://three.synthetic.test/c")!, visitedAt: now.addingTimeInterval(-7200)),
+            BrowserHistoryVisit(url: URL(string: "https://four.synthetic.test/d")!, visitedAt: now.addingTimeInterval(-3 * 86400))
+        ]
+        #expect(try await recorder.importDocument(BrowserHistoryDocument(profileID: profile, visits: visits)) == 4)
+
+        #expect(try await recorder.delete(for: profile, .visit(visits[0].id)) == 1)
+        #expect(try await recorder.delete(for: profile, .site("two.synthetic.test")) == 1)
+        #expect(try await recorder.delete(for: profile, .lastHour(now: now)) == 0)
+        #expect(try await recorder.delete(for: profile, .lastDay(now: now)) == 1)
+        let range = DateInterval(start: now.addingTimeInterval(-4 * 86400), end: now.addingTimeInterval(-2 * 86400))
+        #expect(try await recorder.delete(for: profile, .interval(range)) == 1)
+        #expect(try await recorder.deleteSuggestions(for: profile, url: URL(string: "https://five.synthetic.test/e")!) == 0)
+        // A visit that no longer exists has nothing to match in the engine.
+        #expect(try await recorder.delete(for: profile, .visit(UUID())) == 0)
+        #expect(try await recorder.delete(for: profile, .all) == 0)
+        await recorder.flushEngineRemovals()
+
+        #expect(calls.map(\.0) == [
+            .visit(url: visits[0].url, visitedAt: visits[0].visitedAt),
+            .host("two.synthetic.test"),
+            .period(.lastHour),
+            .period(.lastDay),
+            .interval(range),
+            .url(URL(string: "https://five.synthetic.test/e")!),
+            .period(.allTime)
+        ])
+        #expect(calls.allSatisfy { $0.1 == profile })
+        // Only the all-time clear also deletes the engine's files at the next launch.
+        #expect(try BrowserEngineHistoryPurge.pendingProfiles(dataRoot: data) == [profile])
+        try await recorder.close()
+    }
+
+    @Test("A failed or unfinished engine removal purges the engine history at the next launch")
+    func engineHistoryRemovalFallback() async throws {
+        let data = URL(fileURLWithPath: "/private/tmp/history-engine-fallback-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: data) }
+        let profile = ProfileID(), other = ProfileID(), ephemeral = ProfileID()
+        let recorder = BrowserHistoryRecorder(directory: data.appendingPathComponent("History", isDirectory: true),
+            resolveProfile: { .init(profileID: $0, persistence: $0 == ephemeral ? .ephemeral : .persistent) })
+        var calls = 0
+        recorder.removeEngineHistory = { _, _ in calls += 1; throw BrowserEngineHistoryError.removalIncomplete }
+        let visit = BrowserHistoryVisit(url: URL(string: "https://one.synthetic.test/a")!)
+        #expect(try await recorder.importDocument(BrowserHistoryDocument(profileID: profile, visits: [visit])) == 1)
+        #expect(try await recorder.delete(for: profile, .site("one.synthetic.test")) == 1)
+        await recorder.flushEngineRemovals()
+        #expect(calls == 1)
+        #expect(try BrowserEngineHistoryPurge.pendingProfiles(dataRoot: data) == [profile])
+
+        // Private profiles keep no history: the engine is not asked.
+        #expect(try await recorder.delete(for: ephemeral, .lastHour(now: Date())) == 0)
+        await recorder.flushEngineRemovals()
+        #expect(calls == 1)
+
+        // Quitting while a removal still runs leaves it to the next launch.
+        let gate = AsyncStream<Void>.makeStream()
+        recorder.removeEngineHistory = { _, _ in for await _ in gate.stream { break } }
+        #expect(try await recorder.delete(for: other, .lastDay(now: Date())) == 0)
+        recorder.deferUnfinishedEngineRemovals()
+        #expect(try BrowserEngineHistoryPurge.pendingProfiles(dataRoot: data) == [profile, other])
+        gate.continuation.yield()
+        gate.continuation.finish()
+        await recorder.flushEngineRemovals()
+        try await recorder.close()
+    }
+
     @Test("Deletion drains visits that are still queued for write before mutating the database")
     func queuedWriteThenDelete() async throws {
         let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true).appendingPathComponent("orbit-library-r2-queued-\(UUID())")

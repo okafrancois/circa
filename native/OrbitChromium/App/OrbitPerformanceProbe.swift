@@ -662,6 +662,9 @@ enum OrbitPerformanceProbe {
                     result["thumbnailPerformance"] = await OrbitThumbnailPerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "permissions" {
                     result["permissions"] = await OrbitPermissionsProbe.run(owner, environment: environment, root: root, command: command)
+                } else if name == "history-engine-purge", Bundle.main.bundleIdentifier == OrbitHistoryEnginePurgeProbe.bundleID {
+                    application.confirmQuit = { .quit }
+                    result["historyEnginePurge"] = await OrbitHistoryEnginePurgeProbe.run(owner, environment: environment, command: command, root: root)
                 } else if name == "history-library" {
                     if Bundle.main.bundleIdentifier == OrbitHistoryLibraryProbe.bundleID { application.confirmQuit = { .quit } }
                     result["historyLibrary"] = await OrbitHistoryLibraryProbe.run(owner, environment: environment, command: command, root: root)

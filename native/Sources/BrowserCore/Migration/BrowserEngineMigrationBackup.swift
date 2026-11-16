@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import SQLite3
 
 /// Private snapshot of the engine state that an update can invalidate, taken before the first
 /// launch of a different build: Local State, then for every profile its Secure Preferences
@@ -198,8 +199,9 @@ public enum BrowserEngineMigrationBackup {
         }.sorted { $0.created == $1.created ? $0.id < $1.id : $0.created < $1.created }
     }
 
-    /// What a profile-scoped prune removes from every snapshot.
-    public enum ProfileScope: Sendable { case allFiles, cookies }
+    /// What a profile-scoped prune removes from every snapshot: all of the profile's files, its
+    /// cookie databases, or the cookies of one registrable domain inside them.
+    public enum ProfileScope: Sendable, Equatable { case allFiles, cookies, site(String) }
 
     static var cookieFiles: [String] { profileFiles.filter { $0.contains("Cookies") } }
 
@@ -210,6 +212,7 @@ public enum BrowserEngineMigrationBackup {
     /// deleted. Returns the number of snapshots changed.
     @discardableResult
     public static func prune(profile profileID: ProfileID, _ scope: ProfileScope, dataRoot: URL) throws -> Int {
+        if case .site(let domain) = scope { return try pruneSite(domain, profile: profileID, dataRoot: dataRoot) }
         let directory = dataRoot.appendingPathComponent(directoryName, isDirectory: true)
         try requireConfined(directory, under: dataRoot)
         let name = BrowserEngineProfileCache.directoryName(profileID)
@@ -245,6 +248,103 @@ public enum BrowserEngineMigrationBackup {
             if scope == .allFiles, lstat(profile.path, &info) == 0 { try FileManager.default.removeItem(at: profile) }
         }
         return changed
+    }
+
+    /// Deletes the cookies of `domain` (host-only and domain cookies of the domain and its
+    /// subdomains, the scope of a per-site clear) from every snapshot's copies of the profile's
+    /// cookie databases, then rebuilds each changed database so no freed page keeps them. The
+    /// manifest is rewritten with the new sizes and digests, so the snapshot still restores. A
+    /// copy that cannot be edited (damaged, unknown schema) is dropped with the profile's other
+    /// cookie copies in that snapshot rather than kept. Journal copies set aside by a restore go
+    /// too. Returns the number of snapshots changed.
+    static func pruneSite(_ domain: String, profile profileID: ProfileID, dataRoot: URL) throws -> Int {
+        let domain = domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
+        guard !domain.isEmpty else { return 0 }
+        let directory = dataRoot.appendingPathComponent(directoryName, isDirectory: true)
+        try requireConfined(directory, under: dataRoot)
+        let name = BrowserEngineProfileCache.directoryName(profileID)
+        let databases = cookieFiles.filter { !$0.hasSuffix("-journal") && !$0.hasSuffix("-wal") }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        var changed = 0
+        var failed = false
+        for manifest in snapshots(in: directory) {
+            let snapshot = directory.appendingPathComponent(manifest.id, isDirectory: true)
+            let chromium = snapshot.appendingPathComponent("Chromium", isDirectory: true)
+            let unrestored = snapshot.appendingPathComponent("Unrestored").appendingPathComponent(name, isDirectory: true)
+            try requireConfined(unrestored, under: directory)
+            var touched = false
+            var info = stat()
+            for relative in databases {
+                let file = chromium.appendingPathComponent(name).appendingPathComponent(relative)
+                try requireConfined(file, under: directory)
+                for companion in ["-journal", "-wal", "-shm"] {
+                    try requireConfined(URL(fileURLWithPath: file.path + companion), under: directory)
+                }
+                guard isRegularFile(file) else { continue }
+                switch deleteCookies(of: domain, in: file) {
+                case .unchanged: break
+                case .deleted: touched = true
+                case .failed: failed = true
+                }
+                if failed { break }
+                // The database is consistent once SQLite closed it (a hot journal was rolled
+                // back on open); a stale journal copy can still hold old pages, so it goes.
+                for companion in ["-journal", "-wal", "-shm"] {
+                    let leftover = URL(fileURLWithPath: file.path + companion)
+                    if lstat(leftover.path, &info) == 0 { try FileManager.default.removeItem(at: leftover); touched = true }
+                }
+            }
+            if failed { break }
+            if lstat(unrestored.path, &info) == 0 { try FileManager.default.removeItem(at: unrestored); touched = true }
+            guard touched else { continue }
+            changed += 1
+            // Re-describe every cookie copy of the profile: an edited database has a new digest
+            // and its journal copies are gone.
+            var files: [Entry] = []
+            for entry in manifest.files {
+                guard cookieFiles.contains(where: { entry.path == name + "/" + $0 }) else { files.append(entry); continue }
+                let file = chromium.appendingPathComponent(entry.path)
+                guard isRegularFile(file) else { continue }
+                let (size, hash) = try digest(file)
+                files.append(Entry(path: entry.path, size: size, sha256: hash))
+            }
+            guard files != manifest.files else { continue }
+            var rewritten = manifest
+            rewritten.files = files
+            let file = snapshot.appendingPathComponent("manifest.json")
+            try encoder.encode(rewritten).write(to: file, options: .atomic)
+            guard chmod(file.path, 0o600) == 0 else { try refuseUnsafePath("manifest-mode", code: errno) }
+        }
+        // Never keep a copy that may still hold the site's cookies.
+        if failed { return changed + (try prune(profile: profileID, .cookies, dataRoot: dataRoot)) }
+        return changed
+    }
+
+    enum CookieEdit { case unchanged, deleted, failed }
+
+    /// Opens a snapshot copy (never through a link), applies a journal copy beside it if one
+    /// exists, deletes the domain's rows and vacuums the file in memory-backed temp storage.
+    static func deleteCookies(of domain: String, in file: URL) -> CookieEdit {
+        var database: OpaquePointer?
+        defer { sqlite3_close_v2(database) }
+        guard sqlite3_open_v2(file.path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOFOLLOW, nil) == SQLITE_OK,
+              sqlite3_exec(database, "PRAGMA temp_store=MEMORY; PRAGMA secure_delete=ON;", nil, nil, nil) == SQLITE_OK
+        else { return .failed }
+        var statement: OpaquePointer?
+        let sql = """
+            DELETE FROM cookies WHERE ltrim(lower(host_key),'.')=?1
+              OR (length(ltrim(host_key,'.'))>length(?1) AND substr(ltrim(lower(host_key),'.'),-length(?1)-1)='.'||?1)
+            """
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else { return .failed }
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(statement, 1, domain, -1, transient)
+        let step = sqlite3_step(statement)
+        sqlite3_finalize(statement)
+        guard step == SQLITE_DONE else { return .failed }
+        guard sqlite3_changes(database) > 0 else { return .unchanged }
+        guard sqlite3_exec(database, "VACUUM", nil, nil, nil) == SQLITE_OK else { return .failed }
+        return .deleted
     }
 
     /// Launch counterpart of the removal prune: drops the copies of every `profile-<uuid>` that no
