@@ -187,6 +187,7 @@ struct BrowserHistorySyncTests {
 // Downgrade fixtures must remove tables introduced after the version they model.
 extension HistoryDatabase {
     func discardSyncSchemaForLegacyFixture() throws {
+        try discardSearchIndexSchemaForLegacyFixture()
         for table in ["historySyncEvents", "historySyncBatches", "historySyncState", "historySyncVersions"] {
             try execute("DROP TABLE \(table)")
         }

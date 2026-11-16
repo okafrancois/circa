@@ -305,8 +305,17 @@ extension HistoryDatabase {
         try discardJournalPurgeSchemaForLegacyFixture()
     }
 
-    /// Removes the version-nine journal index objects so a fixture can claim an older version.
+    /// Removes the version-ten visit title index objects so a fixture can claim an older version.
+    func discardSearchIndexSchemaForLegacyFixture() throws {
+        for trigger in Self.visitTitlesTriggers { try execute("DROP TRIGGER IF EXISTS \(trigger)") }
+        try execute("DROP TABLE IF EXISTS visitTitles")
+        try execute("DROP TABLE IF EXISTS visitSearchBackfill")
+    }
+
+    /// Removes the version-nine journal index objects (and everything newer) so a fixture can
+    /// claim an older version.
     func discardJournalPurgeSchemaForLegacyFixture() throws {
+        try discardSearchIndexSchemaForLegacyFixture()
         try execute("DROP TABLE IF EXISTS historySyncBatchVisits")
         try execute("DROP TABLE IF EXISTS historySyncRetired")
         try execute("DROP INDEX IF EXISTS historySyncVisit")

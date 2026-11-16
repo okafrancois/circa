@@ -211,6 +211,24 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
 
     // MARK: Helpers
 
+    /// A committed Chromium navigation is found by the Library history search, both through the
+    /// trigram index (three or more characters) and through the short-term literal query.
+    private func librarySearchScenario(_ application: OrbitApplication, _ window: OrbitWindowController, _ url: URL) async {
+        guard let recorder = application.environment?.historyRecorder, let profile = window.session.activeProfileID else {
+            check("history.library-search", false); return
+        }
+        var indexed = false
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !indexed, !finished, ContinuousClock.now < deadline {
+            await recorder.flush()
+            indexed = (try? await recorder.visits(for: profile, search: "CASE=ORBIT-A"))?.contains { $0.url == url } == true
+            if !indexed { try? await Task.sleep(for: .milliseconds(100)) }
+        }
+        let short = (try? await recorder.visits(for: profile, search: "a"))?.contains { $0.url == url } == true
+        let absent = (try? await recorder.visits(for: profile, search: "case=absent-page"))?.isEmpty == true
+        check("history.library-search", indexed && short && absent, ["indexed": indexed, "short": short, "absent": absent])
+    }
+
     func page(_ name: String) -> URL { URL(string: "/page?case=\(name)", relativeTo: fixture)!.absoluteURL }
 
     func until<T>(_ seconds: Double, _ value: () -> T?) async -> T? {
@@ -668,6 +686,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         if arguments.contains("--orbit-smoke-engine-r5") {
+            await librarySearchScenario(application, window, a)
             await suspensionScenarios(window, tab, engine)
             return
         }
