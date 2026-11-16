@@ -4,23 +4,33 @@ import Foundation
 
 /// CKContainer is constructed only after inspecting the running signature. The account-bound
 /// transport persists CKSyncEngine tokens AND record system fields, including server change tags. History has an independent zone and failure boundary.
+/// The cache lives in SQLite rows beside the legacy JSON file (`<destination>.sqlite`): a cycle
+/// writes only the records, flags and tokens it changed, in one transaction.
 public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyncEngineDelegate {
-    private struct State: Codable {
+    /// The in-memory cache. Containers remember the keys written since the last barrier.
+    private struct State {
+        var records = BrowserSyncTrackedMap<BrowserHistorySyncBatch>()
+        var dirty = BrowserSyncTrackedSet()
+        var deleting = BrowserSyncTrackedSet()
+        var systemFields = BrowserSyncTrackedMap<Data>()
+        /// Records deleted remotely (by a retraction here or elsewhere), with their natural expiry.
+        /// A local store may still list one until it applies the matching tombstone; it is never
+        /// uploaded again.
+        var retired: [String: Date]?
+    }
+    /// The single JSON file written by earlier builds, imported once then deleted.
+    private struct LegacyState: Codable {
         var engine: CKSyncEngine.State.Serialization?
         var records: [String: BrowserHistorySyncBatch] = [:]
         var dirty: Set<String> = []
         var deleting: Set<String> = []
         var systemFields: [String: Data] = [:]
-        /// Records deleted remotely (by a retraction here or elsewhere), with their natural expiry.
-        /// A local store may still list one until it applies the matching tombstone; it is never
-        /// uploaded again. Optional so caches written by earlier builds still decode.
         var retired: [String: Date]?
     }
     private struct EngineCheckpoint: Codable {
         var stateDigest: Data
         var serialization: Data
     }
-    private var stateDigest: Data?
     private let container: CKContainer?
     private let destination: URL
     private let identity: String
@@ -28,17 +38,20 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
     private var state: State { didSet { needsPersist = true } }
     private var needsPersist = false
     private var engineSerialization: CKSyncEngine.State.Serialization?
-    private var enginePersistence = BrowserSyncPersistence()
     private var lastInput: [BrowserHistorySyncBatch]?
     private var lastExchange: Date?
     private var remoteRevision = 0
     private var exchangedRevision = -1
     private(set) var validations = 0
-    private(set) var fullStateEncodes = 0
     private(set) var explicitExchanges = 0
     private var engine: CKSyncEngine?
-    private var persistence = BrowserSyncPersistence()
-    var stateWrites: Int { persistence.writes }
+    /// Opened at launch when the file exists, otherwise at the first write.
+    private var store: BrowserHistorySyncStateStore?
+    private var persistedRetired: [String: Date]
+    private var persistedEngine: Data?
+    /// Transactions that changed cache rows, and those that only advanced the engine tokens.
+    private(set) var stateWrites = 0
+    private(set) var engineWrites = 0
     private var stopped = false
     private var failure: (any Error)?
 
@@ -46,30 +59,78 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
         guard BrowserSyncEntitlement.isAvailable() else { throw BrowserSyncError.unavailable }
         container = CKContainer(identifier: BrowserSyncSchema.container)
         self.destination = destination; self.identity = identity
-        if let bytes = try BrowserPermissionFile.load(destination, maximumBytes: 256 * 1024 * 1024) {
-            state = try JSONDecoder().decode(State.self, from: bytes)
-            stateDigest = Data(SHA256.hash(data: bytes))
-        } else { state = State() }
-        engineSerialization = state.engine
-        if let bytes = try BrowserPermissionFile.load(destination.appendingPathExtension("engine"), maximumBytes: 16 * 1024 * 1024) {
-            if let checkpoint = try? JSONDecoder().decode(EngineCheckpoint.self, from: bytes),
-               checkpoint.stateDigest == stateDigest {
-                if let decoded = try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: checkpoint.serialization) {
-                    engineSerialization = decoded
-                }
-            }
-        }
+        let (store, snapshot) = try Self.open(destination)
+        self.store = store
+        state = Self.state(snapshot); persistedRetired = snapshot.retired; persistedEngine = snapshot.engine
+        engineSerialization = snapshot.engine.flatMap { try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0) }
     }
 
     /// Account-free seam that exercises the production cache and persistence path.
     init(testDestination: URL) throws {
         container = nil; destination = testDestination; identity = "synthetic"
-        if let bytes = try BrowserPermissionFile.load(testDestination, maximumBytes: 256 * 1024 * 1024) {
-            state = try JSONDecoder().decode(State.self, from: bytes)
-            stateDigest = Data(SHA256.hash(data: bytes))
-        } else { state = State() }
-        engineSerialization = state.engine
+        let (store, snapshot) = try Self.open(testDestination)
+        self.store = store
+        state = Self.state(snapshot); persistedRetired = snapshot.retired; persistedEngine = snapshot.engine
+        engineSerialization = snapshot.engine.flatMap { try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0) }
     }
+
+    static func storeURL(_ destination: URL) -> URL { destination.appendingPathExtension("sqlite") }
+
+    /// Loads the row store, importing the legacy JSON file first when one is present. The import
+    /// commits with the file's digest; the file is deleted only afterwards. An interrupted import
+    /// rolls back and runs again; a file left after a committed import (same digest) is only
+    /// deleted. A file with another digest was written by an earlier build since: it replaces
+    /// the rows, exactly as that build would have resumed from it.
+    private static func open(_ destination: URL) throws -> (BrowserHistorySyncStateStore?, BrowserHistorySyncStateSnapshot) {
+        let url = storeURL(destination)
+        let sidecar = destination.appendingPathExtension("engine")
+        let legacy = try BrowserPermissionFile.load(destination, maximumBytes: 256 * 1024 * 1024)
+        var info = stat()
+        let exists = lstat(url.path, &info) == 0
+        guard legacy != nil || exists else {
+            unlink(sidecar.path)
+            return (nil, BrowserHistorySyncStateSnapshot())
+        }
+        let store = try BrowserHistorySyncStateStore(url: url)
+        var snapshot: BrowserHistorySyncStateSnapshot?
+        if let legacy {
+            let digest = Data(SHA256.hash(data: legacy))
+            if try store.importedLegacyDigest() != digest {
+                let imported = try legacySnapshot(legacy, digest: digest, sidecar: sidecar)
+                try store.importLegacy(imported, digest: digest)
+                snapshot = imported
+            }
+            unlink(destination.path)
+        }
+        unlink(sidecar.path)
+        return (store, try snapshot ?? store.load())
+    }
+
+    /// The legacy file plus its engine checkpoint, which counts only when it names this file.
+    private static func legacySnapshot(_ bytes: Data, digest: Data, sidecar: URL) throws -> BrowserHistorySyncStateSnapshot {
+        let legacy = try JSONDecoder().decode(LegacyState.self, from: bytes)
+        var engine = try legacy.engine.map { try BrowserSyncReplica.encodeValue($0) }
+        if let checkpointBytes = try BrowserPermissionFile.load(sidecar, maximumBytes: 16 * 1024 * 1024),
+           let checkpoint = try? JSONDecoder().decode(EngineCheckpoint.self, from: checkpointBytes),
+           checkpoint.stateDigest == digest,
+           (try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: checkpoint.serialization)) != nil {
+            engine = checkpoint.serialization
+        }
+        return BrowserHistorySyncStateSnapshot(engine: engine, records: legacy.records, dirty: legacy.dirty,
+            deleting: legacy.deleting, systemFields: legacy.systemFields, retired: legacy.retired ?? [:])
+    }
+
+    private static func state(_ snapshot: BrowserHistorySyncStateSnapshot) -> State {
+        State(records: .init(snapshot.records), dirty: .init(snapshot.dirty), deleting: .init(snapshot.deleting),
+              systemFields: .init(snapshot.systemFields), retired: snapshot.retired.isEmpty ? nil : snapshot.retired)
+    }
+
+    /// The cache as the next launch would load it (tests compare it with the stored rows).
+    var snapshot: BrowserHistorySyncStateSnapshot {
+        BrowserHistorySyncStateSnapshot(engine: persistedEngine, records: state.records.storage, dirty: state.dirty.storage,
+            deleting: state.deleting.storage, systemFields: state.systemFields.storage, retired: state.retired ?? [:])
+    }
+    var stateStore: BrowserHistorySyncStateStore? { store }
 
     public func account() async throws -> String? {
         guard let container else { return identity }
@@ -160,7 +221,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
     }
 
     var cachedRecordIDs: Set<String> { Set(state.records.keys) }
-    var pendingDeletions: Set<String> { state.deleting }
+    var pendingDeletions: Set<String> { state.deleting.storage }
 
     public func nextFetchChangesOptions(_ context: CKSyncEngine.FetchChangesContext,
                                         syncEngine: CKSyncEngine) async -> CKSyncEngine.FetchChangesOptions {
@@ -175,24 +236,39 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
         engine = nil
     }
 
-    private func persist() throws {
-        guard needsPersist else { return }
-        state.engine = engineSerialization
-        fullStateEncodes += 1
-        let bytes = try BrowserSyncReplica.encodeValue(state)
-        try persistence.save(bytes, to: destination, maximumBytes: 256 * 1024 * 1024)
-        stateDigest = Data(SHA256.hash(data: bytes))
+    /// Writes the rows changed since the last barrier, and the engine tokens when given, in one
+    /// transaction. On failure every change stays pending for the next barrier.
+    private func persist(engine engineBytes: Data? = nil) throws {
+        let engineBytes = engineBytes == persistedEngine ? nil : engineBytes
+        guard needsPersist || engineBytes != nil else { return }
+        var changes = BrowserHistorySyncStateChanges()
+        for id in state.records.touched { changes.records.updateValue(state.records[id], forKey: id) }
+        for id in state.systemFields.touched { changes.systemFields.updateValue(state.systemFields[id], forKey: id) }
+        for id in state.dirty.touched { changes.dirty[id] = state.dirty.contains(id) }
+        for id in state.deleting.touched { changes.deleting[id] = state.deleting.contains(id) }
+        let retired = state.retired ?? [:]
+        if retired != persistedRetired {
+            for (id, expires) in retired where persistedRetired[id] != expires { changes.retired.updateValue(expires, forKey: id) }
+            for id in persistedRetired.keys where retired[id] == nil { changes.retired.updateValue(nil, forKey: id) }
+        }
+        let changesState = !changes.isEmpty
+        changes.engine = engineBytes
+        if !changes.isEmpty {
+            if store == nil { store = try BrowserHistorySyncStateStore(url: Self.storeURL(destination)) }
+            try store?.apply(changes)
+            if changesState { stateWrites += 1 } else { engineWrites += 1 }
+        }
+        state.records.clearTouched(); state.systemFields.clearTouched()
+        state.dirty.clearTouched(); state.deleting.clearTouched()
+        persistedRetired = retired
+        if let engineBytes { persistedEngine = engineBytes }
         needsPersist = false
     }
 
-    /// The record cache must be durable before a newer engine cursor is published.
+    /// The record cache must be durable before a newer engine cursor is published: both commit
+    /// in the same transaction.
     func persistEngineCheckpoint(_ bytes: Data) throws {
-        try persist()
-        if stateDigest == nil { needsPersist = true; try persist() }
-        guard let stateDigest else { throw BrowserSyncError.invalidRecord }
-        let checkpoint = EngineCheckpoint(stateDigest: stateDigest, serialization: bytes)
-        try enginePersistence.save(BrowserSyncReplica.encodeValue(checkpoint),
-            to: destination.appendingPathExtension("engine"), maximumBytes: 16 * 1024 * 1024)
+        try persist(engine: bytes)
     }
 
     func accept(_ record: CKRecord) throws {
