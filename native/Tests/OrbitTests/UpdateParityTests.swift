@@ -63,6 +63,46 @@ struct UpdateParityTests {
         #expect(throws: (any Error).self) { try OrbitUpdateFeed.latestVersion(data: Data("broken".utf8)) }
     }
 
+    @Test("The freshness hint follows Sparkle's stable phased rollout but keeps the prepared and critical updates")
+    func phasedAppcast() throws {
+        // Same element layout as generate_appcast with --phased-rollout-interval 86400.
+        let published = "Mon, 16 Nov 2026 12:00:00 +0000"
+        let xml = """
+        <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>
+        <item><sparkle:version>27</sparkle:version><pubDate>Mon, 09 Nov 2026 12:00:00 +0000</pubDate></item>
+        <item><sparkle:version>30</sparkle:version><pubDate>\(published)</pubDate>\
+        <sparkle:phasedRolloutInterval>86400</sparkle:phasedRolloutInterval></item>
+        </channel></rss>
+        """
+        let release = try #require(DateFormatter.rfc822Fixture.date(from: published))
+        func latest(group: UInt64, after days: Double, pending: String? = nil, feed: String = xml) throws -> String {
+            let phasing = OrbitUpdateFeed.Phasing(group: group, now: release.addingTimeInterval(days * 86400),
+                                                  pendingVersion: pending, hostVersion: "25")
+            return try OrbitUpdateFeed.latestVersion(data: Data(feed.utf8), phasing: phasing)
+        }
+        #expect(try latest(group: 0, after: 0) == "30")
+        #expect(try latest(group: 3, after: 2.9) == "27")
+        #expect(try latest(group: 3, after: 3) == "30")
+        #expect(try latest(group: 6, after: 5.99) == "27")
+        #expect(try latest(group: 13, after: 6) == "30")  // Sparkle uses identifier % 7.
+        // A user-initiated check may prepare the phased build early; it stays verifiable.
+        #expect(try latest(group: 6, after: 0, pending: "30") == "30")
+        // Without a group (Sparkle never ran a scheduled check) nothing is filtered.
+        #expect(try OrbitUpdateFeed.latestVersion(data: Data(xml.utf8)) == "30")
+        let critical = xml.replacingOccurrences(of: "<sparkle:phasedRolloutInterval>86400</sparkle:phasedRolloutInterval>",
+                                                with: "<sparkle:phasedRolloutInterval>86400</sparkle:phasedRolloutInterval><sparkle:criticalUpdate/>")
+        #expect(try latest(group: 6, after: 0, feed: critical) == "30")
+        let criticalBelowHost = critical.replacingOccurrences(of: "<sparkle:criticalUpdate/>",
+                                                              with: "<sparkle:criticalUpdate sparkle:version=\"20\"/>")
+        #expect(try latest(group: 6, after: 0, feed: criticalBelowHost) == "27")
+        let domain = "orbit.test.phasing.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        #expect(OrbitUpdateFeed.Phasing(defaults: defaults, pendingVersion: nil, hostVersion: "25") == nil)
+        defaults.set(NSNumber(value: UInt32(4_000_000_005)), forKey: OrbitUpdateFeed.Phasing.identifierKey)
+        #expect(OrbitUpdateFeed.Phasing(defaults: defaults, pendingVersion: nil, hostVersion: "25")?.group == 4_000_000_005 % 7)
+    }
+
     @Test("A bundle requiring signed feeds reads only feeds whose embedded signature matches its key")
     func signedAppcast() throws {
         let key = Curve25519.Signing.PrivateKey()
@@ -264,5 +304,14 @@ struct UpdateParityTests {
                 }
             }
         }
+    }
+}
+
+private extension DateFormatter {
+    static var rfc822Fixture: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
+        return formatter
     }
 }

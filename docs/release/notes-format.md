@@ -52,6 +52,9 @@ inside front matter. Unknown and duplicate fields are rejected.
 - `engine` (optional): include only when the engine **or a bundled component**
   changes. List the engine version/revision and any changed component version or
   immutable pin, including EasyList/EasyPrivacy and Sparkle when they change.
+- `update` (optional, stable only): the single value `critical` publishes a security hotfix
+  as a Sparkle critical update that skips the phased stable rollout. Use it only when every
+  user must install the fix at once; see `pipeline.md` (Stable phased rollout and critical updates).
 - `media` (optional): an indented list with exactly `file`, `poster`, and `caption`
   for each entry. Use lowercase hyphenated basenames, `.mp4` and `.jpg`; no paths
   or URLs. Add one clip per new user-visible feature when footage is available;

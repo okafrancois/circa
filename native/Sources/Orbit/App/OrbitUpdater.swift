@@ -344,8 +344,15 @@ final class OrbitUpdater: NSObject, ObservableObject {
             request.httpShouldHandleCookies = false
             let (data, response) = try await OrbitUpdateFeed.session.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-            return try OrbitUpdateFeed.latestVersion(data: data, info: Bundle.main.infoDictionary ?? [:],
-                allowedChannels: self?.allowedUpdateChannels ?? [])
+            let info = Bundle.main.infoDictionary ?? [:]
+            // Mirror Sparkle's phased rollout so a stale pending update is not replaced, through a
+            // user-initiated check, by a stable build this installation's group cannot see yet.
+            let phasing = self.flatMap { owner in
+                OrbitUpdateFeed.Phasing(defaults: owner.defaults, pendingVersion: owner.pendingVersion,
+                                        hostVersion: info["CFBundleVersion"] as? String ?? "")
+            }
+            return try OrbitUpdateFeed.latestVersion(data: data, info: info,
+                allowedChannels: self?.allowedUpdateChannels ?? [], phasing: phasing)
         }
         downloadLatestUpdate = { [weak self] in
             self?.replacing = true

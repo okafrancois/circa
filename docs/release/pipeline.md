@@ -22,8 +22,9 @@
 2. Run `.tools/sparkle-2.10.1/bin/generate_keys --account orbit-browser` once.
 3. Back up securely with `.tools/sparkle-2.10.1/bin/generate_keys --account orbit-browser -x /secure/backup/orbit-ed-key`.
 4. Put only the printed public key in `public_ed_key`. Keep the backup outside Git.
-   The private key stays in the runner's Keychain. Alternatively use an external private file
-   via `--ed-key-file /secure/orbit-ed-key` or `ORBIT_ED_KEY_FILE` (never its contents in argv).
+   Local releases read the private key from the Keychain. Hosted releases receive the exported
+   key as the `CIRCA_SPARKLE_PRIVATE_KEY` secret (see below). Alternatively use an external private
+   file via `--ed-key-file /secure/orbit-ed-key` or `ORBIT_ED_KEY_FILE` (never its contents in argv).
 - Missing public key disables the app updater and prevents creating a signed release feed.
 
 ## Signing and notarization
@@ -31,8 +32,9 @@
   with `security find-identity -v -p codesigning`; hardened runtime and secure timestamp.
 - `identity: "local"` remains available only for isolated test configurations.
 - The expected `notarytool_profile` is `orbit-notary`; releases fail before compilation if
-  it is missing. It is now provisioned on this Mac; new runners provision it with
-  `xcrun notarytool store-credentials orbit-notary --apple-id <Apple-ID> --team-id 5Y39TTNCM7`.
+  it is missing. For a local release, provision it with
+  `xcrun notarytool store-credentials orbit-notary --apple-id <Apple-ID> --team-id 5Y39TTNCM7`;
+  hosted releases create it from `CIRCA_NOTARY_CREDENTIALS` in the ephemeral keychain.
 - Configured notarization submits/staples the app before archiving, then the signed DMG.
   The local test app 0.0.2 was notarized and stapled successfully (Accepted).
 - CEF and Sparkle nested code are signed inside out with hardened runtime; Sparkle retains its
@@ -186,6 +188,29 @@
 - `release.py` runs `content-blocking-rules.py check`: the committed rulesets must match the
   pin's hashes and stay within the 30,000 guaranteed static rules.
 
+## Stable phased rollout and critical updates
+
+- Every stable candidate is generated with `generate_appcast --phased-rollout-interval 86400`:
+  its item carries `<sparkle:phasedRolloutInterval>86400</sparkle:phasedRolloutInterval>` and
+  a `pubDate`. Sparkle 2.10.1 splits installations into seven random, persistent groups
+  (`SUUpdateGroupIdentifier` % 7); group N sees the update N days after `pubDate` on scheduled
+  background checks, so everyone has it after six days. Nightly items are never phased.
+- Sparkle ignores phasing for user-initiated checks: **Check for Updates…** always finds the
+  newest build. The app's own feed freshness check applies the same group rule, so a staged
+  older update is not replaced early by a build that the installation's group cannot see yet.
+- To halt a bad stable release during its rollout, publish a fixed patch release (a newer build);
+  remaining groups then receive the fix instead. Published items are never edited.
+- **Critical updates** skip phasing and Sparkle shows them as critical (no skip button). Use one
+  only for a stable security hotfix that every user must install now (an exploited or remotely
+  reachable vulnerability, or broken update delivery). Declare it in the stable release note
+  front matter with `update: critical`; `release.py` then passes `--critical-update-version ''`
+  (critical for every installed version) instead of the phased interval. Nightly notes reject it.
+- `release.py` checks the generated candidate before publishing: phased interval for stable,
+  `<sparkle:criticalUpdate/>` only when the note declares it, neither for nightly.
+- After a stable release, check the published `update-feed/appcast.xml`: the new stable item
+  has the expected `pubDate`, `phasedRolloutInterval` 86400 and no channel; older items and
+  nightly items are unchanged.
+
 ## GitHub-hosted macOS runners
 
 - `hosted-build.yml` compiles the product and smoke application on an Apple Silicon
@@ -206,29 +231,22 @@
   creates a private release configuration and deletes credentials in an always-run
   cleanup step. It refuses local or self-hosted execution. Private files and keys
   are never included in build artifacts or source control.
-- Before switching releases, manually run `release.yml` with `hosted=true` and
-  `publish=false` with an existing version tag. Verification builds the selected
-  workflow ref and uses the tag only as version metadata, without publishing or
-  changing the update feed. Publishing always checks out the version tag.
-  Verify the resulting artifact.
-- Set repository variable `CIRCA_HOSTED_RELEASES=true` only after this verification.
-  Future owner-pushed version tags then use GitHub's macOS runners. Without this
-  variable, releases retain the existing self-hosted path. Neither release path
-  runs for pull requests or forks.
+- `release.yml` runs only on the hosted `xcode-27` runner; its first step fails on any other
+  runner. There is no self-hosted release runner and none may be registered for this public
+  repository. Every run starts from a fresh VM: the engine comes from `release/engine.json`,
+  credentials from the secrets above, and the previous feed from the published `update-feed`.
+- To verify a release without publishing, manually run `release.yml` with `publish=false` and
+  an existing version tag. Verification builds the selected workflow ref and uses the tag only
+  as version metadata, without publishing or changing the update feed. Publishing always checks
+  out the version tag. The signed artifacts are retained for three days.
 
-## Self-hosted fallback runner
-- Run `scripts/setup-release-runner.sh` explicitly on this Mac as the repository owner.
-  It downloads/checksums the official ARM64 runner, requests a short-lived registration token
-  via `gh api` (kept out of argv/logs), assigns `orbit-release`, installs/starts its launchd service.
-- Provision CEF, signing identity and the backed-up EdDSA key on that machine first.
-  Preserve `.tools/` and `dist/release/` in the runner checkout. The script was **not executed**.
+## Release workflow guards
 - `.github/workflows/release.yml` runs only owner-pushed `v*` tags or owner dispatches
   in the configured repository; numeric repository ID, owner, actor and strict `vX.Y.Z` / `vX.Y.Z-nightly.N` tag guards reject other targets. No PR trigger.
 - GitHub Settings → Actions → General: require approval for **all outside collaborators**
   on fork pull-request workflows; keep fork write-token/secret access disabled and the default
   workflow token read-only. This release job explicitly requests `contents: write`.
-- Add a tag ruleset for `v*` restricting creation/update/deletion to the owner. Restrict the
-  runner group to this repository, never authorize a PR workflow to use the release runner.
+- Add a tag ruleset for `v*` restricting creation/update/deletion to the owner.
 
 ORBIT-RENAME is merged: packaging uses the Orbit executable, icon and product identity.
 
@@ -249,8 +267,9 @@ ORBIT-RENAME is merged: packaging uses the Orbit executable, icon and product id
 
 ## Private iCloud organization sync
 - Production config uses `~/Library/OrbitRelease/Orbit_Developer_ID.provisionprofile`.
-  Install that external profile on each release runner; keep it outside Git with mode `0600`.
-  Relative paths resolve beside the configuration; `~` expands to the runner user's home.
+  For a local release, install that external profile outside Git with mode `0600`; hosted
+  releases decode `CIRCA_PROVISIONING_PROFILE` into the ephemeral signing directory.
+  Relative paths resolve beside the configuration; `~` expands to the user's home.
   An explicitly configured missing, expired or mismatched profile aborts the release.
   A deliberately unconfigured (`null`) profile retains the non-cloud signing path.
   Test bundles never receive iCloud capabilities.

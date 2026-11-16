@@ -31,6 +31,8 @@ class Note:
     sections: dict
     engine: str = ''
     media: tuple = ()
+    # 'critical' marks a stable security hotfix that every user receives immediately.
+    update: str = ''
 
     @property
     def channel(self):
@@ -81,7 +83,7 @@ def parse(text, version):
             continue
         item = re.fullmatch(r'  - file: (.+)', line)
         detail = re.fullmatch(r'    (poster|caption): (.+)', line)
-        top = re.fullmatch(r'(date|title|engine|media):(?: (.+))?', line)
+        top = re.fullmatch(r'(date|title|engine|media|update):(?: (.+))?', line)
         if item and media_mode:
             entry = {'file': scalar(item[1])}
             media.append(entry)
@@ -103,6 +105,10 @@ def parse(text, version):
     if not fields.get('title') or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', fields.get('date', '')):
         raise ValueError('Title and ISO date are required')
     date.fromisoformat(fields['date'])
+    if fields.get('update', 'critical') != 'critical':
+        raise ValueError('The only supported update kind is critical')
+    if fields.get('update') and '-nightly.' in version:
+        raise ValueError('Only stable releases can be critical updates')
     sections, current = {}, None
     for line in lines[end + 1:]:
         if not line.strip():
@@ -138,7 +144,7 @@ def parse(text, version):
     if len(media) > len(sections.get('New', [])):
         raise ValueError('Media entries must correspond to New items')
     return Note(version, fields['date'], fields['title'], sections, fields.get('engine', ''),
-                tuple(Media(**item) for item in media))
+                tuple(Media(**item) for item in media), fields.get('update', ''))
 
 
 def boxes(data, start=0, end=None):

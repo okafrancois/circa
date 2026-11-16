@@ -8,11 +8,6 @@ on:
         description: Existing vX.Y.Z or vX.Y.Z-nightly.N tag to publish
         required: true
         type: string
-      hosted:
-        description: Verify this release on a GitHub-hosted Apple Silicon runner
-        required: false
-        default: false
-        type: boolean
       publish:
         description: Publish the signed release (disable for a CI verification build)
         required: false
@@ -29,29 +24,31 @@ jobs:
       github.repository_id == '1436869204' &&
       github.repository_owner == 'okafrancois' && github.actor == 'okafrancois' &&
       (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
-    runs-on: ${{ (vars.CIRCA_HOSTED_RELEASES == 'true' || (github.event_name == 'workflow_dispatch' && inputs.hosted)) && 'xcode-27' || fromJSON('["self-hosted", "macOS", "ARM64", "orbit-release"]') }}
+    # GitHub-hosted Apple Silicon only: every run starts from a fresh VM and ephemeral credentials.
+    # This public repository has no self-hosted release runner.
+    runs-on: xcode-27
     timeout-minutes: 90
     # Publishing creates and edits releases and uploads assets through gh (GH_TOKEN, publish
     # step only). Nothing pushes with git; checkout keeps no token in .git/config.
     permissions:
       contents: write
     steps:
-      - name: Require a browser version tag
+      - name: Require a GitHub-hosted runner and a browser version tag
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: '[[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-nightly\.[1-9][0-9]*)?$ ]]'
+          RUNNER_KIND: ${{ runner.environment }}
+        run: |
+          test "$RUNNER_KIND" = github-hosted
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-nightly\.[1-9][0-9]*)?$ ]]
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
           ref: ${{ (github.event_name == 'workflow_dispatch' && !inputs.publish && github.sha) || inputs.tag || github.ref }}
-          clean: false
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: runner.environment == 'github-hosted'
         with:
           python-version: '3.12'
       - name: Prepare the hosted build tools and engine
-        if: runner.environment == 'github-hosted'
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: '2'
         run: |
@@ -59,7 +56,6 @@ jobs:
           command -v ninja || brew install ninja
           python3 scripts/ci_engine.py
       - name: Configure ephemeral release credentials
-        if: runner.environment == 'github-hosted'
         env:
           ORBIT_SIGNING_DIRECTORY: ${{ runner.temp }}/circa-development-signing
           CIRCA_SIGNING_CERTIFICATE: ${{ secrets.CIRCA_SIGNING_CERTIFICATE }}
@@ -71,13 +67,6 @@ jobs:
           echo "ORBIT_SIGNING_DIRECTORY=$ORBIT_SIGNING_DIRECTORY" >> "$GITHUB_ENV"
           echo "CMAKE_BUILD_PARALLEL_LEVEL=2" >> "$GITHUB_ENV"
           python3 scripts/ci_signing.py
-      - name: Link the prebuilt engine tools
-        if: runner.environment == 'self-hosted'
-        # The CEF distribution and Sparkle tools are local to the release Mac, never in Git.
-        # Set ORBIT_TOOLS_DIR in the runner's .env file.
-        run: |
-          if [ ! -e .tools ]; then ln -s "${ORBIT_TOOLS_DIR:?Set ORBIT_TOOLS_DIR in the runner .env}" .tools; fi
-          test -d .tools/chromium-fork/distrib
       - name: Build, qualify update preservation, sign, notarize when configured, and publish
         # release.py first updates the current public release to this build in a synthetic root
         # (sign-ins and installed extensions); any failure stops before signing or publishing.
@@ -90,7 +79,7 @@ jobs:
           if test "$PUBLISH" = true; then args+=(--publish); fi
           python3 scripts/release.py "${args[@]}"
       - name: Retain preservation evidence
-        if: always() && runner.environment == 'github-hosted'
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Circa-preservation-${{ github.run_id }}
@@ -100,7 +89,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
       - name: Retain verification results
-        if: runner.environment == 'github-hosted' && github.event_name == 'workflow_dispatch' && !inputs.publish
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Circa-signed-ci-verification
@@ -111,7 +100,7 @@ jobs:
             dist/release/*.dmg
           retention-days: 3
       - name: Remove ephemeral signing credentials
-        if: always() && runner.environment == 'github-hosted'
+        if: always()
         env:
           ORBIT_SIGNING_DIRECTORY: ${{ runner.temp }}/circa-development-signing
         run: python3 scripts/ci_signing.py --cleanup
