@@ -1482,7 +1482,7 @@
 "Browsers to import from" = "Browsers to import from";
 "Profile to import" = "Profile to import";
 "Take your Spaces everywhere." = "Take your Spaces everywhere.";
-"Circa can keep your Spaces, tabs and settings in sync through your private iCloud account. No Circa account needed." = "Circa can keep your Spaces, tabs and settings in sync through your private iCloud account. No Circa account needed.";
+"Circa can keep your Spaces, tabs, history and settings in sync through your private iCloud account. Passwords sync only if you turn it on in Settings. No Circa account needed." = "Circa can keep your Spaces, tabs, history and settings in sync through your private iCloud account. Passwords sync only if you turn it on in Settings. No Circa account needed.";
 "iCloud sync isn’t available in this copy of Circa. You can keep everything on this Mac." = "iCloud sync isn’t available in this copy of Circa. You can keep everything on this Mac.";
 "Sign in to iCloud in System Settings to sync. You can turn sync on later in Circa Settings." = "Sign in to iCloud in System Settings to sync. You can turn sync on later in Circa Settings.";
 "YES," = "YES,";
@@ -2221,3 +2221,5 @@
 "Extension · %@" = "Extension · %@";
 
 "Volume %ld%%" = "Volume %ld%%";
+"Sync passwords" = "Sync passwords";
+"Saved passwords are end-to-end encrypted in your iCloud account. Turning this off stops password sync on this Mac; passwords already in iCloud stay available to your other devices." = "Saved passwords are end-to-end encrypted in your iCloud account. Turning this off stops password sync on this Mac; passwords already in iCloud stay available to your other devices.";

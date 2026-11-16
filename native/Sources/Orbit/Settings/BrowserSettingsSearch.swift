@@ -375,7 +375,7 @@ extension BrowserSettingsModel {
         }
         return entries.filter { entry in
             if entry.id == "settings-create-profile" { return false } // Confirmation sheet, not the pane row.
-            if entry.id == "settings-sync" { return environment.sync.showsSettings }
+            if entry.id == "settings-sync" || entry.id == "settings-sync-passwords" { return environment.sync.showsSettings }
             return true
         }.map { original in
             var entry = original

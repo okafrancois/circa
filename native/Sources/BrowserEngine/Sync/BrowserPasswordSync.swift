@@ -1,5 +1,6 @@
 import BrowserCore
 import Foundation
+import OSLog
 
 public enum BrowserPasswordSyncSchema {
     public static let zone = "OrbitPasswords"
@@ -76,6 +77,60 @@ public struct BrowserPasswordSyncEntry: Codable, Sendable, Equatable, CustomStri
             fields[name] = field
         }
         if life < other.life || (life == other.life && other.deleted) { life = other.life; deleted = other.deleted }
+        // A concurrent edit can win a field after the deletion: the tombstone stays secret-free.
+        scrub()
+    }
+
+    // MARK: Tombstones
+
+    /// Canonical secret-free values of a deleted entry. Identity, username, password, form
+    /// action and dates are all replaced; only the opaque UUID aliases and the stamps remain.
+    static let scrubbedFields: [String: Data] = {
+        let values: [String: any Encodable] = ["identity": ["", "", "", "", "", "0"], "password": "", "action": "",
+            "created": Int64(0), "used": Int64(0), "modified": Int64(0), "blocked": false]
+        return values.mapValues { (try? encodeValue($0)) ?? Data() }
+    }()
+    static let scrubbedMatch = ["", "", "", "0", "false"]
+
+    var isScrubbed: Bool {
+        matches == [Self.scrubbedMatch] && fields.count == Self.scrubbedFields.count
+            && fields.allSatisfy { Self.scrubbedFields[$0.key] == $0.value.bytes }
+    }
+
+    /// Deletes the entry and replaces every secret with its canonical empty value.
+    mutating func tombstone(at stamp: Stamp) {
+        deleted = true
+        life = max(life, stamp)
+        scrub()
+    }
+
+    /// Deterministic, so replicas converge: each field keeps the later of its own stamp and
+    /// the deletion stamp (newer than any value written before the deletion) with constant bytes.
+    mutating func scrub() {
+        guard deleted else { return }
+        for (name, bytes) in Self.scrubbedFields {
+            fields[name] = .init(bytes: bytes, stamp: max(fields[name]?.stamp ?? life, life))
+        }
+        matches = [Self.scrubbedMatch]
+    }
+
+    // MARK: Remote validation
+
+    /// Entries from the cloud must describe a web credential (http or https with a host). A
+    /// tombstone carries no URL. Anything else (javascript:, file:, chrome:, app schemes) is refused.
+    var isAcceptableRemote: Bool {
+        if deleted { return isScrubbed || (try? row()) != nil }
+        guard let row = try? row() else { return false }
+        func isWeb(_ value: String) -> Bool {
+            guard let url = URL(string: value), let scheme = url.scheme?.lowercased(),
+                  scheme == "https" || scheme == "http", let host = url.host, !host.isEmpty else { return false }
+            return true
+        }
+        let realm = row.primaryKey.signonRealm.lowercased()
+        guard realm.hasPrefix("https://") || realm.hasPrefix("http://"),
+              isWeb(String(row.primaryKey.signonRealm.prefix { $0 != " " })),
+              isWeb(row.primaryKey.originURL) else { return false }
+        return row.actionURL.isEmpty || isWeb(row.actionURL)
     }
     /// Deterministic first-time deduplication, including transitive aliases and identity edits.
     public static func merged(_ entries: [Self]) throws -> [Self] {
@@ -92,6 +147,16 @@ public struct BrowserPasswordSyncEntry: Codable, Sendable, Equatable, CustomStri
             try entry.validate()
             let row = try entry.row()
             var keys = entry.aliases.map { Key(profile: entry.profileID, kind: 0, parts: [$0.uuidString]) }
+            // A scrubbed tombstone has no identity left to match: it unites only by its aliases.
+            if entry.isScrubbed {
+                for key in keys {
+                    if let prior = owners[key] {
+                        let a = root(index), b = root(prior)
+                        parents[max(a, b)] = min(a, b)
+                    } else { owners[key] = index }
+                }
+                continue
+            }
             keys.append(Key(profile: entry.profileID, kind: 1, parts: Self.match(row)))
             if row.dateCreated != 0 {
                 keys += entry.matches.map { Key(profile: entry.profileID, kind: 2, parts: $0 + [String(row.dateCreated)]) }
@@ -191,6 +256,12 @@ public actor BrowserPasswordSync {
         // Keep decoded credentials only for this exchange/application, never between cycles.
         defer { state = State(); running = false }
         state = try cache.load(State.self) ?? State()
+        // Tombstones written before scrubbing still hold the deleted secret: scrub them once.
+        var scrubbed = false
+        for index in state.entries.indices where state.entries[index].deleted && !state.entries[index].isScrubbed {
+            state.entries[index].scrub(); scrubbed = true
+        }
+        if scrubbed { try cache.save(state) }
         try await admitted()
         for profile in observers.keys where !profiles.contains(profile) { observers.removeValue(forKey: profile)?.cancel() }
         // A full list runs for a profile without a live observer (first cycle, or after our own
@@ -220,7 +291,7 @@ public actor BrowserPasswordSync {
         }
         if listed { try cache.save(state) }
         let outgoing = state.entries
-        let incoming = try await transport.exchange(outgoing)
+        let incoming = Self.acceptable(try await transport.exchange(outgoing))
         try Task.checkCancellation(); try await admitted()
         guard !stopped else { return }
         // Recapture edits that occurred during the exchange, before admitting remote values.
@@ -252,6 +323,17 @@ public actor BrowserPasswordSync {
         // Application drops its own observers; schedule the follow-up cycle that re-subscribes
         // and lists, so later local edits keep waking the runtime.
         if profiles.contains(where: { observers[$0] == nil }) { onLocalChange() }
+    }
+
+    private static let log = Logger(subsystem: "local.orbit", category: "password-sync")
+
+    /// Drops remote entries that are not web credentials. Logged by count only, never content.
+    static func acceptable(_ entries: [BrowserPasswordSyncEntry]) -> [BrowserPasswordSyncEntry] {
+        let accepted = entries.filter(\.isAcceptableRemote)
+        if accepted.count != entries.count {
+            log.notice("Dropped \(entries.count - accepted.count, privacy: .public) invalid remote password entries")
+        }
+        return accepted
     }
 
     private func unobserve(_ profile: ProfileID) {
@@ -320,8 +402,7 @@ public actor BrowserPasswordSync {
         }
         for binding in remaining {
             if let i = state.entries.firstIndex(where: { $0.profileID == profile && $0.aliases.contains(binding.id) }) {
-                state.entries[i].deleted = true
-                state.entries[i].life = .init(time: time, device: state.device)
+                state.entries[i].tombstone(at: .init(time: time, device: state.device))
             }
         }
         state.baseline[profile] = bindings
@@ -357,7 +438,12 @@ public actor BrowserPasswordSync {
                 try capture(rows, profile: profile, now: Date()); try cache.save(state)
                 throw BrowserSyncError.localChange
             }
-            let candidates = try rows.filter { try entry.owns($0) }
+            // A scrubbed tombstone no longer names its credential: the rows this Mac bound to
+            // the entry (exact baseline values) are the ones to remove.
+            let candidates = try rows.filter { row in
+                if entry.deleted, bound.contains(where: { binding in (try? BrowserPasswordSyncEntry.values(row)) == binding.fields }) { return true }
+                return try entry.owns(row)
+            }
             if entry.deleted {
                 for row in candidates { try await store.remove(row.primaryKey, profileID: profile) }
             } else if let current = candidates.first(where: { $0.primaryKey == desired.primaryKey }) ?? candidates.first {

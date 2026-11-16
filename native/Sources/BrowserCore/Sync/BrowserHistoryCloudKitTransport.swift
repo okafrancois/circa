@@ -41,11 +41,15 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
     var stateWrites: Int { persistence.writes }
     private var stopped = false
     private var failure: (any Error)?
+    private var sealedRewrite: BrowserSyncSealedRewrite
+    /// Records queued by the one-time sealed rewrite (observable by tests).
+    private(set) var sealedRewrites = 0
 
     public init(destination: URL, identity: String) throws {
         guard BrowserSyncEntitlement.isAvailable() else { throw BrowserSyncError.unavailable }
         container = CKContainer(identifier: BrowserSyncSchema.container)
         self.destination = destination; self.identity = identity
+        sealedRewrite = BrowserSyncSealedRewrite(cache: destination)
         if let bytes = try BrowserPermissionFile.load(destination, maximumBytes: 256 * 1024 * 1024) {
             state = try JSONDecoder().decode(State.self, from: bytes)
             stateDigest = Data(SHA256.hash(data: bytes))
@@ -64,6 +68,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
     /// Account-free seam that exercises the production cache and persistence path.
     init(testDestination: URL) throws {
         container = nil; destination = testDestination; identity = "synthetic"
+        sealedRewrite = BrowserSyncSealedRewrite(cache: testDestination)
         if let bytes = try BrowserPermissionFile.load(testDestination, maximumBytes: 256 * 1024 * 1024) {
             state = try JSONDecoder().decode(State.self, from: bytes)
             stateDigest = Data(SHA256.hash(data: bytes))
@@ -110,6 +115,11 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
             state.records.removeValue(forKey: id); state.dirty.remove(id)
         }
         retract(records, cutoff: cutoff, now: now)
+        if !sealedRewrite.isDone {
+            // This Mac's records cached before the sealed format may still be plaintext on the
+            // server: save each once more so `record(_:)` replaces the plaintext field.
+            for record in records where state.records[record.id.uuidString] != nil { sealedRewrites += 1; state.dirty.insert(record.id.uuidString) }
+        }
         var pending: [CKSyncEngine.PendingRecordZoneChange] = state.deleting.map {
             .deleteRecord(.init(recordName: $0, zoneID: zone))
         }
@@ -131,6 +141,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
         try await engine?.sendChanges()
         if let failure { throw failure }
         try await admitted()
+        if !sealedRewrite.isDone { try sealedRewrite.markDone() }
         lastInput = records; lastExchange = now; exchangedRevision = remoteRevision
         return Array(state.records.values)
     }
@@ -161,6 +172,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
 
     var cachedRecordIDs: Set<String> { Set(state.records.keys) }
     var pendingDeletions: Set<String> { state.deleting }
+    var dirtyRecordIDs: Set<String> { state.dirty }
 
     public func nextFetchChangesOptions(_ context: CKSyncEngine.FetchChangesContext,
                                         syncEngine: CKSyncEngine) async -> CKSyncEngine.FetchChangesOptions {
@@ -197,7 +209,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
 
     func accept(_ record: CKRecord) throws {
         guard record.recordID.zoneID == zone, record.recordType == BrowserHistorySyncSchema.recordType,
-              let bytes = record["payload"] as? Data, bytes.count <= BrowserHistorySyncSchema.maximumBytes else { throw BrowserSyncError.invalidRecord }
+              let bytes = BrowserSyncSealedPayload.read(record), bytes.count <= BrowserHistorySyncSchema.maximumBytes else { throw BrowserSyncError.invalidRecord }
         let incoming = try JSONDecoder().decode(BrowserHistorySyncBatch.self, from: bytes)
         // A retracted record fetched again before its deletion lands stays out of the cache.
         guard state.retired?[incoming.id.uuidString] == nil else { return }
@@ -240,7 +252,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
                 try await admitted()
                 for record in event.savedRecords {
                     try accept(record)
-                    if let bytes = record["payload"] as? Data,
+                    if let bytes = BrowserSyncSealedPayload.read(record), !BrowserSyncSealedPayload.isLegacy(record),
                        let sent = try? JSONDecoder().decode(BrowserHistorySyncBatch.self, from: bytes),
                        state.records[sent.id.uuidString] == sent, state.dirty.contains(sent.id.uuidString) {
                         state.dirty.remove(sent.id.uuidString)
@@ -282,7 +294,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
         }
     }
 
-    private func record(_ recordID: CKRecord.ID) -> CKRecord? {
+    func record(_ recordID: CKRecord.ID) -> CKRecord? {
         do {
             guard !stopped, recordID.zoneID == zone, let value = state.records[recordID.recordName] else { return nil }
             let record: CKRecord
@@ -292,7 +304,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
                 guard let decoded = CKRecord(coder: decoder) else { throw BrowserSyncError.invalidRecord }
                 decoder.finishDecoding(); record = decoded
             } else { record = CKRecord(recordType: BrowserHistorySyncSchema.recordType, recordID: recordID) }
-            record["payload"] = try BrowserSyncReplica.encodeValue(value) as CKRecordValue
+            BrowserSyncSealedPayload.write(try BrowserSyncReplica.encodeValue(value), to: record)
             return record
         } catch { failure = error; return nil }
     }

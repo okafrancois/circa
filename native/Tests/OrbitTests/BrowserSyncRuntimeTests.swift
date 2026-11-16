@@ -160,5 +160,51 @@ struct BrowserSyncRuntimeTests {
         #expect(cycles > settled)
         await runtime.prepareForTermination()
     }
-}
 
+    @Test("Turning sync off deletes this Mac's sync caches and keeps the sync state")
+    func disableRemovesLocalCaches() async throws {
+        let root = root()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("sync.json")
+        let runtime = BrowserSyncRuntime(destination: destination, interval: .milliseconds(10)) {}
+        try await runtime.setEnabled(true)
+        let caches = ["cloudkit", "cloudkit.sealed-v1", "history.cloudkit", "history.cloudkit.engine",
+                      "history.cloudkit.sqlite", "passwords.sealed", "passwords.cloudkit.sealed"]
+        for name in caches { try Data("synthetic".utf8).write(to: destination.appendingPathExtension(name)) }
+        let unrelated = root.appendingPathComponent("session.json")
+        try Data("synthetic".utf8).write(to: unrelated)
+        try await runtime.setEnabled(false)
+        for name in caches { #expect(!FileManager.default.fileExists(atPath: destination.appendingPathExtension(name).path), "\(name)") }
+        #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(FileManager.default.fileExists(atPath: unrelated.path))
+        // The on/off choice survives in the kept state file.
+        #expect(try BrowserSyncState.load(destination).enabled == false)
+        await runtime.prepareForTermination()
+    }
+
+    @Test("Password sync is off by default; turning it off removes only password caches")
+    func passwordToggle() async throws {
+        let root = root()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("sync.json")
+        let runtime = BrowserSyncRuntime(destination: destination, interval: .milliseconds(10)) {}
+        #expect(!runtime.passwordsEnabled)
+        try await runtime.setEnabled(true)
+        #expect(!runtime.passwordsEnabled)
+        try await runtime.setPasswordsEnabled(true)
+        #expect(runtime.passwordsEnabled)
+        #expect(try BrowserSyncState.load(destination).syncsPasswords)
+        for name in ["cloudkit", "passwords.sealed", "passwords.cloudkit.sealed"] {
+            try Data("synthetic".utf8).write(to: destination.appendingPathExtension(name))
+        }
+        try await runtime.setPasswordsEnabled(false)
+        #expect(!runtime.passwordsEnabled && runtime.enabled)
+        #expect(try !BrowserSyncState.load(destination).syncsPasswords)
+        #expect(!FileManager.default.fileExists(atPath: destination.appendingPathExtension("passwords.sealed").path))
+        #expect(!FileManager.default.fileExists(atPath: destination.appendingPathExtension("passwords.cloudkit.sealed").path))
+        #expect(FileManager.default.fileExists(atPath: destination.appendingPathExtension("cloudkit").path))
+        await runtime.prepareForTermination()
+    }
+}
