@@ -25,9 +25,10 @@ struct BrowserHistoryTransportIdleTests {
             BrowserHistorySyncBatch(profileID: profile, cutoff: BrowserHistorySyncSchema.cutoff(now), events: events)
         }
         _ = try await transport.exchange(batches, now: now)
-        let before = await (transport.validations, transport.fullStateEncodes, transport.explicitExchanges)
+        let before = await (transport.validations, transport.stateWrites, transport.explicitExchanges)
         let writes = await transport.stateWrites
-        let bytes = try Data(contentsOf: destination)
+        let bytes = try FileManager.default.attributesOfItem(atPath: BrowserHistoryCloudKitTransport.storeURL(destination).path)[.size] as? Int ?? 0
+        let rows = await transport.stateStore?.rowsWritten
         var start = cpu()
         for index in 1...10 {
             // Runtime assembles a fresh outer array from each profile's cached batches.
@@ -36,19 +37,22 @@ struct BrowserHistoryTransportIdleTests {
         }
         let newCPU = (cpu() - start) * 1000 / 10
         #expect(await transport.validations == before.0)
-        #expect(await transport.fullStateEncodes == before.1)
+        #expect(await transport.stateWrites == before.1)
         #expect(await transport.explicitExchanges == before.2)
-        // Exercise the same persistence barrier as stateUpdate with opaque engine tokens.
+        #expect(await transport.stateStore?.rowsWritten == rows)
+        // Exercise the same persistence barrier as stateUpdate with opaque engine tokens: one
+        // engine row per token, no cache row.
         for index in 0..<10 { try await transport.persistEngineCheckpoint(Data("token-\(index)".utf8)) }
-        #expect(await transport.fullStateEncodes == before.1)
-        #expect(try Data(contentsOf: destination.appendingPathExtension("engine")).count < 256)
+        try await transport.persistEngineCheckpoint(Data("token-9".utf8))
+        #expect(await transport.engineWrites == 10)
         #expect(await transport.stateWrites == writes)
-        #expect(try Data(contentsOf: destination) == bytes)
+        #expect(await transport.stateStore?.rowsWritten == rows.map { $0 + 10 })
+        #expect(await transport.snapshot.engine == Data("token-9".utf8))
         // A safety fetch rechecks immutable identities without revalidating or encoding them.
         _ = try await transport.exchange(batches, now: now.addingTimeInterval(301))
         #expect(await transport.explicitExchanges == before.2 + 1)
         #expect(await transport.validations == before.0)
-        #expect(await transport.fullStateEncodes == before.1)
+        #expect(await transport.stateWrites == before.1)
         let remote = BrowserHistorySyncBatch(profileID: profile, cutoff: BrowserHistorySyncSchema.cutoff(now), events: [])
         let record = CKRecord(recordType: BrowserHistorySyncSchema.recordType,
             recordID: .init(recordName: remote.id.uuidString, zoneID: .init(zoneName: BrowserHistorySyncSchema.zone)))
@@ -56,14 +60,15 @@ struct BrowserHistoryTransportIdleTests {
         try await transport.accept(record)
         #expect(try await transport.exchange(batches, now: now.addingTimeInterval(302)).count == 201)
         #expect(await transport.validations == before.0 + 1)
-        #expect(await transport.fullStateEncodes == before.1 + 1)
+        #expect(await transport.stateWrites == before.1 + 1)
         let accepted = await transport.validations
         try await transport.accept(record)
         #expect(await transport.validations == accepted)
         let reopened = try BrowserHistoryCloudKitTransport(testDestination: destination)
         _ = try await reopened.exchange(batches, now: now)
         #expect(await reopened.validations == 0)
-        #expect(await reopened.fullStateEncodes == 0)
+        #expect(await reopened.stateWrites == 0)
+        #expect(await reopened.snapshot == transport.snapshot)
         let conflict = BrowserHistorySyncBatch(id: batches[0].id, profileID: profile,
             cutoff: batches[0].cutoff, events: [])
         await #expect(throws: BrowserSyncError.invalidRecord) { try await reopened.exchange([conflict], now: now) }
@@ -88,7 +93,7 @@ struct BrowserHistoryTransportIdleTests {
         }
         let oldCPU = (cpu() - start) * 1000 / 3
         #expect(encodedBytes > 0)
-        print("HISTORY_TRANSPORT_BENCH batches=200 state_bytes=\(bytes.count) old_cpu_ms=\(oldCPU) new_cpu_ms=\(newCPU) idle_validations=0 idle_full_encodes=0 idle_explicit_exchanges=0")
+        print("HISTORY_TRANSPORT_BENCH batches=200 state_bytes=\(bytes) old_cpu_ms=\(oldCPU) new_cpu_ms=\(newCPU) idle_validations=0 idle_full_encodes=0 idle_explicit_exchanges=0")
     }
 
     @Test func failedWriteRetainsDirtyState() async throws {
@@ -103,8 +108,9 @@ struct BrowserHistoryTransportIdleTests {
         try FileManager.default.removeItem(at: root)
         #expect(try await transport.exchange([batch], now: now).count == 1)
         #expect(await transport.validations == 1)
-        #expect(await transport.fullStateEncodes == 2)
         #expect(await transport.stateWrites == 1)
+        let reopened = try BrowserHistoryCloudKitTransport(testDestination: root.appendingPathComponent("state.json"))
+        #expect(await reopened.snapshot.records.count == 1)
     }
 
     @Test func coalescingAndDurableFlush() async throws {

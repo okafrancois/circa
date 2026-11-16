@@ -189,6 +189,14 @@ struct BrowserHistoryPurgeTests {
         try await store.close()
     }
 
+    /// Every byte of the transport's SQLite file and its write-ahead log.
+    private func storeText(_ destination: URL) throws -> String {
+        let url = BrowserHistoryCloudKitTransport.storeURL(destination)
+        var bytes = try Data(contentsOf: url)
+        if let wal = try? Data(contentsOf: URL(fileURLWithPath: url.path + "-wal")) { bytes += wal }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
     @Test("The CloudKit transport deletes retracted records from its cache and never uploads them again")
     func transportRetraction() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
@@ -200,12 +208,14 @@ struct BrowserHistoryPurgeTests {
             events: [BrowserHistorySyncEvent(visit: visit("transport-kept"), time: now)])
         var transport = try BrowserHistoryCloudKitTransport(testDestination: destination)
         #expect(try await transport.exchange([doomed, kept], now: now).count == 2)
-        #expect(String(decoding: try Data(contentsOf: destination), as: UTF8.self).contains("transport-doomed"))
+        #expect(try storeText(destination).contains("transport-doomed"))
         let notice = BrowserHistorySyncBatch.retraction(of: doomed.id, profileID: profile)
         // A stale store may still list the batch in the same exchange; it is not kept.
         #expect(try await transport.exchange([doomed, kept, notice], now: now.addingTimeInterval(1)).map(\.id) == [kept.id])
         #expect(await transport.pendingDeletions.contains(doomed.id.uuidString))
-        #expect(!String(decoding: try Data(contentsOf: destination), as: UTF8.self).contains("transport-doomed"))
+        // Rows are zeroed and the write-ahead log truncated: no byte of the record stays on disk.
+        #expect(try !storeText(destination).contains("transport-doomed"))
+        #expect(try storeText(destination).contains("transport-kept"))
         // The server can still send it back before the deletion lands: it stays out of the cache.
         let fetched = CKRecord(recordType: BrowserHistorySyncSchema.recordType,
             recordID: .init(recordName: doomed.id.uuidString, zoneID: .init(zoneName: BrowserHistorySyncSchema.zone)))
