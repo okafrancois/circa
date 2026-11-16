@@ -355,11 +355,12 @@ SPARKLE = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
 STABLE_PHASED_ROLLOUT_SECONDS = 24 * 60 * 60
 
 
-def rollout_arguments(nightly, critical):
-    """generate_appcast options for the candidate: phased stable, immediate critical or nightly."""
-    if nightly:
-        if critical:
-            raise ValueError('Only stable releases can be critical updates')
+def rollout_arguments(nightly, critical, isolated=False):
+    """generate_appcast options for the candidate: phased stable, immediate critical or nightly.
+    Isolated updater E2E feeds (--local-test-root) are never phased, so their checks stay immediate."""
+    if nightly and critical:
+        raise ValueError('Only stable releases can be critical updates')
+    if nightly or isolated:
         return []
     if critical:
         # An empty version makes the update critical for every installed version.
@@ -367,7 +368,7 @@ def rollout_arguments(nightly, critical):
     return ['--phased-rollout-interval', str(STABLE_PHASED_ROLLOUT_SECONDS)]
 
 
-def validate_rollout(path, build, nightly, critical):
+def validate_rollout(path, build, nightly, critical, isolated=False):
     """The candidate item must carry exactly the rollout policy of its channel."""
     items = [item for item in ET.parse(path).findall('./channel/item')
              if (item.findtext(SPARKLE + 'version') or item.find('enclosure').get(SPARKLE + 'version')) == str(build)]
@@ -376,7 +377,7 @@ def validate_rollout(path, build, nightly, critical):
     item = items[0]
     interval = item.findtext(SPARKLE + 'phasedRolloutInterval')
     is_critical = item.find(SPARKLE + 'criticalUpdate') is not None
-    expected = None if nightly or critical else str(STABLE_PHASED_ROLLOUT_SECONDS)
+    expected = None if nightly or critical or isolated else str(STABLE_PHASED_ROLLOUT_SECONDS)
     if interval != expected:
         raise ValueError('Candidate phased rollout interval must be ' + (expected or 'absent'))
     if is_critical != critical:
@@ -751,7 +752,7 @@ def main():
     prefix = args.feed_url.rsplit('/', 1)[0] + '/' if args.feed_url else f"https://github.com/{config['repository']}/releases/download/v{version}/"
     run(sparkle / 'bin/generate_appcast', *signing, '--versions', str(build), '--download-url-prefix', prefix,
         '--full-release-notes-url', 'https://circabrowser.com/changelog',
-        *(['--channel', 'nightly'] if nightly else []), *rollout_arguments(nightly, critical),
+        *(['--channel', 'nightly'] if nightly else []), *rollout_arguments(nightly, critical, bool(args.local_test_root)),
         '--delta-compression', 'lzfse', '--maximum-versions', '0', '--maximum-deltas', '5', archives)
     feed = archives / 'appcast.xml'
     merge_published_items(feed, published_feed, build, nightly)
@@ -759,7 +760,7 @@ def main():
     # and also covers an older feed in the archive directory.
     run(sparkle / 'bin/sign_update', *signing, feed, capture_output=True)
     validate_appcast(feed, build)
-    validate_rollout(feed, build, nightly, critical)
+    validate_rollout(feed, build, nightly, critical, bool(args.local_test_root))
     verify_feed_signature(feed, config['public_ed_key'])
     if args.publish:
         stable_dmg = None

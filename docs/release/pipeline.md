@@ -194,7 +194,8 @@
   its item carries `<sparkle:phasedRolloutInterval>86400</sparkle:phasedRolloutInterval>` and
   a `pubDate`. Sparkle 2.10.1 splits installations into seven random, persistent groups
   (`SUUpdateGroupIdentifier` % 7); group N sees the update N days after `pubDate` on scheduled
-  background checks, so everyone has it after six days. Nightly items are never phased.
+  background checks, so everyone has it after six days. Nightly items and isolated
+  `--local-test-root` updater feeds are never phased.
 - Sparkle ignores phasing for user-initiated checks: **Check for Updates…** always finds the
   newest build. The app's own feed freshness check applies the same group rule, so a staged
   older update is not replaced early by a build that the installation's group cannot see yet.

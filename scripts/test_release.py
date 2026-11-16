@@ -203,6 +203,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(release.rollout_arguments(False, False), ['--phased-rollout-interval', '86400'])
         self.assertEqual(release.rollout_arguments(True, False), [])
         self.assertEqual(release.rollout_arguments(False, True), ['--critical-update-version', ''])
+        self.assertEqual(release.rollout_arguments(False, False, isolated=True), [])
         with self.assertRaises(ValueError):
             release.rollout_arguments(True, True)
 
@@ -228,6 +229,12 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'publication date'):
                 release.validate_rollout(feed, 42, False, False)
             feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                            + self.NIGHTLY_ITEM.replace('<sparkle:channel>nightly</sparkle:channel>', '')
+                            + '</channel></rss>')
+            release.validate_rollout(feed, 42, False, False, isolated=True)
+            with self.assertRaises(ValueError):
+                release.validate_rollout(feed, 42, False, False)
+            feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
                             + self.STABLE_ITEM.replace('86400', '604800') + '</channel></rss>')
             with self.assertRaises(ValueError):
                 release.validate_rollout(feed, 42, False, False)
@@ -235,8 +242,9 @@ class ReleaseTests(unittest.TestCase):
     def test_release_generates_and_checks_the_rollout_before_publishing(self):
         source = Path(release.__file__).read_text()
         generate = source.index("run(sparkle / 'bin/generate_appcast'")
-        self.assertIn('*rollout_arguments(nightly, critical)', source[generate:source.index('archives)', generate)])
-        check = source.index('validate_rollout(feed, build, nightly, critical)')
+        self.assertIn('*rollout_arguments(nightly, critical, bool(args.local_test_root))',
+                      source[generate:source.index('archives)', generate)])
+        check = source.index('validate_rollout(feed, build, nightly, critical, bool(args.local_test_root))')
         self.assertLess(source.index('validate_appcast(feed, build)'), check)
         self.assertLess(check, source.index('publish_release(config, version, archive, dmg, archives'))
         self.assertIn("critical = notes is not None and load(notes, ROOT).update == 'critical'", source)
