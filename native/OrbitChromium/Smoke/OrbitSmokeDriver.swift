@@ -559,6 +559,12 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             finish(aborted: false)
             return
         }
+        if arguments.contains("--orbit-smoke-profile-site-data") {
+            await OrbitSiteDataScenarios.runProfileWide(environment: environment, window: first, fixture: fixture,
+                                                        engineRoot: configuration.engineRoot, record: record)
+            finish(aborted: false)
+            return
+        }
         if arguments.contains("--orbit-smoke-site-data") {
             await OrbitSiteDataScenarios.run(environment: environment, window: first, fixture: fixture, record: record)
             finish(aborted: false)

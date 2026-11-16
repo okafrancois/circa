@@ -182,6 +182,14 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
             released = true
         }
         guard persistence == .persistent else { return }
+        try await retireProfileDirectory(profileID, released: released, deadline: deadline)
+        removeProfileLeftovers(profileID)
+    }
+
+    /// Deletes `profile-<uuid>` through the bridge once Chrome unloaded the profile (see
+    /// `removeProfile`), waiting for a quiet period in which Chrome did not recreate it.
+    private func retireProfileDirectory(_ profileID: ProfileID, released: Bool,
+                                        deadline: ContinuousClock.Instant) async throws {
         let path = profileDirectory(profileID)
         let quiet = Duration.seconds(2)
         var absentSince: ContinuousClock.Instant?
@@ -225,6 +233,23 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
             }
             await Task { try? await Task.sleep(for: .milliseconds(50)) }.value
         }
+    }
+
+    /// What a removed profile leaves outside its directory: the HTTP and code caches Chromium
+    /// keeps under the user's Caches folder (personal data roots only) and the profile's copies in
+    /// the engine migration backups. Neither failure fails the removal: the launch sweep
+    /// (`EngineComposition`) retries both before the engine starts.
+    private func removeProfileLeftovers(_ profileID: ProfileID) {
+        let engineRoot = URL(fileURLWithPath: runtime.rootCachePath, isDirectory: true)
+        do {
+            try BrowserEngineMigrationBackup.prune(profile: profileID, .allFiles, dataRoot: engineRoot.deletingLastPathComponent())
+        } catch {
+            runtime.trace?("profile-backup-prune-deferred", ["category": String(describing: error)])
+        }
+        guard let cacheRoot = BrowserEngineProfileCache.cacheRoot(engineRoot: engineRoot) else { return }
+        // Caches can hold many thousands of files: never on the main thread. A failure (Chrome
+        // still finishing a write) leaves a retired tree for the launch sweep.
+        Task.detached(priority: .utility) { try? BrowserEngineProfileCache.remove(profileID, cacheRoot: cacheRoot) }
     }
 
     public func diagnosticDataRoot(for profileID: ProfileID) -> URL? {
