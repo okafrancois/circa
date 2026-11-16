@@ -386,6 +386,35 @@ inline const std::vector<const char*>& ContextMenuCommandNames() {
   return names;
 }
 
+// NAV-INITIATOR: how a page navigation that asks for another tab (OnOpenURLFromTab: Command- or
+// middle-click, Shift-click, a form with a modifier) reaches the target the shell chose. A target
+// loaded again by URL is browser-initiated: no initiator origin, no Referer, `Sec-Fetch-Site: none`
+// and SameSite=Strict cookies attached. Preferred order:
+// - kEngineTab: Chrome performs the original navigation (initiator, referrer, POST body) in a new
+//   tab of the source's logical Browser, offered back through the unowned-tab handler and given to
+//   the shell's surface. Only tab dispositions stay in that Browser; hosted sources only.
+// - kReopen: a main-frame user gesture; the shell may open the link again from the source document
+//   itself (a renderer-initiated `noopener` window), keeping that document as initiator.
+// - kReplay: the historical load by URL (non-hosted sources, subframes, scripted opens).
+// Values are the `kind` passed to ACRDecideNewSurface (1 is OnBeforePopup).
+enum class OpenURLRoute : int32_t { kReplay = 2, kEngineTab = 3, kReopen = 4 };
+constexpr int32_t kDispositionNewForegroundTab = 3;  // CEF_WOD_NEW_FOREGROUND_TAB
+constexpr int32_t kDispositionNewBackgroundTab = 4;  // CEF_WOD_NEW_BACKGROUND_TAB
+inline OpenURLRoute RouteOpenURLFromTab(int32_t disposition, bool hosted_source, bool engine_tabs_offered,
+                                        bool main_frame, bool user_gesture) {
+  const bool tab = disposition == kDispositionNewForegroundTab || disposition == kDispositionNewBackgroundTab;
+  if (tab && hosted_source && engine_tabs_offered) return OpenURLRoute::kEngineTab;
+  if (main_frame && user_gesture) return OpenURLRoute::kReopen;
+  return OpenURLRoute::kReplay;
+}
+
+// NAV-INITIATOR: the claim made in OnOpenURLFromTab is valid only for the tab Chrome creates in the
+// same call (Navigate runs synchronously after the handler returns false): same window and profile.
+inline bool MatchesEngineTabClaim(uint64_t claim_window, uint64_t claim_profile, uint64_t tab_window,
+                                  uint64_t tab_profile) {
+  return claim_window != 0 && claim_profile != 0 && claim_window == tab_window && claim_profile == tab_profile;
+}
+
 // CH-ESSENTIALS: a context menu command the shell asks for is executed only when it was offered for
 // that very request (present and enabled in Chrome's model); anything else cancels the menu.
 inline bool AcceptsContextMenuCommand(int32_t command_id, const std::set<int32_t>& offered) {

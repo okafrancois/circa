@@ -200,18 +200,39 @@ extension BrowserWindowController {
                                     kind: action.kind == .linkActivation && action.isUserGesture != false ? .linkActivation : .other,
                                     httpMethod: action.httpMethod, hasBody: action.hasBody != false))
         if BrowserSplitLinkRouting.accepts(link), session.selectedSurface === source {
-            if canAddSplitPane { session.addSplitPane(url: url) }
+            guard canAddSplitPane else { return .handled(.cancel) }
+            // NAV-INITIATOR: the link reopens from its document and arrives as a new target, which
+            // `routeNewTargetToPeek` moves to the split; loading it again by URL is the fallback.
+            let reopened = reopenLinkFromDocument(url, modifiers: action.modifiers, in: source) { [weak self] in
+                guard let self, acceptsCommands, canAddSplitPane else { return }
+                session.addSplitPane(url: url)
+            }
+            if !reopened { session.addSplitPane(url: url) }
             return .handled(.cancel)
         }
         guard case .peek(let trigger) = BrowserPeekRouting.decide(link, settings: peek.settings) else { return .declined }
         let origin = peekActivationPoint(in: source)
         let generation = source.documentGeneration
-        Task { [weak self, weak source] in
+        let openByURL = { @MainActor [weak self, weak source] in
             guard let self, let source, owns(source), session.selectedSurface === source,
                   source.documentGeneration == generation else { return }
             openPeek(url, trigger: trigger, activationPoint: origin)
         }
+        // NAV-INITIATOR: reopened from the document, the link comes back as a new target and the
+        // same Peek decision applies to it (`routeNewTargetToPeek`).
+        if reopenLinkFromDocument(url, modifiers: action.modifiers, in: source, fallback: openByURL) {
+            return .handled(.cancel)
+        }
+        Task { openByURL() }
         return .handled(.cancel)
+    }
+
+    /// Engines that can reopen a link from the document that showed it (`BrowserLinkReopening`)
+    /// keep that document as the request's initiator; false leaves the caller's route by URL.
+    func reopenLinkFromDocument(_ url: URL, modifiers: BrowserModifierKeys, in source: Surface,
+                                fallback: @escaping @MainActor () -> Void) -> Bool {
+        guard let reopening = source as? any BrowserLinkReopening else { return false }
+        return reopening.reopenLinkFromDocument(url, modifiers: modifiers, fallback: fallback)
     }
 
     func peekLinkRequest(kind: BrowserPeekRequestKind, source: Surface, sourceOccurrenceID: TabOccurrenceID,

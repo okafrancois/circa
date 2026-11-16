@@ -348,7 +348,38 @@ void AnchoredRootRemovesOnlyItsOwnChildren() {
 
 }  // namespace
 
+void OpenURLFromTabKeepsInitiatorWherePossible() {
+  using orbit_bridge::OpenURLRoute;
+  using orbit_bridge::RouteOpenURLFromTab;
+  // Command-click (background) and Command-Shift-click (foreground) in a hosted tab: Chrome opens it.
+  Check(RouteOpenURLFromTab(4, true, true, true, true) == OpenURLRoute::kEngineTab,
+        "a background tab of a hosted source is created by the engine");
+  Check(RouteOpenURLFromTab(3, true, true, false, false) == OpenURLRoute::kEngineTab,
+        "a foreground tab keeps the engine path even from a subframe or without gesture");
+  // Shift-click (new window) never leaves the logical Browser: reopened from the document.
+  Check(RouteOpenURLFromTab(6, true, true, true, true) == OpenURLRoute::kReopen,
+        "a new-window disposition from a main-frame gesture is reopened from the document");
+  Check(RouteOpenURLFromTab(6, true, true, false, true) == OpenURLRoute::kReplay,
+        "a subframe initiator is never replaced by the main document");
+  Check(RouteOpenURLFromTab(6, true, true, true, false) == OpenURLRoute::kReplay,
+        "a scripted open without gesture is not reopened");
+  // Without hosting or without the framework's unowned-tab handler Chrome would make a window.
+  Check(RouteOpenURLFromTab(4, false, true, true, true) == OpenURLRoute::kReopen,
+        "a non-hosted source falls back to reopening");
+  Check(RouteOpenURLFromTab(4, true, false, true, true) == OpenURLRoute::kReopen,
+        "a framework without unowned tabs falls back to reopening");
+  Check(RouteOpenURLFromTab(4, false, false, false, true) == OpenURLRoute::kReplay,
+        "the replay remains the last resort");
+  Check(static_cast<int32_t>(OpenURLRoute::kReplay) == 2,
+        "kind 2 keeps its historical meaning for older shells");
+  Check(orbit_bridge::MatchesEngineTabClaim(7, 9, 7, 9), "a claim matches its own window and profile");
+  Check(!orbit_bridge::MatchesEngineTabClaim(7, 9, 8, 9), "another window's tab is not claimed");
+  Check(!orbit_bridge::MatchesEngineTabClaim(7, 9, 7, 10), "another profile's tab is not claimed");
+  Check(!orbit_bridge::MatchesEngineTabClaim(0, 0, 0, 0), "an empty claim matches nothing");
+}
+
 int main() {
+  OpenURLFromTabKeepsInitiatorWherePossible();
   RenderersRunWithoutXSLT();
   KeyReceiptsAreBoundedPerSurface();
   OneSurfaceCannotEvictAnother();

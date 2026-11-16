@@ -108,6 +108,14 @@ final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySourc
     private(set) var pendingMetadata: BrowserNavigationMetadata?
     /// Every request that left the engine, with its method, as a server would count them.
     private(set) var sentRequests: [(method: String, url: URL)] = []
+    /// NAV-INITIATOR: `BrowserLinkReopening` switches. Off by default (an engine that only replays).
+    var reopensLinksFromDocument = false
+    /// A reopen that never reaches the delegate: its fallback runs instead.
+    var dropsLinkReopens = false
+    private(set) var reopenedLinks: [(url: URL, modifiers: BrowserModifierKeys)] = []
+    private(set) var reopenFallbacks = 0
+    /// New targets this document opened itself (renderer-initiated in a real engine).
+    private(set) var openedTargets: [URL] = []
     private var history: [URL] = []
     private var index = -1
 
@@ -260,6 +268,7 @@ final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySourc
     func openNewTarget(_ url: URL, modifiers: BrowserModifierKeys = [], buttonNumber: Int = 0,
                        userGesture: Bool = true) -> PeekSyntheticSurface? {
         guard let delegate, let engine else { return nil }
+        openedTargets.append(url)
         var created: PeekSyntheticSurface?
         pendingMetadata = .init(kind: userGesture ? .linkActivation : .other, httpMethod: "GET", hasBody: false)
         let accepted = delegate.surface(self, createSurfaceFor: BrowserNewSurfaceRequest(
@@ -337,5 +346,27 @@ final class PeekSyntheticDownloadTransfer: BrowserEngineDownloadTransfer {
     func invalidate() {
         onInvalidate?()
         onInvalidate = nil
+    }
+}
+
+
+extension PeekSyntheticSurface: BrowserLinkReopening {
+    /// Like Chromium's isolated-world `noopener` window: the link comes back on a later turn as a
+    /// new target of this document, with the gesture's modifiers.
+    func reopenLinkFromDocument(_ url: URL, modifiers: BrowserModifierKeys,
+                                fallback: @escaping @MainActor () -> Void) -> Bool {
+        guard reopensLinksFromDocument, !isDisposed else { return false }
+        reopenedLinks.append((url, modifiers))
+        let drops = dropsLinkReopens
+        Task { @MainActor [weak self] in
+            guard let self, !self.isDisposed else { return }
+            if drops {
+                reopenFallbacks += 1
+                fallback()
+            } else {
+                openNewTarget(url, modifiers: modifiers)
+            }
+        }
+        return true
     }
 }
