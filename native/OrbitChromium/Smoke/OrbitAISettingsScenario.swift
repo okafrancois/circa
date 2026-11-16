@@ -11,6 +11,7 @@ extension OrbitSmokeDriver {
         guard let profile = owner.session.activeProfileID else { check("context", false); return }
         if arguments.contains("--orbit-smoke-appearance-settings") { await appearanceSettingsScenario(environment, owner); return }
         if arguments.contains("--orbit-smoke-ui-perf-guards") { await uiPerfGuardsScenario(environment, owner); return }
+        if arguments.contains("--orbit-smoke-perf-shell-b") { await perfShellBScenario(environment, owner); return }
         if arguments.contains("--orbit-smoke-errand") { await errandScenario(environment, owner); return }
         if arguments.contains("--orbit-smoke-ai-site-exclusion") { await aiSiteExclusionScenario(environment, owner); return }
         if arguments.contains("--orbit-smoke-boost-generation") { await boostGenerationScenario(environment, owner); return }

@@ -35,7 +35,9 @@ class SuggestionURLProtocol: URLProtocol, @unchecked Sendable {
     @MainActor static func service(debounce: Duration = .milliseconds(30)) -> BrowserSearchSuggestions {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [self]
-        return BrowserSearchSuggestions(configuration: configuration, debounce: debounce, endpoint: { $0.suggestionURL(for: $1) })
+        // Each service gets its own cache so one test's answers never satisfy another's requests.
+        return BrowserSearchSuggestions(configuration: configuration, debounce: debounce, cache: BrowserSearchSuggestionCache(),
+                                        endpoint: { $0.suggestionURL(for: $1) })
     }
 }
 

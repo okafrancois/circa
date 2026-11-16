@@ -140,7 +140,8 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     var desktopPreview: NSImage?
     var desktopPreviewBackground = NSColor.windowBackgroundColor
     private var desktopPreviewStart: TimeInterval?
-    private var desktopPreviewTimer: Timer?
+    /// Paces the tear-off preview on the display refresh; progress stays elapsed-time based.
+    let desktopPreviewTicker = OrbitFrameTicker()
     private weak var desktopDragSession: NSDraggingSession?
     private var desktopRowImage: NSImage?
     private var desktopTileImage: NSImage?
@@ -1209,13 +1210,11 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         desktopDragPoint = screenPoint
         if !window.frame.contains(screenPoint), desktopPreviewStart == nil {
             desktopPreviewStart = CACurrentMediaTime()
-            desktopPreviewTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.updateDesktopDragImage() }
+            desktopPreviewTicker.start(in: self) { [weak self] _ in
+                self?.updateDesktopDragImage() ?? false
             }
-            if let desktopPreviewTimer { RunLoop.main.add(desktopPreviewTimer, forMode: .common) }
         } else if window.frame.contains(screenPoint), desktopPreviewStart != nil {
-            desktopPreviewTimer?.invalidate()
-            desktopPreviewTimer = nil
+            desktopPreviewTicker.stop()
             desktopPreviewStart = nil
         }
         updateDesktopDragImage()
@@ -1233,26 +1232,28 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         relayout(animated: true)
     }
 
-    private func updateDesktopDragImage() {
+    /// Returns whether the preview transition still needs frames.
+    @discardableResult
+    private func updateDesktopDragImage() -> Bool {
         guard let session = desktopDragSession, let start = desktopPreviewStart,
-              let row = desktopRowImage, let tile = desktopTileImage, let document = desktopPreview, let window else { return }
-        let image = SidebarTearOffPreview.render(document: document, row: row, tile: tile, elapsed: CACurrentMediaTime() - start, sourceWidth: window.frame.width, background: desktopPreviewBackground)
-        if CACurrentMediaTime() - start >= SidebarTearOffPreview.duration {
-            desktopPreviewTimer?.invalidate()
-            desktopPreviewTimer = nil
+              let row = desktopRowImage, let tile = desktopTileImage, let document = desktopPreview, let window else {
+            // The page image may arrive after the pointer left the window: keep waiting for it.
+            return desktopPreviewStart != nil
         }
+        let image = SidebarTearOffPreview.render(document: document, row: row, tile: tile, elapsed: CACurrentMediaTime() - start, sourceWidth: window.frame.width, background: desktopPreviewBackground)
+        let animating = CACurrentMediaTime() - start < SidebarTearOffPreview.duration
         let point = convert(window.convertPoint(fromScreen: desktopDragPoint), from: nil)
         session.enumerateDraggingItems(options: [], for: self, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
             item.setDraggingFrame(NSRect(x: point.x - 12, y: point.y - image.size.height / 2,
                                          width: image.size.width, height: image.size.height), contents: image)
         }
+        return animating
     }
 
     func ignoreModifierKeys(for session: NSDraggingSession) -> Bool { true }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        desktopPreviewTimer?.invalidate()
-        desktopPreviewTimer = nil
+        desktopPreviewTicker.stop()
         desktopPreviewStart = nil
         desktopDragSession = nil
         desktopRowImage = nil

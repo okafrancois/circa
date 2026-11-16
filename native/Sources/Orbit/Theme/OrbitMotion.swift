@@ -129,7 +129,7 @@ final class OrbitSpringAnimator {
                 guard let self, let driver else { return }
                 advance(to: clock?() ?? driver.time)
             }
-            if !driver.start() { set(newTarget); onSettle?() }
+            if !driver.start(window: view.window) { set(newTarget); onSettle?() }
             return
         }
         guard isInFlight, link == nil else { return }

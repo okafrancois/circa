@@ -257,8 +257,13 @@ public struct BrowserAICitation: Identifiable, Equatable, Sendable {
 
     /// The answer as a reader sees it, for the clipboard: no provenance markers.
     public static func displayText(_ message: BrowserAIMessage) -> String {
+        displayText(segments(message))
+    }
+
+    /// `displayText(_:)` for segments already computed from a message.
+    public static func displayText(_ segments: [Segment]) -> String {
         var result = ""
-        for segment in segments(message) {
+        for segment in segments {
             switch segment {
             case .text(let text): result += text
             case .citation: while result.last == " " { result.removeLast() }

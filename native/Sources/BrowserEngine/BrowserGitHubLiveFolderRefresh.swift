@@ -87,38 +87,33 @@ public final class BrowserGitHubLiveFolderRefresh {
                     return
                 }
                 let queries = try BrowserGitHubPullRequestsProvider.queries(configuration, login: account.login)
+                // Relationship queries are independent: fetch them together, then merge in query
+                // order so the folder's item order does not depend on which answer came first.
+                let fetches = queries.map { query in
+                    Task { @MainActor [weak self] () throws -> QueryResult? in
+                        guard let self else { return nil }
+                        return try await fetch(query: query, account: account, epoch: epoch, now: now)
+                    }
+                }
+                let results: [QueryResult?]
+                do {
+                    results = try await withTaskCancellationHandler {
+                        var collected: [QueryResult?] = []
+                        for fetch in fetches { collected.append(try await fetch.value) }
+                        return collected
+                    } onCancel: { fetches.forEach { $0.cancel() } }
+                } catch {
+                    fetches.forEach { $0.cancel() }
+                    throw error
+                }
                 var items: [BrowserLiveFolderFetchedItem] = []
                 var identities: Set<BrowserLiveFolderItemID> = []
                 var complete = true
-                for query in queries {
-                    var received = 0
-                    var queryIDs: Set<BrowserLiveFolderItemID> = []
-                    var expectedCount: Int?
-                    for number in 1...40 {
-                        let response = try await session.pullRequests(profileID: profileID, query: query, page: number)
-                        try Task.checkCancellation()
-                        guard self.epoch == epoch else { return }
-                        if response.status == 401 { throw BrowserGitHubProviderError.signedOut }
-                        if response.status == 429 || response.status == 403 && response.retryAfter != nil {
-                            let seconds = response.retryAfter.flatMap(Double.init) ?? 60
-                            throw BrowserGitHubProviderError.rateLimited(until: now.addingTimeInterval(seconds.isFinite ? max(60, seconds) : 60))
-                        }
-                        if response.status == 403 { throw BrowserGitHubProviderError.accessDenied }
-                        guard response.status == 200 else { throw BrowserGitHubProviderError.server(status: response.status) }
-                        let page = try BrowserGitHubWebPage(html: response.body)
-                        guard page.account.id == account.id else { throw BrowserGitHubProviderError.accountChanged }
-                        guard page.currentPage == number else { throw BrowserGitHubProviderError.invalidResponse }
-                        if let expectedCount, expectedCount != page.totalCount { complete = false }
-                        expectedCount = page.totalCount
-                        received += page.items.count
-                        for item in page.items where !queryIDs.insert(item.identity).inserted { complete = false }
-                        for item in page.items where identities.insert(item.identity).inserted { items.append(item) }
-                        if number >= page.totalPages {
-                            if received != page.totalCount { complete = false }
-                            break
-                        }
-                        if number == 40 { complete = false }
-                    }
+                for result in results {
+                    // A query abandoned because the connection changed leaves the refresh without effect.
+                    guard let result else { return }
+                    if !result.complete { complete = false }
+                    for item in result.items where identities.insert(item.identity).inserted { items.append(item) }
                 }
                 try Task.checkCancellation()
                 guard self.epoch == epoch else { return }
@@ -152,5 +147,44 @@ public final class BrowserGitHubLiveFolderRefresh {
         self.task = task
         await task.value
         if self.epoch == epoch && operationID == operation { self.task = nil }
+    }
+
+    private struct QueryResult: Sendable {
+        var items: [BrowserLiveFolderFetchedItem] = []
+        var complete = true
+    }
+
+    /// All pages of one relationship query. Nil when the connection changed while it ran.
+    private func fetch(query: String, account: BrowserGitHubAccount, epoch: UInt64, now: Date) async throws -> QueryResult? {
+        var result = QueryResult()
+        var received = 0
+        var queryIDs: Set<BrowserLiveFolderItemID> = []
+        var expectedCount: Int?
+        for number in 1...40 {
+            let response = try await session.pullRequests(profileID: profileID, query: query, page: number)
+            try Task.checkCancellation()
+            guard self.epoch == epoch else { return nil }
+            if response.status == 401 { throw BrowserGitHubProviderError.signedOut }
+            if response.status == 429 || response.status == 403 && response.retryAfter != nil {
+                let seconds = response.retryAfter.flatMap(Double.init) ?? 60
+                throw BrowserGitHubProviderError.rateLimited(until: now.addingTimeInterval(seconds.isFinite ? max(60, seconds) : 60))
+            }
+            if response.status == 403 { throw BrowserGitHubProviderError.accessDenied }
+            guard response.status == 200 else { throw BrowserGitHubProviderError.server(status: response.status) }
+            let page = try BrowserGitHubWebPage(html: response.body)
+            guard page.account.id == account.id else { throw BrowserGitHubProviderError.accountChanged }
+            guard page.currentPage == number else { throw BrowserGitHubProviderError.invalidResponse }
+            if let expectedCount, expectedCount != page.totalCount { result.complete = false }
+            expectedCount = page.totalCount
+            received += page.items.count
+            for item in page.items where !queryIDs.insert(item.identity).inserted { result.complete = false }
+            result.items += page.items
+            if number >= page.totalPages {
+                if received != page.totalCount { result.complete = false }
+                break
+            }
+            if number == 40 { result.complete = false }
+        }
+        return result
     }
 }

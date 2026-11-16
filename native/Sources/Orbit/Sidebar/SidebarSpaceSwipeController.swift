@@ -580,7 +580,7 @@ final class SidebarSpaceSwipeController {
             _ = self.advance(to: creation ? self.clock() + SpaceCreationMotion.presentationLead : link.time)
         }
         self.link = link
-        if !link.start() {
+        if !link.start(window: sidebar.window) {
             offset = motion?.target ?? offset
             show(offset: offset)
             completeSettlement()

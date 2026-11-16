@@ -56,6 +56,11 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var quickWindowArchiveSweepInProgress = false
     var lastRecordedWindowActivity: (WindowID, SpaceID)?
     var windowActivitySave: Task<Void, Never>?
+    /// The latest window/Space activity not yet handed to the settings store.
+    var pendingWindowActivity: (WindowID, SpaceID)?
+    var windowActivityDebounce: Task<Void, Never>?
+    /// Space switches and swipes write the remembered window once activity settles.
+    var windowActivityDelay: Duration = .seconds(2)
     var onPersistenceError: ((any Error) -> Void)?
     var onPersistenceSuccess: (() -> Void)?
     var onHistoryIssue: ((ProfileID, BrowserHistoryIssue?) -> Void)?
@@ -354,7 +359,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             sessionPowerObserver = BrowserSessionPowerObserver { [weak self] in
                 guard let self, !self.isFinalizing else { return }
                 self.saveTask?.cancel()
-                self.saveSchedule.reset()
+                self.saveSchedule.reset(savedAt: ProcessInfo.processInfo.systemUptime)
                 do { try await self.saveNow(fullSync: true) }
                 catch { self.onPersistenceError?(error) }
             }
@@ -366,7 +371,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                     Task { @MainActor in
                         guard let self, !self.isFinalizing else { return }
                         self.saveTask?.cancel()
-                        self.saveSchedule.reset()
+                        self.saveSchedule.reset(savedAt: ProcessInfo.processInfo.systemUptime)
                         do { try await self.saveNow(fullSync: fullSync) }
                         catch { self.onPersistenceError?(error) }
                     }
@@ -849,8 +854,10 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             for delay in [Duration.seconds(delay), .seconds(1), .seconds(5)] {
                 do {
                     try await Task.sleep(for: delay)
+                    // A task replaced right after its sleep ended must not save as well as its successor.
+                    try Task.checkCancellation()
                     guard let self, !isFinalizing, let persistence else { return }
-                    saveSchedule.reset()
+                    saveSchedule.reset(savedAt: ProcessInfo.processInfo.systemUptime)
                     await captureWindowPlacements()
                     let result = try await persistence.saveCurrentState(from: store)
                     if case .saved = result { onPersistenceSuccess?() }
@@ -870,7 +877,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     func saveNow(fullSync: Bool = false) async throws {
         guard let persistence, !isFinalizing else { throw BrowserSessionPersistence.PersistenceError.finalizationInProgress }
         sync.localStateChanged()
-        await windowActivitySave?.value
+        await flushWindowActivity()
         try await liveFoldersIfStarted?.persistAll()
         await captureWindowPlacements()
         for _ in 0..<5 {
@@ -895,7 +902,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         saveTask?.cancel()
         await saveTask?.value
         await waitForRetirements()
-        await windowActivitySave?.value
+        await flushWindowActivity()
         await settings.flushExtensionPinOrders()
         await history.flush()
         history.deferUnfinishedEngineRemovals()
