@@ -69,7 +69,7 @@ final class BrowserLibraryDrawer {
         } else {
             driver.prepare()
             animation.beginSegment(to: presented ? 1 : 0, spring: LibraryMotion.spring, velocity: velocity ?? 0)
-            if animation.isAnimating { driver.start() }
+            if animation.isAnimating { driver.start(window: view?.window) }
         }
     }
 

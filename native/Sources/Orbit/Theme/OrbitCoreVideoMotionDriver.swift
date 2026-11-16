@@ -14,13 +14,19 @@ final class OrbitCoreVideoMotionDriver: @unchecked Sendable {
     @MainActor private(set) var time: Double = 0
     @MainActor var onFrame: (() -> Void)?
 
-    @MainActor init(time: Double = CACurrentMediaTime()) { self.time = time }
+    /// Follows the display of the window passed to `start(window:)`.
+    let screen: OrbitDisplayLinkScreen
 
-    @MainActor @discardableResult func start() -> Bool {
-        guard link == nil else { return true }
-        var newLink: CVDisplayLink?
-        guard CVDisplayLinkCreateWithCGDisplay(CGMainDisplayID(), &newLink) == kCVReturnSuccess,
-              let newLink else { return false }
+    @MainActor init(time: Double = CACurrentMediaTime()) {
+        self.time = time
+        screen = OrbitDisplayLinkScreen()
+    }
+
+    /// Runs on the refresh of `window`'s display (the main display without a window).
+    @MainActor @discardableResult func start(window: NSWindow? = nil) -> Bool {
+        if let link { screen.bind(link, to: window); return true }
+        guard let newLink = OrbitDisplayLinkScreen.makeLink() else { return false }
+        screen.bind(newLink, to: window)
         let callbackResult = CVDisplayLinkSetOutputCallback(newLink, { _, current, target, _, _, context in
             guard let context else { return kCVReturnSuccess }
             let driver = Unmanaged<OrbitCoreVideoMotionDriver>.fromOpaque(context).takeUnretainedValue()
@@ -28,15 +34,16 @@ final class OrbitCoreVideoMotionDriver: @unchecked Sendable {
                            end: Double(target.pointee.videoTime) / Double(target.pointee.videoTimeScale))
             return kCVReturnSuccess
         }, Unmanaged.passUnretained(self).toOpaque())
-        guard callbackResult == kCVReturnSuccess else { return false }
+        guard callbackResult == kCVReturnSuccess else { screen.unbind(); return false }
         link = newLink
-        guard CVDisplayLinkStart(newLink) == kCVReturnSuccess else { link = nil; return false }
+        guard CVDisplayLinkStart(newLink) == kCVReturnSuccess else { link = nil; screen.unbind(); return false }
         return true
     }
 
     @MainActor func stop() {
         if let link { CVDisplayLinkStop(link) }
         link = nil
+        screen.unbind()
         lock.lock()
         generation += 1
         pending = nil

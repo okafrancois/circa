@@ -76,6 +76,8 @@ struct BrowserAssistantView: View {
     @State private var modelPickerPresented = false
     @State private var citationUnavailable = false
     @State private var activeCitation: String?
+    /// Citation parsing per message, alive as long as this view; released with the conversation.
+    @State private var citationMemo = BrowserAssistantCitationMemo()
     @State private var citationReset: Task<Void, Never>?
     @State private var panelWidth: CGFloat = 372
     @State private var composerWidth: CGFloat = 352
@@ -188,7 +190,7 @@ struct BrowserAssistantView: View {
             answerMeta(message).padding(.bottom, 6)
             if message.text.isEmpty && message.state == .streaming {
                 BrowserAssistantThinkingView()
-            } else if !BrowserAICitation.segments(message).isEmpty {
+            } else if citationMemo.entry(message).hasText {
                 BrowserAssistantAnswerText(message: message, open: { open($0) }, activeCitation: activeCitation)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -212,7 +214,7 @@ struct BrowserAssistantView: View {
                 }.padding(.top, 12)
             }
             if !message.text.isEmpty && message.state != .streaming {
-                BrowserAssistantCopyButton(text: BrowserAICitation.displayText(message)).padding(.top, 6).padding(.leading, -6)
+                BrowserAssistantCopyButton(text: citationMemo.entry(message).displayText).padding(.top, 6).padding(.leading, -6)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -251,8 +253,7 @@ struct BrowserAssistantView: View {
     }
 
     private func uniqueCitations(_ message: BrowserAIMessage) -> [BrowserAICitation] {
-        var numbers: Set<Int> = []
-        return BrowserAICitation.parse(message).filter { numbers.insert($0.number).inserted }
+        citationMemo.entry(message).citations
     }
 
     /// Provenance is checked by the owner when opened; the pill holds its strong state during the highlight.

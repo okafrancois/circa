@@ -11,10 +11,12 @@ final class BrowserSearchSuggestions {
     private var revision = UUID()
     private var key: RequestKey?
     private var hidden: [SearchEngine: Set<String>] = [:]
+    private let cache: BrowserSearchSuggestionCache
     private(set) var values: [String] = []
     var onChange: (() -> Void)?
 
     init(configuration: URLSessionConfiguration = .ephemeral, debounce: Duration = .milliseconds(180),
+         cache: BrowserSearchSuggestionCache = .shared,
          endpoint: @escaping (SearchEngine, String) -> URL? = { engine, query in
              // Unit-test palettes must opt into an injected, offline transport.
              guard !ProcessInfo.processInfo.arguments.contains(where: { $0.contains(".xctest") }) else { return nil }
@@ -30,6 +32,7 @@ final class BrowserSearchSuggestions {
         session = URLSession(configuration: configuration, delegate: SuggestionSessionDelegate(), delegateQueue: nil)
         self.debounce = debounce
         self.endpoint = endpoint
+        self.cache = cache
     }
 
     deinit { task?.cancel(); session.invalidateAndCancel() }
@@ -41,6 +44,17 @@ final class BrowserSearchSuggestions {
               let url = endpoint(engine, text) else { cancel(); return }
         let next = RequestKey(query: text, engine: engine, profileID: profileID)
         guard next != key else { return }
+        let cacheKey = BrowserSearchSuggestionCache.Key(engine: engine, profileID: profileID, query: next.query)
+        if let cached = cache.values(for: cacheKey) {
+            // A recent answer for this exact draft is shown at once, without debounce or network.
+            revision = UUID()
+            task?.cancel()
+            task = nil
+            key = next
+            values = cached.filter { !(hidden[engine]?.contains(Self.identity($0)) ?? false) }
+            onChange?()
+            return
+        }
         cancel()
         key = next
         let token = revision
@@ -55,7 +69,9 @@ final class BrowserSearchSuggestions {
                 let (data, response) = try await session.data(for: request)
                 guard !Task.isCancelled, let self, revision == token,
                       let response = response as? HTTPURLResponse, response.statusCode == 200 else { return }
-                values = Self.parse(data, query: next.query).filter { !(hidden[engine]?.contains(Self.identity($0)) ?? false) }
+                let parsed = Self.parse(data, query: next.query)
+                cache.store(parsed, for: cacheKey)
+                values = parsed.filter { !(hidden[engine]?.contains(Self.identity($0)) ?? false) }
                 onChange?()
             } catch { /* Suggestions are optional; local results remain available. */ }
         }

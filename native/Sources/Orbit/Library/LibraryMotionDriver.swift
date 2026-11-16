@@ -12,17 +12,20 @@ final class LibraryMotionDriver: @unchecked Sendable {
     @MainActor private(set) var time: Double = 0
     @MainActor var onFrame: (() -> Void)?
 
-    @MainActor init() {}
+    /// Follows the display of the window passed to `start(window:)`.
+    let screen: OrbitDisplayLinkScreen
+
+    @MainActor init() { screen = OrbitDisplayLinkScreen() }
 
     @MainActor func prepare() {
         if link == nil { time = CACurrentMediaTime() }
     }
 
-    @MainActor func start() {
-        guard link == nil else { return }
-        var newLink: CVDisplayLink?
-        guard CVDisplayLinkCreateWithCGDisplay(CGMainDisplayID(), &newLink) == kCVReturnSuccess,
-              let newLink else { return }
+    /// Runs on the refresh of `window`'s display (the main display without a window).
+    @MainActor func start(window: NSWindow? = nil) {
+        if let link { screen.bind(link, to: window); return }
+        guard let newLink = OrbitDisplayLinkScreen.makeLink() else { return }
+        screen.bind(newLink, to: window)
         CVDisplayLinkSetOutputCallback(newLink, { _, current, target, _, _, context in
             guard let context else { return kCVReturnSuccess }
             let driver = Unmanaged<LibraryMotionDriver>.fromOpaque(context).takeUnretainedValue()
@@ -37,6 +40,7 @@ final class LibraryMotionDriver: @unchecked Sendable {
     @MainActor func stop() {
         if let link { CVDisplayLinkStop(link) }
         link = nil
+        screen.unbind()
         lock.lock()
         generation += 1
         pending = nil

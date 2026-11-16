@@ -13,6 +13,8 @@ struct BrowserAssistantAnswerView: View {
     var continueInPanel: () -> Void
     @State private var unavailable = false
     @State private var activeCitation: String?
+    /// Citation parsing per message, alive as long as this view; released with the conversation.
+    @State private var citationMemo = BrowserAssistantCitationMemo()
     @Environment(\.colorScheme) private var colorScheme
 
     /// The bar's material follows the window appearance, so the accent is guarded against that polarity.
@@ -47,7 +49,7 @@ struct BrowserAssistantAnswerView: View {
                 if let message {
                     VStack(alignment: .leading, spacing: 8) {
                         if message.text.isEmpty && message.state == .streaming { BrowserAssistantThinkingView() }
-                        if !BrowserAICitation.segments(message).isEmpty {
+                        if citationMemo.entry(message).hasText {
                             BrowserAssistantAnswerText(message: message, open: { open($0) }, activeCitation: activeCitation)
                         }
                         if message.state == .stopped { Text(uiText("Stopped")).foregroundStyle(palette.secondary.swiftUI) }
@@ -93,8 +95,7 @@ struct BrowserAssistantAnswerView: View {
     }
 
     private func uniqueCitations(_ message: BrowserAIMessage) -> [BrowserAICitation] {
-        var numbers: Set<Int> = []
-        return BrowserAICitation.parse(message).filter { numbers.insert($0.number).inserted }
+        citationMemo.entry(message).citations
     }
 
     private func open(_ source: BrowserAICitation) {
