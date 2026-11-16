@@ -32,6 +32,21 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     private var pinOrder: [ProfileID: [String]] = [:]
     private weak var selectedSurface: Engine.Surface?
     private var iconImages = BrowserCostCache<String, NSImage>(budget: 1024 * 1024)
+    /// The last live snapshot of the selected tab. The engine notifies the observed profile of
+    /// every registry, pin and per-tab action change (badge, title, icon, enabled), so while
+    /// that observation is live and the tab document is the same, a session projection reuses
+    /// the snapshot instead of asking the engine to serialize the inventory again.
+    private struct InventorySnapshot {
+        weak var surface: Engine.Surface?
+        let profile: ProfileID
+        let generation: UInt64
+        let revision: UInt64
+        let items: [BrowserExtensionSummary]
+    }
+    private var inventorySnapshot: InventorySnapshot?
+    private var inventoryRevision: UInt64 = 0
+    /// The last decoded icon per extension, reused while its encoded pixels are unchanged.
+    private var decodedIcons: [String: (encoded: String, image: NSImage)] = [:]
 
     private var cyclingID: String?
     private var cyclingEpoch: UInt64?
@@ -113,14 +128,17 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             toolbarObservation?.cancel()
             toolbarObservation = nil
             toolbarProfile = profile
+            inventorySnapshot = nil
         }
         // Chromium creates the profile asynchronously. A refused startup subscription must
         // be retried once navigation makes the registry ready, even in the same profile.
         if toolbarObservation == nil, owner.acceptsCommands,
            let profile, let host = owner.engine.extensions, host.supportsPinning {
             let observation = try? host.observeChanges(in: profile) { [weak self] in
-                guard self?.toolbarProfile == profile else { return }
-                self?.renderPinnedIcons()
+                guard let self else { return }
+                self.inventoryRevision &+= 1
+                guard self.toolbarProfile == profile else { return }
+                self.renderPinnedIcons()
             }
             if toolbarProfile == profile, owner.session.activeProfileID == profile {
                 toolbarObservation = observation
@@ -175,8 +193,17 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     }
 
     private func icon(for item: BrowserExtensionSummary) -> NSImage? {
-        guard let encoded = item.actionState?.iconPNGBase64 ?? item.iconPNGBase64, encoded.count < 512 * 1024,
-              let data = Data(base64Encoded: encoded) else { return nil }
+        guard let encoded = item.actionState?.iconPNGBase64 ?? item.iconPNGBase64, encoded.count < 512 * 1024 else { return nil }
+        let memoKey = ((previewProfile ?? selectedSurface?.profileID)?.rawValue.uuidString ?? "") + item.id
+        if let decoded = decodedIcons[memoKey], decoded.encoded == encoded { return decoded.image }
+        guard let image = decodedIcon(for: item, encoded: encoded) else { return nil }
+        if decodedIcons.count >= 256 { decodedIcons.removeAll() }
+        decodedIcons[memoKey] = (encoded, image)
+        return image
+    }
+
+    private func decodedIcon(for item: BrowserExtensionSummary, encoded: String) -> NSImage? {
+        guard let data = Data(base64Encoded: encoded) else { return nil }
         let key = ((previewProfile ?? selectedSurface?.profileID)?.rawValue.uuidString ?? "")
             + item.id + Data(SHA256.hash(data: data)).base64EncodedString()
         if let image = iconImages.value(for: key) { return image }
@@ -200,10 +227,23 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         else if let profile, let host = owner.engine.extensions, host.supportsPinning {
             do {
                 if let surface, surface.profileID == profile, previewProfile == nil {
-                    items = try host.installedExtensions(on: surface)
-                    tabInventories.insert(TabInventory(surface: surface, items: items), for: ObjectIdentifier(surface), cost: Self.inventoryCost(items))
-                } else { items = try host.installedExtensions(in: profile) }
-                profileInventories.insert(items, for: profile, cost: Self.inventoryCost(items))
+                    if let snapshot = inventorySnapshot, snapshot.surface === surface, snapshot.profile == profile,
+                       snapshot.generation == surface.documentGeneration, snapshot.revision == inventoryRevision,
+                       toolbarObservation != nil, toolbarProfile == profile {
+                        items = snapshot.items
+                    } else {
+                        items = try host.installedExtensions(on: surface)
+                        tabInventories.insert(TabInventory(surface: surface, items: items), for: ObjectIdentifier(surface), cost: Self.inventoryCost(items))
+                        profileInventories.insert(items, for: profile, cost: Self.inventoryCost(items))
+                        inventorySnapshot = toolbarObservation != nil && toolbarProfile == profile
+                            ? InventorySnapshot(surface: surface, profile: profile, generation: surface.documentGeneration,
+                                                revision: inventoryRevision, items: items)
+                            : nil
+                    }
+                } else {
+                    items = try host.installedExtensions(in: profile)
+                    profileInventories.insert(items, for: profile, cost: Self.inventoryCost(items))
+                }
             }
             catch {
                 if let surface, surface.profileID == profile, previewProfile == nil {
@@ -404,6 +444,8 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
 
     func releaseMemory() {
         iconImages.removeAll()
+        decodedIcons.removeAll()
+        inventorySnapshot = nil
         tabInventories.removeAll()
         profileInventories.removeAll()
         let active = previewProfile ?? selectedSurface?.profileID

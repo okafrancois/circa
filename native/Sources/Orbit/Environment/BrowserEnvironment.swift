@@ -894,6 +894,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         await history.flush()
         do {
             for controller in liveControllers { await controller.session.waitForPendingCommands() }
+            // Site preference toggles are written behind a short coalescing delay.
+            try await sitePreferences.flushPendingWrites()
             guard await themeEditors.finishAll() else { throw BrowserTerminationPreparationError.themeCommitFailed }
             try await flushQuickWindowArchives()
             await captureWindowPlacements()

@@ -48,6 +48,7 @@ struct BrowserSitePreferenceTests {
         #expect(restored.preferences(url: URL(string: "https://sub.example.test"), profileID: profile) == BrowserSitePreferences())
         settings.developerMode = false
         try restored.set(settings, url: url, profileID: profile)
+        try restored.flushPendingWritesNow()
         #expect(FileManager.default.fileExists(atPath: file.appendingPathExtension("backup").path))
     }
 

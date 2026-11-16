@@ -3,6 +3,7 @@ import BrowserCore
 import BrowserEngine
 import CryptoKit
 import ImageIO
+import Synchronization
 import UniformTypeIdentifiers
 
 /// Profile-local favicon pixels. Chromium's authenticated image wins; dormant favorites can
@@ -14,6 +15,9 @@ actor FavoriteIconStore {
     private var pending: [String: Task<BrowserFaviconImage?, Never>] = [:]
     private var failures = BrowserCostCache<String, Date>(budget: 128 * 1024, countLimit: 512)
     private var removedProfiles = Set<ProfileID>()
+    /// Bumped after every change to the files on disk. Synchronous readers that remember a
+    /// missing file (`SidebarIconMemoryCache`) forget it when this value moves.
+    nonisolated let diskGeneration = Atomic<UInt64>(0)
 
     init(directory: URL? = nil, configuration: URLSessionConfiguration = .ephemeral) {
         self.directory = directory
@@ -72,6 +76,7 @@ actor FavoriteIconStore {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
                 attributes: [.posixPermissions: 0o700])
             try image.png.write(to: file, options: .atomic)
+            diskGeneration.add(1, ordering: .releasing)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         } catch { /* A disposable cache must never interrupt navigation or session saving. */ }
     }
@@ -83,7 +88,10 @@ actor FavoriteIconStore {
         for key in images.keys where key.hasPrefix(prefix) { images.remove(key) }
         for key in failures.keys where key.hasPrefix(prefix) { failures.remove(key) }
         if let folder = directory?.appendingPathComponent(profile.rawValue.uuidString),
-           FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
+           FileManager.default.fileExists(atPath: folder.path) {
+            defer { diskGeneration.add(1, ordering: .releasing) }
+            try FileManager.default.removeItem(at: folder)
+        }
     }
 
     func releaseMemory() {

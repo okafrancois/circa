@@ -229,7 +229,27 @@ final class FavoriteTileView: NSView {
         }
     }
 
-    private static func iconPresentation(_ source: NSImage) -> (image: NSImage, tint: NSColor)? {
+    /// The analysis depends on the source pixels only. Favicons are shared, immutable decoded
+    /// images, so one analysis serves every tile (and every rebuild) showing the same image.
+    /// Weak keys drop an entry with its source image.
+    private final class IconPresentation {
+        let image: NSImage
+        let tint: NSColor
+        init(image: NSImage, tint: NSColor) { self.image = image; self.tint = tint }
+    }
+    private static let presentations = NSMapTable<NSImage, IconPresentation>(
+        keyOptions: [.weakMemory, .objectPointerPersonality], valueOptions: .strongMemory)
+
+    static func iconPresentation(_ source: NSImage) -> (image: NSImage, tint: NSColor)? {
+        if let cached = presentations.object(forKey: source) { return (cached.image, cached.tint) }
+        guard let presentation = analyzedIconPresentation(source) else { return nil }
+        // A value retaining its own weak key would never be purged.
+        guard presentation.image !== source else { return presentation }
+        presentations.setObject(IconPresentation(image: presentation.image, tint: presentation.tint), forKey: source)
+        return presentation
+    }
+
+    static func analyzedIconPresentation(_ source: NSImage) -> (image: NSImage, tint: NSColor)? {
         let image = source
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
