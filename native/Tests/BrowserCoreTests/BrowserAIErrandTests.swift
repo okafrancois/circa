@@ -18,6 +18,18 @@ private actor ErrandProvider: BrowserAIProviderClient {
     }
 }
 
+@MainActor private final class ErrandChangeResumer {
+    private var continuation: CheckedContinuation<Void, Never>?
+    var timeout: Task<Void, Never>?
+    init(_ continuation: CheckedContinuation<Void, Never>) { self.continuation = continuation }
+    func resume() {
+        timeout?.cancel()
+        timeout = nil
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 @Suite @MainActor struct BrowserAIErrandTests {
     private func sample() -> BrowserAIErrandObservation {
         .init(pages: [.init(id: UUID(), snapshot: UUID(), revision: 4,
@@ -30,16 +42,30 @@ private actor ErrandProvider: BrowserAIProviderClient {
         if let value { object["value"] = value }
         return String(decoding: try! JSONEncoder().encode(object), as: UTF8.self)
     }
-    private func wait(_ condition: @MainActor () -> Bool) async {
-        let end = ContinuousClock.now.advanced(by: .seconds(2))
-        while !condition() && ContinuousClock.now < end { await Task.yield() }
+    /// Resumes on each change of the errand's observed state instead of polling against a clock,
+    /// so a loaded machine only slows the test down. The deadline only bounds a real hang.
+    private func wait(_ condition: @escaping @MainActor () -> Bool) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(60))
+        while !condition() && ContinuousClock.now < deadline {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                let resumer = ErrandChangeResumer(continuation)
+                let satisfied = withObservationTracking { condition() } onChange: {
+                    Task { @MainActor in resumer.resume() }
+                }
+                if satisfied { resumer.resume(); return }
+                resumer.timeout = Task { @MainActor in
+                    try? await Task.sleep(until: deadline)
+                    resumer.resume()
+                }
+            }
+        }
         #expect(condition())
     }
     private var enabled: BrowserAIPreferences {
         var preferences = BrowserAIPreferences(); preferences.isEnabled = true; return preferences
     }
 
-    @Test func noMutationBeforeSingleUseApprovalAndNextTurnHasReceipt() async {
+    @Test func noMutationBeforeSingleUseApprovalAndNextTurnHasReceipt() async throws {
         let observation = sample()
         let provider = ErrandProvider([response("click", observation), #"{"action":"finish","summary":"Done"}"#])
         var executions = 0
@@ -53,7 +79,7 @@ private actor ErrandProvider: BrowserAIProviderClient {
         errand.start()
         await wait { errand.phase == .waiting }
         #expect(executions == 0)
-        let approval = errand.approval!.id
+        let approval = try #require(errand.approval).id
         errand.allowOnce(UUID())
         #expect(executions == 0 && errand.phase == .waiting)
         errand.allowOnce(approval); errand.allowOnce(approval)
@@ -93,7 +119,7 @@ private actor ErrandProvider: BrowserAIProviderClient {
         #expect(await provider.prompts.isEmpty)
     }
 
-    @Test func stopDuringActionDoesNotResumeOrStartAnotherRequest() async {
+    @Test func stopDuringActionDoesNotResumeOrStartAnotherRequest() async throws {
         let observation = sample()
         let matching = ErrandProvider([response("click", observation)])
         var task: BrowserAIErrand?
@@ -101,7 +127,7 @@ private actor ErrandProvider: BrowserAIProviderClient {
             preferences: { enabled }, ownerCurrent: { true }, observe: { observation }, isCurrent: { _ in true },
             execute: { _, _ in task?.stop(); await Task.yield(); return true })
         task = errand; errand.start(); await wait { errand.phase == .waiting }
-        errand.allowOnce(errand.approval!.id)
+        errand.allowOnce(try #require(errand.approval).id)
         await wait { errand.phase == .stopped }
         #expect(await matching.prompts.count == 1)
     }
@@ -138,14 +164,14 @@ private actor ErrandProvider: BrowserAIProviderClient {
         }
     }
 
-    @Test func stopDropsPageDataAndNeverRunsPendingAction() async {
+    @Test func stopDropsPageDataAndNeverRunsPendingAction() async throws {
         let observation = sample()
         let matching = ErrandProvider([response("click", observation)])
         let errand = BrowserAIErrand(goal: "Read", choice: .init(provider: .codex), client: matching,
             preferences: { enabled }, ownerCurrent: { true }, observe: { observation }, isCurrent: { _ in true },
             execute: { _, _ in Issue.record("Stopped action executed"); return false })
         errand.start(); await wait { errand.phase == .waiting }
-        let id = errand.approval!.id; errand.stop(); errand.allowOnce(id)
+        let id = try #require(errand.approval).id; errand.stop(); errand.allowOnce(id)
         #expect(errand.phase == .stopped && errand.pages.isEmpty)
     }
 

@@ -37,7 +37,8 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 - Known data (cached favicons, titles, URLs) renders without flicker.
 
 ## Releases
-- `scripts/release.py` builds, signs, notarizes (`orbit-notary` profile), packages and publishes. It runs on the self-hosted runner when a `vX.Y.Z` tag is pushed. Never trigger releases from pull requests or forks.
+- `scripts/release.py` builds, signs, notarizes, packages and publishes. `.github/workflows/release.yml` runs it on a GitHub-hosted macOS runner (`xcode-27`, fresh VM, ephemeral credentials from repository secrets) when a `vX.Y.Z` or `vX.Y.Z-nightly.N` tag is pushed. Never register a self-hosted runner for this public repository, and never trigger releases from pull requests or forks.
+- Stable releases roll out through Sparkle in daily phases (seven groups, one day apart); nightlies and manual **Check for Updates…** are immediate. Mark a stable security hotfix with `update: critical` in its release note only when every user must install it at once (`docs/release/pipeline.md`).
 - Release cadence: after merging one or more user-visible features or fixes, the PM pushes `main` and tags the next version (patch for fixes, minor for new features). Installed copies update through Sparkle.
 - Every `vX.Y.Z` tag ships with `release/notes/<version>.md`, committed before tagging, in the structured format of `docs/release/notes-format.md` (title sentence, New / Faster / Fixed / Smaller / Known limits; Faster items carry measured before → after numbers; an `engine` line whenever the engine or a bundled component changes). Run `python3 scripts/changelog.py build` and commit the regenerated `web/` changelog with the note. Published release notes are the source for public announcements, so list every new feature there; say so explicitly when a release only has internal fixes.
 - Nightly channel: merged lots go out first as `vX.Y.Z-nightly.N` with a short note in `release/notes/nightly/`; promote to stable once the nightly ran without regression. Hotfixes may go straight to stable; engine changes always go through a nightly first.
@@ -54,5 +55,5 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 
 ## Monorepo
 - Keep `native/`, `scripts/`, `release/`, `docs/` and `.github/` at the repository root.
-- Website and mobile projects belong in `web/` and `mobile/`; use `web-vX.Y.Z` and `mobile-vX.Y.Z` tags, publish with `--latest=false`, filter workflows to their own folder, and never use the self-hosted browser runner.
+- Website and mobile projects belong in `web/` and `mobile/`; use `web-vX.Y.Z` and `mobile-vX.Y.Z` tags, publish with `--latest=false`, filter workflows to their own folder, and never use the browser release workflow or its runner.
 - The website is static (no build) and deploys on Vercel from the `web/` root directory; `web/vercel.json` skips deploys when `web/` is unchanged.

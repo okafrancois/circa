@@ -1,5 +1,4 @@
 # The public-preview hosted image is newer than the bundled actionlint catalog.
 self-hosted-runner:
   labels:
-    - orbit-release
     - xcode-27

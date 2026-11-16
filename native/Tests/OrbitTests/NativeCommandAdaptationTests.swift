@@ -8,6 +8,26 @@ private final class AdaptationOracleTarget: NSObject {
     @objc func performSyntheticAction(_ sender: Any?) { calls += 1 }
 }
 
+/// A synthesized key event whose virtual key produces `characters` on the active layout, so the
+/// event agrees with layout translation on AZERTY as on QWERTY (a US key code such as 12 for q
+/// produces "a" on AZERTY). A character without its own key (`[` on AZERTY) uses a virtual key
+/// that translates to nothing, never a key typing a different character. Number-row keys are
+/// skipped for other characters: Command+number shortcuts address those keys physically.
+@MainActor
+func layoutConsistentKeyEvent(_ characters: String, flags: NSEvent.ModifierFlags,
+                              windowNumber: Int = 0, timestamp: TimeInterval = 1) -> NSEvent? {
+    let base = characters.lowercased()
+    let numberRow: Set<UInt16> = [18, 19, 20, 21, 22, 23, 25, 26, 28, 29]
+    let digit = base.count == 1 && base.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+    let code = BrowserKeyEquivalentMatcher.layoutKeyCode(producing: base) { code in
+        guard digit || !numberRow.contains(code) else { return nil }
+        return CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true).flatMap { NSEvent(cgEvent: $0) }
+    } ?? 0xFF
+    return NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: timestamp,
+        windowNumber: windowNumber, context: nil, characters: characters,
+        charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)
+}
+
 extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
@@ -23,16 +43,19 @@ struct NativeCommandAdaptationTests {
             .init(key: "\u{F703}", modifiers: [.command, .option]), .init(key: "\u{F70F}", modifiers: [])
         ]
         let matcher = BrowserKeyEquivalentMatcher(bindings: bindings)
-        let samples: [(String, UInt16, NSEvent.ModifierFlags)] = [
-            ("q", 12, .command), ("t", 17, .command), ("T", 17, [.command, .shift]),
-            ("Z", 6, [.command, .capsLock]), ("x", 7, .command),
+        // Letters use the active layout's keys; arrows and F12 have layout-independent key codes.
+        let samples: [(String, UInt16?, NSEvent.ModifierFlags)] = [
+            ("q", nil, .command), ("t", nil, .command), ("T", nil, [.command, .shift]),
+            ("Z", nil, [.command, .capsLock]), ("x", nil, .command),
             ("\u{F702}", 123, [.command, .option]), ("\u{F703}", 124, [.command, .option]),
             ("\u{F70F}", 111, []), ("\u{F70F}", 111, .shift)
         ]
         for (characters, code, flags) in samples {
-            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
-                timestamp: 1, windowNumber: 0, context: nil, characters: characters,
-                charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+            let event = try #require(code.map { code in
+                NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                    timestamp: 1, windowNumber: 0, context: nil, characters: characters,
+                    charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)
+            } ?? layoutConsistentKeyEvent(characters, flags: flags))
             let input = try #require(BrowserShortcutEvent(event))
             for binding in bindings {
                 let oracle = NSMenu()
@@ -53,8 +76,7 @@ struct NativeCommandAdaptationTests {
             #expect(input.nativeMatches.bindings != nil)
         }
         #expect(matcher.unexpectedActionCount == 0)
-        let caps = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .capsLock],
-            timestamp: 1, windowNumber: 0, context: nil, characters: "Z", charactersIgnoringModifiers: "Z", isARepeat: false, keyCode: 6))
+        let caps = try #require(layoutConsistentKeyEvent("Z", flags: [.command, .capsLock]))
         let input = try #require(BrowserShortcutEvent(caps))
         #expect(matcher.matches(.init(key: "z", modifiers: .command), input: input))
         #expect(!matcher.matches(.init(key: "Z", modifiers: .command), input: input))

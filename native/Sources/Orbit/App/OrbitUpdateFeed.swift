@@ -41,14 +41,62 @@ enum OrbitUpdateFeed {
         return Data(signed)
     }
 
-    /// The bundle's own policy: when it requires signed feeds, the hint reads only verified bytes.
-    static func latestVersion(data: Data, info: [String: Any], allowedChannels: Set<String> = []) throws -> String {
-        guard info["SURequireSignedFeed"] as? Bool == true else { return try latestVersion(data: data, allowedChannels: allowedChannels) }
-        guard let key = info["SUPublicEDKey"] as? String else { throw URLError(.cannotParseResponse) }
-        return try latestVersion(data: verifiedContent(data, publicKey: key), allowedChannels: allowedChannels)
+    /// Sparkle's phased rollout as seen by this installation. Sparkle stores a random identifier
+    /// under `SUUpdateGroupIdentifier` on the first scheduled check and assigns one of seven groups;
+    /// group N becomes eligible N rollout intervals after the item's publication date.
+    struct Phasing {
+        static let groupCount: UInt64 = 7
+        static let identifierKey = "SUUpdateGroupIdentifier"
+        var group: UInt64
+        var now = Date()
+        /// The prepared update stays eligible: a user-initiated check legitimately bypasses phasing.
+        var pendingVersion: String?
+        var hostVersion = ""
+
+        init(group: UInt64, now: Date = Date(), pendingVersion: String? = nil, hostVersion: String = "") {
+            self.group = group % Self.groupCount
+            self.now = now
+            self.pendingVersion = pendingVersion
+            self.hostVersion = hostVersion
+        }
+
+        /// Nil until Sparkle has assigned this installation a group; no phasing applies then.
+        init?(defaults: UserDefaults, pendingVersion: String?, hostVersion: String) {
+            guard let identifier = defaults.object(forKey: Self.identifierKey) as? NSNumber else { return nil }
+            self.init(group: identifier.uint64Value, pendingVersion: pendingVersion, hostVersion: hostVersion)
+        }
+
+        fileprivate func admits(_ item: Item) -> Bool {
+            if item.version == pendingVersion { return true }
+            // Critical updates ignore phasing, like Sparkle's own background check.
+            if let critical = item.criticalBelow, critical.isEmpty || hostVersion.isEmpty
+                || hostVersion.compare(critical, options: .numeric) == .orderedAscending { return true }
+            guard let interval = TimeInterval(item.phasedInterval), let published = Self.date(item.publicationDate) else { return true }
+            return now.timeIntervalSince(published) >= interval * TimeInterval(group)
+        }
+
+        private static func date(_ text: String) -> Date? {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            for format in ["EEE, dd MMM yyyy HH:mm:ss Z", "dd MMM yyyy HH:mm:ss Z"] {
+                formatter.dateFormat = format
+                if let date = formatter.date(from: text) { return date }
+            }
+            return nil
+        }
     }
 
-    static func latestVersion(data: Data, allowedChannels: Set<String> = []) throws -> String {
+    /// The bundle's own policy: when it requires signed feeds, the hint reads only verified bytes.
+    static func latestVersion(data: Data, info: [String: Any], allowedChannels: Set<String> = [],
+                              phasing: Phasing? = nil) throws -> String {
+        guard info["SURequireSignedFeed"] as? Bool == true else {
+            return try latestVersion(data: data, allowedChannels: allowedChannels, phasing: phasing)
+        }
+        guard let key = info["SUPublicEDKey"] as? String else { throw URLError(.cannotParseResponse) }
+        return try latestVersion(data: verifiedContent(data, publicKey: key), allowedChannels: allowedChannels, phasing: phasing)
+    }
+
+    static func latestVersion(data: Data, allowedChannels: Set<String> = [], phasing: Phasing? = nil) throws -> String {
         let reader = Reader()
         let parser = XMLParser(data: data)
         parser.delegate = reader
@@ -59,14 +107,18 @@ enum OrbitUpdateFeed {
             (item.channel.isEmpty || allowedChannels.contains(item.channel)) && !item.version.isEmpty
                 && (item.minimum.isEmpty || currentOS.compare(item.minimum, options: .numeric) != .orderedAscending)
                 && (item.maximum.isEmpty || currentOS.compare(item.maximum, options: .numeric) != .orderedDescending)
+                && (phasing?.admits(item) ?? true)
         }).map(\.version).max(by: { $0.compare($1, options: .numeric) == .orderedAscending }) else {
             throw URLError(.cannotParseResponse)
         }
         return latest
     }
 
-    private struct Item {
+    fileprivate struct Item {
         var version = "", minimum = "", maximum = "", channel = ""
+        var publicationDate = "", phasedInterval = ""
+        /// Nil when not critical; empty when critical for every installed version.
+        var criticalBelow: String?
     }
     private final class Reader: NSObject, XMLParserDelegate {
         var items: [Item] = []
@@ -81,6 +133,9 @@ enum OrbitUpdateFeed {
             if path == ["rss", "channel", "item", "enclosure"], item.version.isEmpty {
                 item.version = attributeDict["sparkle:version"] ?? ""
             }
+            if path == ["rss", "channel", "item", "sparkle:criticalUpdate"] {
+                item.criticalBelow = attributeDict["sparkle:version"] ?? ""
+            }
         }
         func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
         func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
@@ -91,6 +146,8 @@ enum OrbitUpdateFeed {
                 case "sparkle:minimumSystemVersion": item.minimum = value
                 case "sparkle:maximumSystemVersion": item.maximum = value
                 case "sparkle:channel": item.channel = value
+                case "pubDate": item.publicationDate = value
+                case "sparkle:phasedRolloutInterval": item.phasedInterval = value
                 default: break
                 }
             }

@@ -383,9 +383,8 @@ struct NativeQuickWindowR2Tests {
         let menus = BrowserCommandMenus(registry: registry, keyWindow: { little.window })
         let bar = menus.makeMenuBar()
         func event(_ key: String, flags: NSEvent.ModifierFlags = .command) throws -> NSEvent {
-            try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
-                windowNumber: little.window?.windowNumber ?? 0, context: nil, characters: key,
-                charactersIgnoringModifiers: key, isARepeat: false, keyCode: 0))
+            // Key codes follow the active layout: key code 0 is q on AZERTY and a on QWERTY.
+            try #require(layoutConsistentKeyEvent(key, flags: flags, windowNumber: little.window?.windowNumber ?? 0, timestamp: 0))
         }
         #expect(keyboard.handle(try event("t")))
         #expect(little.isEditingAddress)

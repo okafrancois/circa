@@ -349,6 +349,43 @@ def validate_appcast(path, build):
 
 
 SPARKLE = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+# Stable updates reach Sparkle's seven phased-rollout groups one day apart: group 0 at once,
+# every user after six days. Sparkle ignores phasing for user-initiated checks ("Check for
+# Updates...") and for critical updates. Nightly testers always receive builds at once.
+STABLE_PHASED_ROLLOUT_SECONDS = 24 * 60 * 60
+
+
+def rollout_arguments(nightly, critical, isolated=False):
+    """generate_appcast options for the candidate: phased stable, immediate critical or nightly.
+    Isolated updater E2E feeds (--local-test-root) are never phased, so their checks stay immediate."""
+    if nightly and critical:
+        raise ValueError('Only stable releases can be critical updates')
+    if nightly or isolated:
+        return []
+    if critical:
+        # An empty version makes the update critical for every installed version.
+        return ['--critical-update-version', '']
+    return ['--phased-rollout-interval', str(STABLE_PHASED_ROLLOUT_SECONDS)]
+
+
+def validate_rollout(path, build, nightly, critical, isolated=False):
+    """The candidate item must carry exactly the rollout policy of its channel."""
+    items = [item for item in ET.parse(path).findall('./channel/item')
+             if (item.findtext(SPARKLE + 'version') or item.find('enclosure').get(SPARKLE + 'version')) == str(build)]
+    if len(items) != 1:
+        raise ValueError('Appcast must contain exactly one candidate item')
+    item = items[0]
+    interval = item.findtext(SPARKLE + 'phasedRolloutInterval')
+    is_critical = item.find(SPARKLE + 'criticalUpdate') is not None
+    expected = None if nightly or critical or isolated else str(STABLE_PHASED_ROLLOUT_SECONDS)
+    if interval != expected:
+        raise ValueError('Candidate phased rollout interval must be ' + (expected or 'absent'))
+    if is_critical != critical:
+        raise ValueError('Candidate critical update marker does not match the release note')
+    if expected and not (item.findtext('pubDate') or '').strip():
+        raise ValueError('A phased rollout requires the candidate publication date')
+
+
 # The gate fails unless every one of these ran and passed (a narrower harness cannot pass).
 REQUIRED_PRESERVATION_CHECKS = (
     'profiles_isolated', 'login_sets_persistent_session_and_httponly', 'old_engine_restart_keeps_persistent',
@@ -630,9 +667,13 @@ def main():
         raise ValueError('--qualify-only neither publishes nor uses an isolated test root')
     # Validate the entire editorial history before any downloads, signing or builds.
     load_all(ROOT)
+    critical = False
     if not args.qualify_only:
-        if not args.local_test_root and release_notes_path(version) is None:
+        notes = release_notes_path(version)
+        if not args.local_test_root and notes is None:
             raise ValueError('A structured release note is required for ' + version)
+        critical = notes is not None and load(notes, ROOT).update == 'critical'
+        rollout_arguments(nightly, critical)
         require_notary_profile(config)
     if not config['public_ed_key']:
         raise ValueError('Configure public_ed_key before preparing signed update releases')
@@ -711,7 +752,7 @@ def main():
     prefix = args.feed_url.rsplit('/', 1)[0] + '/' if args.feed_url else f"https://github.com/{config['repository']}/releases/download/v{version}/"
     run(sparkle / 'bin/generate_appcast', *signing, '--versions', str(build), '--download-url-prefix', prefix,
         '--full-release-notes-url', 'https://circabrowser.com/changelog',
-        *(['--channel', 'nightly'] if nightly else []),
+        *(['--channel', 'nightly'] if nightly else []), *rollout_arguments(nightly, critical, bool(args.local_test_root)),
         '--delta-compression', 'lzfse', '--maximum-versions', '0', '--maximum-deltas', '5', archives)
     feed = archives / 'appcast.xml'
     merge_published_items(feed, published_feed, build, nightly)
@@ -719,6 +760,7 @@ def main():
     # and also covers an older feed in the archive directory.
     run(sparkle / 'bin/sign_update', *signing, feed, capture_output=True)
     validate_appcast(feed, build)
+    validate_rollout(feed, build, nightly, critical, bool(args.local_test_root))
     verify_feed_signature(feed, config['public_ed_key'])
     if args.publish:
         stable_dmg = None

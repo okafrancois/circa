@@ -188,6 +188,90 @@ class ReleaseTests(unittest.TestCase):
             release.merge_published_items(current, previous, 5, False)
             self.assertEqual([i[0] for i in release.preservation_items(current, False)], [5, 3])
 
+    # Item layouts below are what Sparkle 2.10.1 generate_appcast writes for each option.
+    STABLE_ITEM = ('<item><sparkle:version>42</sparkle:version><pubDate>Mon, 16 Nov 2026 21:59:54 +0100</pubDate>'
+                   '<sparkle:phasedRolloutInterval>86400</sparkle:phasedRolloutInterval>'
+                   '<enclosure url="https://example.test/42.zip" sparkle:edSignature="sig"/></item>')
+    CRITICAL_ITEM = ('<item><sparkle:version>42</sparkle:version><pubDate>Mon, 16 Nov 2026 21:59:54 +0100</pubDate>'
+                     '<sparkle:criticalUpdate/><enclosure url="https://example.test/42.zip" sparkle:edSignature="sig"/></item>')
+    NIGHTLY_ITEM = ('<item><sparkle:version>42</sparkle:version><pubDate>Mon, 16 Nov 2026 21:59:54 +0100</pubDate>'
+                    '<sparkle:channel>nightly</sparkle:channel>'
+                    '<enclosure url="https://example.test/42.zip" sparkle:edSignature="sig"/></item>')
+
+    def test_only_stable_releases_roll_out_in_daily_phases(self):
+        self.assertEqual(release.STABLE_PHASED_ROLLOUT_SECONDS, 86400)
+        self.assertEqual(release.rollout_arguments(False, False), ['--phased-rollout-interval', '86400'])
+        self.assertEqual(release.rollout_arguments(True, False), [])
+        self.assertEqual(release.rollout_arguments(False, True), ['--critical-update-version', ''])
+        self.assertEqual(release.rollout_arguments(False, False, isolated=True), [])
+        with self.assertRaises(ValueError):
+            release.rollout_arguments(True, True)
+
+    def test_candidate_rollout_policy_is_verified_in_the_generated_feed(self):
+        older = ('<item><sparkle:version>41</sparkle:version><sparkle:phasedRolloutInterval>86400'
+                 '</sparkle:phasedRolloutInterval><enclosure url="https://example.test/41.zip"/></item>')
+        cases = {(False, False): self.STABLE_ITEM, (False, True): self.CRITICAL_ITEM, (True, False): self.NIGHTLY_ITEM}
+        with tempfile.TemporaryDirectory() as temporary:
+            feed = Path(temporary) / 'appcast.xml'
+            for (nightly, critical), item in cases.items():
+                feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                                + older + item + '</channel></rss>')
+                for policy in cases:
+                    with self.subTest(item=(nightly, critical), policy=policy):
+                        if policy == (nightly, critical):
+                            release.validate_rollout(feed, 42, *policy)
+                        else:
+                            with self.assertRaises(ValueError):
+                                release.validate_rollout(feed, 42, *policy)
+            feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                            + self.STABLE_ITEM.replace('<pubDate>Mon, 16 Nov 2026 21:59:54 +0100</pubDate>', '')
+                            + '</channel></rss>')
+            with self.assertRaisesRegex(ValueError, 'publication date'):
+                release.validate_rollout(feed, 42, False, False)
+            feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                            + self.NIGHTLY_ITEM.replace('<sparkle:channel>nightly</sparkle:channel>', '')
+                            + '</channel></rss>')
+            release.validate_rollout(feed, 42, False, False, isolated=True)
+            with self.assertRaises(ValueError):
+                release.validate_rollout(feed, 42, False, False)
+            feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                            + self.STABLE_ITEM.replace('86400', '604800') + '</channel></rss>')
+            with self.assertRaises(ValueError):
+                release.validate_rollout(feed, 42, False, False)
+
+    def test_release_generates_and_checks_the_rollout_before_publishing(self):
+        source = Path(release.__file__).read_text()
+        generate = source.index("run(sparkle / 'bin/generate_appcast'")
+        self.assertIn('*rollout_arguments(nightly, critical, bool(args.local_test_root))',
+                      source[generate:source.index('archives)', generate)])
+        check = source.index('validate_rollout(feed, build, nightly, critical, bool(args.local_test_root))')
+        self.assertLess(source.index('validate_appcast(feed, build)'), check)
+        self.assertLess(check, source.index('publish_release(config, version, archive, dmg, archives'))
+        self.assertIn("critical = notes is not None and load(notes, ROOT).update == 'critical'", source)
+
+    def test_critical_updates_are_declared_by_stable_release_notes_only(self):
+        text = NOTE_FIXTURE.read_text()
+        self.assertEqual(release_notes.parse(text, '1.2.3').update, '')
+        critical = text.replace('\n---\n', '\nupdate: critical\n---\n', 1)
+        self.assertEqual(release_notes.parse(critical, '1.2.3').update, 'critical')
+        for bad, version in [(critical, '1.2.3-nightly.1'), (critical.replace('update: critical', 'update: urgent'), '1.2.3'),
+                             (critical.replace('update: critical', 'update: critical\nupdate: critical'), '1.2.3'),
+                             (critical.replace('update: critical', 'update:'), '1.2.3')]:
+            with self.subTest(bad=bad, version=version), self.assertRaises(ValueError):
+                release_notes.parse(bad, version)
+
+    def test_release_workflow_runs_only_on_hosted_runners_for_owner_tags(self):
+        workflow = (release.ROOT / '.github/workflows/release.yml').read_text()
+        self.assertIn('    runs-on: xcode-27\n', workflow)
+        self.assertEqual(workflow.count('runs-on:'), 1)
+        for forbidden in ('self-hosted', '"orbit-release"', 'ORBIT_TOOLS_DIR', 'CIRCA_HOSTED_RELEASES',
+                          'pull_request', 'inputs.hosted'):
+            self.assertNotIn(forbidden, workflow.replace('no self-hosted release runner', ''))
+        self.assertIn("tags: ['v*']", workflow)
+        self.assertIn('test "$RUNNER_KIND" = github-hosted', workflow)
+        self.assertIn('persist-credentials: false', workflow)
+        self.assertFalse((release.ROOT / 'scripts/setup-release-runner.sh').exists())
+
     def test_release_enables_quarantine_even_for_older_source_bundles(self):
         for source in ({}, {'LSFileQuarantineEnabled': False}):
             with self.subTest(source=source):

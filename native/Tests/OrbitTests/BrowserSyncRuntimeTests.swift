@@ -19,7 +19,8 @@ struct BrowserSyncRuntimeTests {
         #expect(cycles == 0)
         // Positive checks poll: a loaded host can delay the 10 ms cycles.
         func waitForCycle(after count: Int) async throws {
-            let deadline = ContinuousClock.now + .seconds(5)
+            // Generous bound for a loaded machine; the loop ends as soon as the cycle runs.
+            let deadline = ContinuousClock.now + .seconds(30)
             while cycles <= count, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
         }
         for _ in 0..<2 {
@@ -75,7 +76,8 @@ struct BrowserSyncRuntimeTests {
         URL(fileURLWithPath: "/private/tmp", isDirectory: true).appendingPathComponent(UUID().uuidString)
     }
     private func wait(until condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(5)
+        // Generous bound for a loaded machine; the loop ends as soon as the condition holds.
+        let deadline = ContinuousClock.now + .seconds(30)
         while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
     }
 

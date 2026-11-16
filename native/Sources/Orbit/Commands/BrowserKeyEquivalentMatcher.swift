@@ -62,10 +62,13 @@ final class BrowserKeyEquivalentMatcher: NSObject {
         }
         guard NSApp != nil else { return false } // Retry lazily once the application exists.
         var events: [NSEvent] = []
+        let hardware = validationLayoutEvent()
+        // The synthesized probe uses the active layout's q key (A on AZERTY), never the US
+        // virtual key: AppKit may translate a synthesized event's key code through the layout.
         if let synthetic = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
             timestamp: 0, windowNumber: 0, context: nil, characters: "q", charactersIgnoringModifiers: "q",
-            isARepeat: false, keyCode: 12) { events.append(synthetic) }
-        if let hardware = validationLayoutEvent() { events.append(hardware) }
+            isARepeat: false, keyCode: hardware?.keyCode ?? 12) { events.append(synthetic) }
+        if let hardware { events.append(hardware) }
         let supported = events.count == 2
             && events.allSatisfy { nativeBindings(for: $0).contains(Self.validationBinding) }
             && unexpectedActionCount == 0
@@ -78,14 +81,23 @@ final class BrowserKeyEquivalentMatcher: NSObject {
                             plainEvent: (UInt16) -> NSEvent? = { code in
                                 CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true).flatMap { NSEvent(cgEvent: $0) }
                             }) -> NSEvent? {
+        guard let code = layoutKeyCode(producing: character, plainEvent: plainEvent),
+              let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true) else { return nil }
+        event.flags = flags
+        return NSEvent(cgEvent: event)
+    }
+
+    /// The virtual key whose unmodified character is `character` on the current layout, if any.
+    static func layoutKeyCode(producing character: String,
+                              plainEvent: (UInt16) -> NSEvent? = { code in
+                                  CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true).flatMap { NSEvent(cgEvent: $0) }
+                              }) -> UInt16? {
         for code in UInt16(0)...UInt16(127) {
             // Modifier virtual keys produce flagsChanged even when CGEvent requests keyDown.
             // Reading characters on those events raises an Objective-C exception.
             guard !(54...63).contains(code), let plain = plainEvent(code), plain.type == .keyDown,
-                  plain.charactersIgnoringModifiers == character,
-                  let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true) else { continue }
-            event.flags = flags
-            return NSEvent(cgEvent: event)
+                  plain.charactersIgnoringModifiers == character else { continue }
+            return code
         }
         return nil
     }
