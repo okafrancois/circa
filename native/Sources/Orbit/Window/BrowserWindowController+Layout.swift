@@ -57,6 +57,13 @@ extension BrowserWindowController {
     private func configureAddressField() {
         sidebar.addressContainer.contextMenuBuilder = { [weak self] in self?.makeAddressContextMenu(toolbar: false) }
         addressField.contextMenuBuilder = { [weak self] in self?.makeAddressContextMenu(toolbar: false) }
+        (window as? OrbitBrowserWindow)?.sidebarAddress = addressField
+        addressField.onAddressPress = { [weak self] in
+            self?.submitInput { owner in
+                let anchor = owner.isSidebarVisible && !owner.isToolbarVisible ? owner.sidebar.addressContainer : nil
+                owner.palette.present(.currentTab, anchor: anchor)
+            }
+        }
         addressField.placeholderString = OrbitShellText.addressPlaceholder
         addressField.placeholderAttributedString = NSAttributedString(string: OrbitShellText.addressPlaceholder, attributes: [
             .font: OrbitTokens.Typography.addressField, .foregroundColor: OrbitTokens.Color.Text.placeholder

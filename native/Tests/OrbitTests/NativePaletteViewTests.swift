@@ -52,6 +52,22 @@ extension NativeWebKitTests {
 @Suite("Native palette reusable view", .serialized)
 @MainActor
 struct NativePaletteViewTests {
+    @Test("Address placement follows the field and restores centered metrics on the next presentation")
+    func addressPlacement() throws {
+        let h = PaletteViewHarness()
+        defer { h.close() }
+        let field = NSView(frame: NSRect(x: 8, y: 44, width: 164, height: 32))
+        h.view.addSubview(field)
+        h.view.anchor = field
+        h.render((0..<5).map { paletteViewResult($0) })
+        #expect(h.view.panel.frame == NSRect(x: 8, y: 44, width: 350, height: 310))
+        #expect(h.view.infoButton.isHidden && h.view.divider.isHidden)
+        h.view.anchor = nil
+        h.render([])
+        #expect(h.view.panel.frame == BrowserPaletteView.panelFrame(in: h.view.bounds.size, resultCount: 0))
+        #expect(!h.view.infoButton.isHidden && !h.view.divider.isHidden)
+    }
+
     @Test("Extension rows keep the puzzle symbol separate from the named icon chip across reuse")
     func extensionChip() throws {
         let h = PaletteViewHarness(); defer { h.close() }

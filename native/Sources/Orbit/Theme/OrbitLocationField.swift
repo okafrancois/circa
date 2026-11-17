@@ -14,6 +14,8 @@ final class OrbitLocationField: NSTextField {
         return visibleRect.intersection(convert(alignmentRect(forFrame: frame), from: superview))
     }
 
+    var onAddressPress: (() -> Void)?
+
     override func resetCursorRects() {
         if !textCursorRect.isEmpty { addCursorRect(textCursorRect, cursor: .iBeam) }
     }

@@ -72,6 +72,22 @@ extension NativeWebKitTests {
 @Suite("Native command palette", .serialized)
 @MainActor
 struct NativePaletteTests {
+    @Test("Clicking the empty address opens the current-tab palette and hiding the field preserves the draft")
+    func emptyAddressPlacement() async throws {
+        let h = try await PaletteHarness()
+        h.window.palette.registry = h.registry
+        h.window.addressField.onAddressPress?()
+        await h.window.palette.waitForResults()
+        let palette = try #require(h.window.palette)
+        #expect(palette.isPresented && palette.mode == .currentTab)
+        #expect(palette.view.anchor === h.window.sidebar.addressContainer)
+        #expect(palette.view.input.stringValue.isEmpty)
+        palette.query("draft")
+        h.window.setSidebarVisible(false, animated: false)
+        #expect(palette.view.anchor == nil && palette.view.input.stringValue == "draft")
+        try await h.close()
+    }
+
     @Test("The first palette render uses known sidebar pixels only from the captured profile")
     func knownIconOnFirstRender() async throws {
         let h = try await PaletteHarness()

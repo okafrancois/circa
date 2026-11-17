@@ -596,6 +596,9 @@ enum OrbitPerformanceProbe {
                             "milliseconds": (ProcessInfo.processInfo.systemUptime - start) * 1000,
                             "durableBytes": (try Data(contentsOf: destination)).count] as [String: Any]
                     } catch { result["syncIdle"] = ["failed": true] }
+                } else if name == "address-palette", ownsWindow(owner, bundleID: "lab.orbit.orbit.urlbar-cmdbar") {
+                    application.confirmQuit = { .quit }
+                    result["addressPalette"] = await addressPalette(owner, history: environment.historyRecorder, command: command)
                 } else if name == "command-bar-extensions" {
                     result["commandBarExtensions"] = await commandBarExtensions(owner, command: command)
                 } else if name == "command-bar", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-cmdbar") {
@@ -850,6 +853,53 @@ enum OrbitPerformanceProbe {
 
 extension OrbitPerformanceProbe {
     /// Refuse synthetic input unless WindowServer attributes this exact window to this process.
+    private static func addressPalette(_ owner: OrbitWindowController, history: BrowserHistoryRecorder, command: [String: String]) async -> [String: Any] {
+        func owns() -> Bool { ownsWindow(owner, bundleID: "lab.orbit.orbit.urlbar-cmdbar") }
+        guard owns(), let window = owner.window, let content = window.contentView else { return [:] }
+        let view = owner.palette.view
+        switch command["step"] {
+        case "prepare":
+            guard let base = command["base"].flatMap(URL.init(string:)), base.scheme == "http",
+                  base.host == "127.0.0.1", let profile = owner.session.activeProfileID else { return [:] }
+            NSApp.appearance = NSAppearance(named: .aqua)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            owner.palette.searchSuggestions = BrowserSearchSuggestions(endpoint: { _, _ in base.appendingPathComponent("suggest") })
+            owner.palette.showsSearchSuggestions = true
+            _ = try? await history.importDocument(.init(profileID: profile, visits: [
+                .init(url: URL(string: "https://google.com/")!, title: "Google")
+            ]))
+            owner.submitAddress(base.absoluteString)
+            await owner.session.waitForQueuedCommands()
+        case "click", "outside":
+            content.layoutSubtreeIfNeeded()
+            let point = command["step"] == "click"
+                ? owner.addressField.convert(NSPoint(x: owner.addressField.bounds.midX, y: owner.addressField.bounds.midY), to: nil)
+                : view.convert(NSPoint(x: view.bounds.maxX - 20, y: view.bounds.midY), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard owns(), let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return [:] }
+                window.sendEvent(event)
+            }
+        case "text":
+            guard let editor = view.input.currentEditor() as? NSTextView, owns() else { return [:] }
+            editor.insertText(command["text"] ?? "", replacementRange: editor.selectedRange())
+        case "tab", "escape", "return":
+            guard owns(), let editor = view.input.currentEditor() as? NSTextView else { return [:] }
+            let selector = command["step"] == "tab" ? #selector(NSResponder.insertTab(_:))
+                : command["step"] == "escape" ? #selector(NSResponder.cancelOperation(_:)) : #selector(NSResponder.insertNewline(_:))
+            editor.doCommand(by: selector)
+        default: break
+        }
+        await owner.palette.waitForResults()
+        let selection = view.input.currentEditor()?.selectedRange
+        return ["open": owner.palette.isPresented, "text": view.input.stringValue,
+                "selected": selection?.length ?? 0, "panel": NSStringFromRect(view.panel.frame),
+                "page": owner.session.selectedSurface?.currentURL?.absoluteString ?? "",
+                "tab": owner.session.snapshot?.selectedOccurrenceID?.rawValue.uuidString ?? ""]
+    }
+
     private static func commandBar(_ owner: OrbitWindowController, command: [String: String]) async -> [String: Any] {
         let bundleID = "lab.orbit.orbit.perf-cmdbar"
         guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipRefused": true] }

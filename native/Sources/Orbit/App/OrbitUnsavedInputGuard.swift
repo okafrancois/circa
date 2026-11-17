@@ -117,6 +117,7 @@ final class OrbitUnsavedInputGuard: NSObject {
 }
 
 final class OrbitBrowserWindow: NSWindow {
+    weak var sidebarAddress: OrbitLocationField?
     private weak var middleClickTarget: NSView?
 
     /// Browser windows never hand their state or contents to macOS window restoration: Circa
@@ -133,6 +134,15 @@ final class OrbitBrowserWindow: NSWindow {
     }
 
     override func sendEvent(_ event: NSEvent) {
+        // Route the resting text before AppKit makes its inline editor first responder.
+        if event.type == .leftMouseDown, !event.modifierFlags.contains(.control), event.window === self,
+           let field = sidebarAddress, let press = field.onAddressPress,
+           field.textCursorRect.contains(field.convert(event.locationInWindow, from: nil)),
+           let root = contentView, let hit = root.hitTest(root.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow),
+           hit === field || hit === field.currentEditor() {
+            press()
+            return
+        }
         OrbitUnsavedInputGuard.keyDown(in: self, event: event)
         // AppKit routes auxiliary buttons to the first responder. Sidebar middle clicks
         // instead belong to the row under the press, through its matching release.
