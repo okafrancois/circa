@@ -37,7 +37,9 @@ struct DailyPaletteTests {
         await app.windows.waitForPendingCommands()
         await first.palette.waitForResults()
         #expect(first.session.snapshot?.tabs.count == count)
-        #expect(first.palette.results.prefix(4).map(\.action) == [.command(.newWindow), .command(.newIncognitoWindow), .command(.manageExtensions), .command(.addExtension)])
+        #expect(first.palette.results.last?.action == .command(.essentialKeyboardShortcuts))
+        #expect(!first.palette.results.contains { $0.action == .command(.newWindow) })
+        #expect(first.palette.view.inputSymbol == "magnifyingglass")
         first.palette.query("nouvelle fenêtre")
         let index = try #require(first.palette.results.firstIndex { $0.action == .command(.newWindow) })
         first.palette.move(index - first.palette.selection.index)
@@ -94,9 +96,15 @@ struct DailyPaletteTests {
         }
         let tab = BrowserPaletteResult(id: "synthetic-tab", title: "Synthetic tab", detail: "", section: .tabs,
                                        action: .tab(TabID(), windowID: nil, spaceID: nil))
-        let empty = BrowserPaletteRanking.results(query: "", mode: .newTab, resolver: AddressResolver(), candidates: [tab], history: [], actions: actions)
-        #expect(empty.prefix(3).map(\.action) == actions.map(\.action))
-        #expect(empty.dropFirst(3).first?.id == tab.id)
+        let favorite = BrowserPaletteResult(id: "favorite", title: "Favorite", detail: "", section: .pinned,
+                                            action: .tab(TabID(), windowID: nil, spaceID: nil))
+        let blank = BrowserPaletteResult(id: "blank", title: "Blank", detail: "", section: .tabs,
+                                        action: .tab(TabID(), windowID: nil, spaceID: nil), sourceURL: URL(string: "about:blank"))
+        let help = BrowserPaletteResult(id: "help", title: "Help", detail: "", section: .commands,
+                                        action: .command(.essentialKeyboardShortcuts))
+        let empty = BrowserPaletteRanking.emptyResults(candidates: [favorite, blank, tab] + actions, help: help)
+        #expect(empty == [tab, favorite, help])
+        #expect(empty.prefix(2).allSatisfy { $0.actionLabel == "Switch to Tab" })
         for (query, command) in [("new window", BrowserCommandID.newWindow), ("nouvelle fenetre", .newWindow),
                                   ("manage extensions", .manageExtensions), ("gérer les extensions", .manageExtensions),
                                   ("add extension", .addExtension), ("ajouter une extension", .addExtension), ("chrome web store", .addExtension)] {

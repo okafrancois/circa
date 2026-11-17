@@ -329,10 +329,13 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         selectedIndex = results.indices.contains(selected) ? selected : -1
         selectedResult = selectedIndex >= 0 ? results[selectedIndex] : nil
         announcedResultCount = results.count
-        let symbol = selectedResult?.inputSymbol ?? "magnifyingglass"
+        // An empty draft keeps the search glyph; the selected destination only labels a typed query.
+        let isEmpty = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let glyphResult = isEmpty ? nil : selectedResult
+        let symbol = glyphResult?.inputSymbol ?? "magnifyingglass"
         inputSymbol = symbol
         if symbolImages[symbol] == nil { symbolImages[symbol] = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: nil) }
-        let image = selectedResult.flatMap { result in
+        let image = glyphResult.flatMap { result in
             anchor != nil || result.section == .tabs || result.section == .pinned ? favicons[result.id] : nil
         }
         let inputImage = image ?? symbolImages[symbol]
