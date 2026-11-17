@@ -9,6 +9,47 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.0-nightly.5/</id>
+    <title>0.75.0-nightly.5 — Starting Circa with no open tab takes you straight to search.</title>
+    <link href="https://circabrowser.com/changelog/0.75.0-nightly.5/" />
+    <updated>2026-11-17T00:00:00Z</updated>
+    <published>2026-11-17T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Starting Circa with no open tab takes you straight to search.
+
+1 new
+
+## New
+
+- When Circa starts and the restored window has no open tab, the New Tab search opens right away, focused and ready to type. Press Escape to keep the empty page.
+
+## Known limits
+
+- New windows and closing the last tab keep their current behaviour for now.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.0-nightly.5" data-version="0.75.0-nightly.5" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.0-nightly.5" aria-label="Link to version 0.75.0-nightly.5"&gt;0.75.0-nightly.5&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-17"&gt;November 17, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Starting Circa with no open tab takes you straight to search.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 new&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;When Circa starts and the restored window has no open tab, the New Tab search opens right away, focused and ready to type. Press Escape to keep the empty page.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;New windows and closing the last tab keep their current behaviour for now.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0-nightly.5/launch-new-tab.jpg" aria-label="With no tab to restore, the window opens with the New Tab search ready to type."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0-nightly.5/launch-new-tab.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0-nightly.5/launch-new-tab.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;With no tab to restore, the window opens with the New Tab search ready to type.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.0-nightly.5/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.0-nightly.4/</id>
     <title>0.75.0-nightly.4 — Your chosen app icon stays in the Dock when Circa is closed.</title>
     <link href="https://circabrowser.com/changelog/0.75.0-nightly.4/" />
