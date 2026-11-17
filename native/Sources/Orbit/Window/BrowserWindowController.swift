@@ -226,6 +226,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var windowedFrame: NSRect?
     let savesSessionLocally: Bool
     let isPrivateWindow: Bool
+    var launchNewTab = BrowserLaunchNewTab()
     private(set) var isPreparingForTermination = false
     private var isDispatchingAcceptedCommand = false
     var acceptsCommands: Bool { !isPreparingForTermination || isDispatchingAcceptedCommand }
@@ -332,6 +333,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         session.onChange = { [weak self] in
             let perfStart = BrowserPerformance.begin()
             defer { BrowserPerformance.end(.windowRender, since: perfStart) }
+            self?.reconcileLaunchNewTab()
             self?.bookmarkTransfer?.contextDidChange()
             self?.renderSession(selection: self?.session.selectionChangeTabIDs)
             self?.reconcileBackgroundMedia()
@@ -386,6 +388,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidBecomeKey(_ notification: Notification) {
         onActivate()
         passwordPrompt.render()
+        presentLaunchNewTabIfReady()
         // Detached swipe pages need not compete with the first window transaction.
         Task { [weak self] in
             guard let self, !session.isClosed else { return }
