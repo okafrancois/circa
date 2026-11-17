@@ -351,7 +351,7 @@ def host_entitlements(identity_name='local', main_entitlements=None):
 
 
 def sign_chromium_bundle(bundle, identity_name='local', main_entitlements=None):
-    """Sign nested Mach-O code, Sparkle services, helpers, frameworks, then the host."""
+    """Sign nested Mach-O code, Sparkle services, helpers, frameworks, plug-ins, then the host."""
     import plistlib
     bundle = Path(bundle)
     if main_entitlements and is_local_identity(identity_name):
@@ -392,5 +392,13 @@ def sign_chromium_bundle(bundle, identity_name='local', main_entitlements=None):
         for entry in sorted(frameworks.rglob('*'), key=lambda p: len(p.parts), reverse=True):
             if not entry.is_symlink() and entry.is_dir() and entry.suffix in {'.app', '.xpc', '.framework'}:
                 sign_one(entry, preserve=entry.name == 'Downloader.xpc')
+        # The Dock tile plug-in runs in the Dock's plug-in host: hardened runtime, no entitlement,
+        # whatever the identity.
+        for plug_in in sorted((bundle / 'Contents/PlugIns').glob('*.docktileplugin')):
+            if plug_in.is_symlink() or not plug_in.is_dir():
+                raise RuntimeError('Invalid Dock tile plug-in')
+            for executable in sorted((plug_in / 'Contents/MacOS').iterdir()):
+                sign_one(executable)
+            sign_one(plug_in)
         sign_one(bundle)
     run([CODESIGN, '--verify', '--deep', '--strict', str(bundle)], label='bundle signature verification')

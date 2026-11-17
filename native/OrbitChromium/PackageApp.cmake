@@ -14,8 +14,12 @@ endif()
 find_program(PYTHON_EXECUTABLE python3 REQUIRED)
 set(BUNDLE_POLICY "${CMAKE_CURRENT_LIST_DIR}/../../scripts/orbit_bundle_policy.py")
 # Refuse compiler outputs in copied directory trees before copying anything into the bundle.
-foreach(SOURCE "${CEF_ROOT}/Release/Chromium Embedded Framework.framework"
+set(BUILD_TREES "${CEF_ROOT}/Release/Chromium Embedded Framework.framework"
     "${HELPER_DIRECTORY}" "${BUILD_DIRECTORY}/OrbitLabNative_BrowserShell.bundle")
+if(DEFINED DOCK_TILE_PLUGIN AND NOT "${DOCK_TILE_PLUGIN}" STREQUAL "")
+  list(APPEND BUILD_TREES "${DOCK_TILE_PLUGIN}")
+endif()
+foreach(SOURCE IN LISTS BUILD_TREES)
   execute_process(COMMAND "${PYTHON_EXECUTABLE}" "${BUNDLE_POLICY}" "${SOURCE}" --reject-build-artifacts
     COMMAND_ERROR_IS_FATAL ANY)
 endforeach()
@@ -100,6 +104,17 @@ foreach(HELPER IN LISTS HELPERS)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_directory "${SOURCE}" "${DESTINATION}"
     COMMAND_ERROR_IS_FATAL ANY)
 endforeach()
+# The product's Dock tile plug-in (the smoke build has none and does not declare one).
+if(DEFINED DOCK_TILE_PLUGIN AND NOT "${DOCK_TILE_PLUGIN}" STREQUAL "")
+  get_filename_component(DOCK_TILE_NAME "${DOCK_TILE_PLUGIN}" NAME)
+  if(NOT DOCK_TILE_NAME STREQUAL "OrbitDockTile.docktileplugin"
+      OR NOT EXISTS "${DOCK_TILE_PLUGIN}/Contents/MacOS/OrbitDockTile" OR IS_SYMLINK "${APP}/Contents/PlugIns")
+    message(FATAL_ERROR "Missing Dock tile plug-in or unsafe destination")
+  endif()
+  file(MAKE_DIRECTORY "${APP}/Contents/PlugIns")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DOCK_TILE_PLUGIN}"
+    "${APP}/Contents/PlugIns/${DOCK_TILE_NAME}" COMMAND_ERROR_IS_FATAL ANY)
+endif()
 execute_process(COMMAND "${PYTHON_EXECUTABLE}" "${BUNDLE_POLICY}" "${APP}" --set-helper-identifiers
   COMMAND_ERROR_IS_FATAL ANY)
 file(MAKE_DIRECTORY "${APP}/Contents/Resources")

@@ -222,7 +222,8 @@ def signed_entitlements(path):
 
 
 def verify_scoped_entitlements(bundle, read=signed_entitlements):
-    """A Developer ID host keeps library validation; each helper stays within its own set."""
+    """A Developer ID host keeps library validation; each helper stays within its own set and the
+    Dock tile plug-in has none."""
     from local_signing import CODE_SIGNING_ENTITLEMENT_PREFIX, DEVELOPER_ID_HELPER_ENTITLEMENTS, helper_variant
     host = read(bundle)
     widened = sorted(key for key in host if key.startswith(CODE_SIGNING_ENTITLEMENT_PREFIX))
@@ -240,6 +241,14 @@ def verify_scoped_entitlements(bundle, read=signed_entitlements):
             raise RuntimeError(helper.name + ' carries entitlements beyond its set: ' + ', '.join(extra))
     if seen != set(DEVELOPER_ID_HELPER_ENTITLEMENTS):
         raise RuntimeError('Expected exactly the classified Chromium helpers')
+    from orbit_bundle_policy import DOCK_TILE_PLUGIN
+    plug_ins = bundle / 'Contents/PlugIns'
+    for plug_in in sorted(plug_ins.iterdir()) if plug_ins.is_dir() else []:
+        if plug_in.name != DOCK_TILE_PLUGIN:
+            raise RuntimeError('Unclassified plug-in bundle: ' + plug_in.name)
+        # Loaded by the Dock's plug-in host: no entitlement at all.
+        if read(plug_in):
+            raise RuntimeError(plug_in.name + ' carries entitlements: ' + ', '.join(sorted(read(plug_in))))
 
 
 def prepare_bundle(source, destination, config, version, build, local_test_root=None, feed_url=None):
@@ -257,7 +266,8 @@ def prepare_bundle(source, destination, config, version, build, local_test_root=
     for localized in resources.glob('*.lproj/InfoPlist.strings'):
         localized.write_bytes(plistlib.dumps({'CFBundleName': config['name'], 'CFBundleDisplayName': config['name']}))
     set_helper_bundle_identifiers(destination)
-    for helper in (destination / 'Contents/Frameworks').glob('*Helper*.app'):
+    for helper in [*(destination / 'Contents/Frameworks').glob('*Helper*.app'),
+                   *(destination / 'Contents/PlugIns').glob('*.docktileplugin')]:
         values = packager.read_info(helper)
         values.update(CFBundleVersion=str(build), CFBundleShortVersionString=version)
         packager.write_info(helper, values)

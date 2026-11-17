@@ -7,6 +7,12 @@ import shutil
 
 FRAMEWORK = 'Chromium Embedded Framework.framework'
 HELPERS = ['Orbit Helper' + suffix + '.app' for suffix in ('', ' (GPU)', ' (Renderer)', ' (Plugin)', ' (Alerts)')]
+# Dock tile plug-in (NSDockTilePlugIn): draws the chosen app icon while the app is not running.
+DOCK_TILE_PLUGIN = 'OrbitDockTile.docktileplugin'
+DOCK_TILE_EXECUTABLE = 'OrbitDockTile'
+DOCK_TILE_PATHS = frozenset({'', 'Contents', 'Contents/Info.plist', 'Contents/MacOS',
+                             'Contents/MacOS/' + DOCK_TILE_EXECUTABLE,
+                             'Contents/_CodeSignature', 'Contents/_CodeSignature/CodeResources'})
 ORBIT_RESOURCE_FILES = frozenset({
     'README.md', 'sign-color.pdf', 'sign-color.svg',
     'vector-provenance.json', 'wordmark.pdf', 'wordmark.svg',
@@ -67,6 +73,10 @@ def helper_bundle_identifier(bundle_id, suffix='', synthetic=False):
     return bundle_id + '.helper' + suffix
 
 
+def dock_tile_bundle_identifier(bundle_id, synthetic=False):
+    return helper_bundle_identifier(bundle_id, synthetic=synthetic)[:-len('.helper')] + '.docktile'
+
+
 def set_helper_bundle_identifiers(bundle):
     """Assign identities and notification branding to staged copies before signing."""
     bundle = Path(bundle)
@@ -86,6 +96,12 @@ def set_helper_bundle_identifiers(bundle):
             resources.mkdir(exist_ok=True)
             shutil.copyfile(bundle / 'Contents/Resources/Orbit.icns', resources / 'Orbit.icns')
         path.write_bytes(plistlib.dumps(helper))
+    plug_in = bundle / 'Contents/PlugIns' / DOCK_TILE_PLUGIN / 'Contents/Info.plist'
+    if plug_in.is_file() and not plug_in.is_symlink():
+        values = plistlib.loads(plug_in.read_bytes())
+        values['CFBundleIdentifier'] = dock_tile_bundle_identifier(
+            info['CFBundleIdentifier'], info.get('OrbitSyntheticBundle', False))
+        plug_in.write_bytes(plistlib.dumps(values))
 
 
 def reject_build_artifacts(bundle):
@@ -119,6 +135,12 @@ def validate_bundle_contents(bundle, own_icon_catalog=False):
             raise RuntimeError('Unexpected bundle content: ' + str(relative))
         path = '/'.join(parts[1:])
         allowed = path in {'Info.plist', 'PkgInfo', 'MacOS', 'MacOS/Orbit', 'MacOS/Orbit', 'Resources', 'Frameworks', '_CodeSignature', '_CodeSignature/CodeResources'}
+        if parts[1] == 'PlugIns':
+            # Only the Dock tile plug-in the Info.plist declares (checked below), in its exact layout.
+            allowed = len(parts) == 2 or (parts[2] == DOCK_TILE_PLUGIN and '/'.join(parts[3:]) in DOCK_TILE_PATHS)
+            directory = len(parts) <= 3 or parts[-1] in {'Contents', 'MacOS', '_CodeSignature'}
+            if allowed and (entry.is_symlink() or (directory and not entry.is_dir()) or (not directory and not entry.is_file())):
+                raise RuntimeError('Invalid Dock tile plug-in type refused: ' + str(relative))
         if parts[1] == 'Resources' and len(parts) > 2:
             tail = parts[2:]
             allowed = len(tail) == 1 and tail[0] in {'LICENSE.txt', 'Orbit.icns', 'Circa.sdef', 'OrbitLabNative_BrowserShell.bundle'}
@@ -215,6 +237,16 @@ def validate_bundle_contents(bundle, own_icon_catalog=False):
             raise RuntimeError('Unexpected bundle content: ' + str(relative))
         if entry.is_symlink() and (not entry.exists() or not entry.resolve().is_relative_to(bundle.resolve())):
             raise RuntimeError('External or broken bundle symlink refused: ' + str(relative))
+
+    declared = None
+    if (bundle / 'Contents/Info.plist').is_file():
+        declared = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes()).get('NSDockTilePlugIn')
+    plug_ins = bundle / 'Contents/PlugIns'
+    present = sorted(entry.name for entry in plug_ins.iterdir()) if plug_ins.is_dir() else []
+    if declared not in (None, DOCK_TILE_PLUGIN) or present != ([declared] if declared else []):
+        raise RuntimeError('Dock tile plug-in and NSDockTilePlugIn declaration differ')
+    if declared and not (plug_ins / declared / 'Contents/MacOS' / DOCK_TILE_EXECUTABLE).is_file():
+        raise RuntimeError('Declared Dock tile plug-in has no executable')
 
     if len(app_icon_directories) > 1:
         raise RuntimeError('Ambiguous app icon resource layouts refused')

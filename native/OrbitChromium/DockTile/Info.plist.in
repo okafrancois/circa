@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Dock tile plug-in of the product (Contents/PlugIns). scripts/orbit_bundle_policy.py derives its
+     identifier from the containing application's before signing. -->
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>io.github.okatech.orbit.test.orbit.unpackaged.docktile</string>
+  <key>CFBundleExecutable</key><string>OrbitDockTile</string>
+  <key>CFBundleName</key><string>OrbitDockTile</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>NSPrincipalClass</key><string>OrbitDockTilePlugIn</string>
+</dict></plist>
