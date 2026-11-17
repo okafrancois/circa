@@ -130,14 +130,21 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         }
     }
 
-    func present(_ requestedMode: BrowserPaletteMode, emptyAddress: Bool = false) {
+    func centerIfAnchored() {
+        guard isPresented, view.anchor != nil else { return }
+        view.anchor = nil
+        view.render(results, selected: selection.index)
+    }
+
+    func present(_ requestedMode: BrowserPaletteMode, emptyAddress: Bool = false, anchor: NSView? = nil) {
         guard let owner, owner.acceptsCommands, let registry, !owner.session.isClosed else { return }
         if isPresented, mode == requestedMode { dismiss(); return }
         presentationSequence &+= 1
         if !isPresented {
             let responder = owner.window?.firstResponder
             let field = (responder as? NSTextView).flatMap { $0.isFieldEditor ? $0.delegate as? NSView : nil }
-            previousResponder = field ?? responder
+            // Programmatic address focus can already have an inline editor before the click.
+            previousResponder = anchor != nil && field === owner.addressField ? nil : field ?? responder
             previousOccurrence = owner.session.snapshot?.selectedOccurrenceID
         }
         searchSuggestions.cancel()
@@ -152,6 +159,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         generation = UUID()
         let ticket = presentation
         siteSearch = nil
+        view.anchor = anchor
         view.setSiteSearch(nil, animated: false)
         mode = requestedMode
         opensEmptyAddress = emptyAddress
@@ -173,7 +181,11 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                     ? uiText("Extensions require an updated Chromium build.") : BrowserDailyCommands.detail($0.id), section: .commands, action: .command($0.id),
                   searchAliases: BrowserDailyCommands.aliases($0.id), shortcut: $0.shortcuts.first?.displayLabel ?? "")
         }
-        view.input.stringValue = mode == .currentTab && !emptyAddress ? owner.session.selectedSurface?.navigationState.url?.absoluteString ?? "" : ""
+        func initialAddress(_ surface: Engine.Surface?) -> String {
+            if anchor != nil { return BrowserAddressPresentation(surface: surface).value }
+            return surface?.navigationState.url?.absoluteString ?? ""
+        }
+        view.input.stringValue = mode == .currentTab && !emptyAddress ? initialAddress(owner.session.selectedSurface) : ""
         view.isHidden = false
         view.superview?.addSubview(view, positioned: .above, relativeTo: nil)
         view.needsLayout = true
@@ -193,7 +205,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             let sources = owner.session.paletteContext ?? ready
             sourceContext = sources
             if requestedMode == .currentTab, !emptyAddress, inputRevision == firstQuery {
-                view.input.stringValue = ready.selectedOccurrenceID.flatMap { owner.session.surface(for: $0)?.navigationState.url?.absoluteString } ?? ""
+                view.input.stringValue = initialAddress(ready.selectedOccurrenceID.flatMap { owner.session.surface(for: $0) })
                 view.input.currentEditor()?.selectAll(nil)
                 draft = view.input.stringValue
             }

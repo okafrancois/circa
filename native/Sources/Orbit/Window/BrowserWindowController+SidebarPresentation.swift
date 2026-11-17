@@ -77,6 +77,7 @@ extension BrowserWindowController {
         // that cannot animate) makes AppKit drop the field editor or hidden responder first and
         // leave the window itself as first responder: the page then received no keys (DBG-KEYS).
         let focusLeavesSidebar = !visible && isFocusInSidebar
+        if !visible { palette.centerIfAnchored() }
         isSidebarVisible = visible
         windowShell.setDocked(visible, animated: animated)
         updateSidebarColumnVisibility()

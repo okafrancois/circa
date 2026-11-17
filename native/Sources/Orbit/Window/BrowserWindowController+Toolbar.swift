@@ -27,6 +27,7 @@ extension BrowserWindowController {
 
     func setToolbarVisible(_ visible: Bool) {
         guard visible != isToolbarVisible else { return }
+        if visible { palette.centerIfAnchored() }
         isToolbarVisible = visible
         refreshToolbarPresentation()
     }

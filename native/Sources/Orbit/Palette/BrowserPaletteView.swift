@@ -34,14 +34,33 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     let siteHint = NSTextField(labelWithString: "")
     private let infoPopover = OrbitFrostPopover()
     private(set) var inputSymbol = "magnifyingglass"
-    var siteSearchHint: BrowserPaletteSiteSearch? {
+    private let keycapBackground = NSView()
+    private let tabKeycap = NSTextField(labelWithString: uiText("Tab"))
+    weak var anchor: NSView? {
         didSet {
-            guard oldValue != siteSearchHint else { return }
-            siteHint.stringValue = siteSearchHint == nil ? "" : uiText("Tab to search")
-            siteHint.isHidden = siteSearchHint == nil
+            let radius = anchor == nil ? OrbitTokens.Radius.commandBar : 12
+            panel.layer?.cornerRadius = radius
+            material.layer?.cornerRadius = radius
+            input.font = anchor == nil ? OrbitTokens.Typography.commandBarInput : OrbitTokens.Typography.commandBarRowTitle
+            divider.isHidden = anchor != nil
+            updateSiteHint()
             needsLayout = true
         }
     }
+    var siteSearchHint: BrowserPaletteSiteSearch? {
+        didSet {
+            guard oldValue != siteSearchHint else { return }
+            updateSiteHint()
+        }
+    }
+    private func updateSiteHint() {
+        siteHint.textColor = anchor == nil ? OrbitFloatingMaterial.secondary : .secondaryLabelColor
+        siteHint.stringValue = siteSearchHint.map { anchor == nil ? uiText("Tab to search") : uiFormat("Search %@", uiText($0.name)) } ?? ""
+        siteHint.isHidden = siteSearchHint == nil
+        keycapBackground.isHidden = anchor == nil || siteSearchHint == nil
+        needsLayout = true
+    }
+
     private var siteSearch: BrowserPaletteSiteSearch?
     private var suppressCompletion = false
     private var deletionEdit = false
@@ -105,7 +124,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         input.cell?.isScrollable = true
         input.placeholderString = uiText("Search or Enter URL…")
         input.placeholderAttributedString = NSAttributedString(string: uiText("Search or Enter URL…"), attributes: [
-            .font: OrbitTokens.Typography.commandBarInput, .foregroundColor: OrbitFloatingMaterial.secondary
+            .font: input.font ?? OrbitTokens.Typography.commandBarInput, .foregroundColor: OrbitFloatingMaterial.secondary
         ])
         input.delegate = self
         input.setAccessibilityLabel(uiText("Search or Enter URL"))
@@ -137,6 +156,16 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         siteHint.textColor = OrbitFloatingMaterial.secondary
         siteHint.isHidden = true
         panel.addSubview(siteHint)
+        tabKeycap.font = OrbitTokens.Typography.commandBarRowTitle
+        tabKeycap.cell?.usesSingleLineMode = true
+        tabKeycap.alignment = .center
+        tabKeycap.textColor = .secondaryLabelColor
+        keycapBackground.wantsLayer = true
+        keycapBackground.layer?.cornerRadius = 4
+        keycapBackground.layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.12).cgColor
+        keycapBackground.isHidden = true
+        keycapBackground.addSubview(tabKeycap)
+        panel.addSubview(keycapBackground)
         divider.wantsLayer = true
         divider.setAccessibilityElement(false)
         panel.addSubview(divider)
@@ -177,11 +206,18 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     }
     required init?(coder: NSCoder) { nil }
 
-    static func panelFrame(in size: NSSize, resultCount: Int = 5) -> NSRect {
+    static func panelFrame(in size: NSSize, resultCount: Int = 5, anchor: NSRect? = nil) -> NSRect {
         let m = OrbitTokens.Metrics.CommandBar.self
         let count = min(5, max(0, resultCount))
-        let preferredHeight = m.searchRowHeight + m.firstRowGap + CGFloat(count) * m.rowPitch
+        let header = anchor == nil ? m.searchRowHeight + m.firstRowGap : 52
+        let preferredHeight = header + CGFloat(count) * m.rowPitch
             - (count > 0 ? m.rowPitch - m.rowHeight : 0) + m.bottomPadding
+        if let anchor {
+            let width = min(350, size.width)
+            let left = min(max(0, anchor.minX), size.width - width)
+            let top = max(0, min(anchor.minY, size.height - header))
+            return NSRect(x: left, y: top, width: width, height: min(preferredHeight, size.height - top))
+        }
         let top = max(m.rowInsetX, min(m.top(windowHeight: size.height), size.height - m.searchRowHeight - m.rowInsetX))
         let height = min(preferredHeight, max(m.searchRowHeight, size.height - top - m.rowInsetX))
         let width = min(m.width, max(0, size.width - 2 * m.rowInsetX))
@@ -191,27 +227,38 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     override func layout() {
         super.layout()
         let m = OrbitTokens.Metrics.CommandBar.self
-        panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count)
+        let compact = anchor != nil
+        let inputRowHeight = compact ? 50 : m.searchRowHeight
+        panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count, anchor: anchor.map { convert($0.bounds, from: $0) })
         if answerView != nil { panel.frame.size.height = answerHeight ?? 230 }
         panelShadow.frame = panel.frame
-        panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: OrbitTokens.Radius.commandBar,
-                                       cornerHeight: OrbitTokens.Radius.commandBar, transform: nil)
+        panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: panel.layer?.cornerRadius ?? 0,
+                                       cornerHeight: panel.layer?.cornerRadius ?? 0, transform: nil)
         material.frame = panel.bounds
         // Panel uses unflipped coordinates. Its top and input stay fixed while results change.
         let inputHeight = input.intrinsicContentSize.height
         let scopeWidth = siteSearch == nil ? 0 : min(180, ceil(scopeLabel.intrinsicContentSize.width) + 20)
-        scopeLabel.frame = NSRect(x: m.titleOriginX, y: panel.bounds.height - 45, width: scopeWidth, height: 26)
+        scopeLabel.frame = NSRect(x: m.titleOriginX, y: panel.bounds.height - inputRowHeight / 2 - 13, width: scopeWidth, height: 26)
         let inputX = m.titleOriginX + (scopeWidth > 0 ? scopeWidth + 10 : 0)
-        let trailing: CGFloat = siteHint.isHidden ? 48 : 144
-        input.frame = NSRect(x: inputX, y: panel.bounds.height - m.searchRowHeight / 2 - inputHeight / 2,
+        let capWidth = max(30, ceil(tabKeycap.intrinsicContentSize.width) + 8)
+        keycapBackground.frame = NSRect(x: panel.bounds.width - 22 - capWidth, y: panel.bounds.height - 37, width: capWidth, height: 24)
+        let keyHeight = tabKeycap.intrinsicContentSize.height
+        tabKeycap.frame = NSRect(x: 0, y: (24 - keyHeight) / 2, width: capWidth, height: keyHeight)
+        let hintWidth = min(ceil(siteHint.intrinsicContentSize.width), panel.bounds.width / 3)
+        let trailing: CGFloat = compact ? (siteHint.isHidden ? 16 : capWidth + hintWidth + 38) : (siteHint.isHidden ? 48 : 144)
+        input.frame = NSRect(x: inputX, y: panel.bounds.height - inputRowHeight / 2 - inputHeight / 2,
                              width: max(0, panel.bounds.width - inputX - trailing), height: inputHeight)
         infoButton.frame = NSRect(x: panel.bounds.width - 46, y: panel.bounds.height - 44, width: 24, height: 24)
         siteHint.frame = NSRect(x: panel.bounds.width - 144, y: panel.bounds.height - 43, width: 96, height: 20)
-        searchIcon.frame = NSRect(x: 23, y: panel.bounds.height - m.searchRowHeight / 2 - 8, width: 16, height: 16)
+        if compact {
+            siteHint.frame = NSRect(x: keycapBackground.frame.minX - 6 - hintWidth, y: panel.bounds.height - 25 - siteHint.intrinsicContentSize.height / 2,
+                                    width: hintWidth, height: siteHint.intrinsicContentSize.height)
+        }
+        searchIcon.frame = NSRect(x: compact ? 24 : 23, y: panel.bounds.height - inputRowHeight / 2 - 8, width: 16, height: 16)
         divider.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight,
                                width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: 1 / (window?.backingScaleFactor ?? 2))
         scroll.frame = NSRect(x: m.rowInsetX, y: m.bottomPadding, width: max(0, panel.bounds.width - 2 * m.rowInsetX),
-                              height: max(0, panel.bounds.height - m.searchRowHeight - m.firstRowGap - m.bottomPadding))
+                              height: max(0, panel.bounds.height - (compact ? 52 : m.searchRowHeight + m.firstRowGap) - m.bottomPadding))
         answerView?.frame = scroll.frame
         resizeList()
     }
@@ -286,12 +333,12 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         inputSymbol = symbol
         if symbolImages[symbol] == nil { symbolImages[symbol] = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: nil) }
         let image = selectedResult.flatMap { result in
-            result.section == .tabs || result.section == .pinned ? favicons[result.id] : nil
+            anchor != nil || result.section == .tabs || result.section == .pinned ? favicons[result.id] : nil
         }
         let inputImage = image ?? symbolImages[symbol]
         if searchIcon.image !== inputImage { searchIcon.image = inputImage }
         searchIcon.contentTintColor = image == nil ? OrbitFloatingMaterial.body : nil
-        infoButton.isHidden = siteSearch != nil
+        infoButton.isHidden = anchor != nil || siteSearch != nil
         let row = selectedIndex >= 0 ? resultRows[selectedIndex] : -1
         list.selectRowIndexes(row >= 0 ? IndexSet(integer: row) : [], byExtendingSelection: false)
         if oldIndex != selectedIndex { refreshSelection(at: oldIndex) }
@@ -419,8 +466,9 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
                 symbolImages[result.symbol] = image
             }
         }
+        cell.compact = anchor != nil
         cell.configure(result: result, image: image, usesFavicon: usesFavicon,
-                       showsDetails: !input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                       showsDetails: anchor == nil && !input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         cell.apply(selected: index == selected, accent: accent, usesMaterial: usesMaterial)
     }
 
@@ -463,7 +511,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.layer?.borderColor = (usesMaterial ? OrbitTokens.Color.Line.commandBarMaterialOuterStroke : OrbitTokens.Color.Line.commandBarOuterStroke).resolvedCGColor(for: effectiveAppearance)
     }
     func completeURL(for result: BrowserPaletteResult, draft: String) {
-        guard !suppressCompletion, siteSearchHint == nil, !draft.isEmpty,
+        guard !suppressCompletion, (siteSearchHint == nil || anchor != nil), !draft.isEmpty,
               !draft.contains(where: \.isWhitespace), result.section != .search,
               result.section != .commands, let url = result.url,
               let editor = input.currentEditor() as? NSTextView, !editor.hasMarkedText(),
@@ -485,7 +533,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         let placeholder = site.map { uiFormat("Search %@", uiText($0.name)) } ?? uiText("Search or Enter URL…")
         input.placeholderString = placeholder
         input.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
-            .font: OrbitTokens.Typography.commandBarInput, .foregroundColor: OrbitFloatingMaterial.secondary
+            .font: input.font ?? OrbitTokens.Typography.commandBarInput, .foregroundColor: OrbitFloatingMaterial.secondary
         ])
         input.setAccessibilityLabel(placeholder)
         // AppKit's active field editor caches its placeholder. Rebind it at a scope boundary;
@@ -628,6 +676,9 @@ private final class PaletteSectionCell: NSTableCellView {
 
 @MainActor
 final class PaletteResultCell: NSTableCellView {
+    var compact = false {
+        didSet { if compact != oldValue { paintKey = nil } }
+    }
     private var presentedResult: BrowserPaletteResult?
     private var presentedImage: NSImage?
     private var presentedDetails = false
@@ -753,24 +804,24 @@ final class PaletteResultCell: NSTableCellView {
         refreshBackground()
         extensionNameLabel.textColor = OrbitFloatingMaterial.body
         extensionChip.layer?.backgroundColor = OrbitFloatingMaterial.body.withAlphaComponent(0.08).resolvedCGColor(for: effectiveAppearance)
-        titleLabel.textColor = OrbitFloatingMaterial.body
+        titleLabel.textColor = compact && selected ? .white : OrbitFloatingMaterial.body
         detailLabel.textColor = OrbitFloatingMaterial.secondary
         actionLabel.textColor = selected ? OrbitFloatingMaterial.body : OrbitFloatingMaterial.secondary
         shortcutLabel.textColor = OrbitFloatingMaterial.secondary
-        let showsAction = showsTabAction || (showsRestoreAction && selected)
+        let showsAction = !compact && (showsTabAction || (showsRestoreAction && selected))
         actionIcon.contentTintColor = selected ? accent : OrbitTokens.Color.State.commandBarAccessoryForeground
         actionIcon.isHidden = !showsAction
         accessory.isHidden = !showsAction
         actionLabel.isHidden = !showsAction
         shortcutLabel.isHidden = shortcutLabel.stringValue.isEmpty
         accessory.layer?.backgroundColor = (selected ? NSColor.white : OrbitTokens.Color.State.commandBarAccessory).resolvedCGColor(for: effectiveAppearance)
-        let hasWhiteTile = selected && (showsTabAction || !shortcutLabel.stringValue.isEmpty || !extensionChip.isHidden)
+        let hasWhiteTile = selected && ((compact && usesFavicon) || showsTabAction || !shortcutLabel.stringValue.isEmpty || !extensionChip.isHidden)
         icon.contentTintColor = usesFavicon ? nil : (selected ? (hasWhiteTile ? accent : OrbitFloatingMaterial.body) : OrbitFloatingMaterial.body)
         iconTile.layer?.backgroundColor = (hasWhiteTile ? NSColor.white : .clear).resolvedCGColor(for: effectiveAppearance)
         if oldActionHidden != actionLabel.isHidden { needsLayout = true }
     }
     private func refreshBackground() {
-        background.layer?.backgroundColor = (isSelectedResult ? NSColor.controlAccentColor.withAlphaComponent(0.12) :
+        background.layer?.backgroundColor = (isSelectedResult ? (compact ? NSColor(white: 0.5, alpha: 1) : NSColor.controlAccentColor.withAlphaComponent(0.12)) :
             (isHovered ? OrbitTokens.Color.State.commandBarRowHover : .clear)).resolvedCGColor(for: effectiveAppearance)
     }
     override func updateTrackingAreas() {
