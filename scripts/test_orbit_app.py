@@ -42,6 +42,58 @@ class ResourceAssemblyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Invalid scripting dictionary resource'):
                 validate_bundle_contents(bundle)
 
+    def test_dock_tile_plug_in_matches_its_declaration_and_follows_the_bundle_identifier(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / 'Orbit.app'
+            info = bundle / 'Contents/Info.plist'
+            info.parent.mkdir(parents=True)
+            plug_in = bundle / 'Contents/PlugIns/OrbitDockTile.docktileplugin/Contents'
+            (plug_in / 'MacOS').mkdir(parents=True)
+            (plug_in / 'MacOS/OrbitDockTile').write_bytes(b'\xcf\xfa\xed\xfe')
+            (plug_in / 'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': 'unpackaged'}))
+            info.write_bytes(plistlib.dumps({'CFBundleIdentifier': 'io.github.okatech.orbit'}))
+            with self.assertRaisesRegex(RuntimeError, 'NSDockTilePlugIn declaration'):
+                validate_bundle_contents(bundle)
+            info.write_bytes(plistlib.dumps({'CFBundleIdentifier': 'io.github.okatech.orbit',
+                                             'NSDockTilePlugIn': 'OrbitDockTile.docktileplugin'}))
+            validate_bundle_contents(bundle)
+            extra = plug_in / 'Resources'
+            extra.mkdir()
+            with self.assertRaisesRegex(RuntimeError, 'Unexpected bundle content'):
+                validate_bundle_contents(bundle)
+            extra.rmdir()
+            other = bundle / 'Contents/PlugIns/Other.docktileplugin'
+            other.mkdir()
+            with self.assertRaisesRegex(RuntimeError, 'Unexpected bundle content'):
+                validate_bundle_contents(bundle)
+            other.rmdir()
+            (plug_in / 'MacOS/OrbitDockTile').unlink()
+            with self.assertRaisesRegex(RuntimeError, 'no executable'):
+                validate_bundle_contents(bundle)
+            (plug_in / 'MacOS/OrbitDockTile').symlink_to('/usr/bin/true')
+            with self.assertRaisesRegex(RuntimeError, 'Invalid Dock tile plug-in type'):
+                validate_bundle_contents(bundle)
+            # The plug-in identifier follows the containing app's, synthetic namespace included.
+            (bundle / 'Contents/Frameworks').mkdir()
+            with patch('orbit_bundle_policy.HELPERS', []):
+                set_helper_bundle_identifiers(bundle)
+                self.assertEqual(plistlib.loads((plug_in / 'Info.plist').read_bytes())['CFBundleIdentifier'],
+                                 'io.github.okatech.orbit.docktile')
+                info.write_bytes(plistlib.dumps({'CFBundleIdentifier': 'io.github.okatech.orbit.test.orbit.dock',
+                                                 'OrbitSyntheticBundle': True}))
+                set_helper_bundle_identifiers(bundle)
+                self.assertEqual(plistlib.loads((plug_in / 'Info.plist').read_bytes())['CFBundleIdentifier'],
+                                 'io.github.okatech.orbit.test.orbit-synthetic.dock.docktile')
+
+    def test_product_declares_the_packaged_dock_tile_plug_in(self):
+        root = Path(__file__).resolve().parents[1] / 'native/OrbitChromium'
+        info = (root / 'App/Info.plist.in').read_text()
+        self.assertIn('<key>NSDockTilePlugIn</key><string>OrbitDockTile.docktileplugin</string>', info)
+        self.assertNotIn('NSDockTilePlugIn', (root / 'Smoke/Info.plist.in').read_text())
+        plug_in = plistlib.loads((root / 'DockTile/Info.plist.in').read_bytes())
+        self.assertEqual((plug_in['CFBundleExecutable'], plug_in['CFBundlePackageType'], plug_in['NSPrincipalClass']),
+                         ('OrbitDockTile', 'BNDL', 'OrbitDockTilePlugIn'))
+
     def test_font_allowlist_matches_the_shipped_resources(self):
         directory = Path(__file__).resolve().parents[1] / 'native/Sources/BrowserShell/Resources/BrandFonts'
         self.assertEqual(BRAND_FONT_FILES, frozenset(path.name for path in directory.iterdir() if path.is_file()))

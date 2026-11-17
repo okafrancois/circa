@@ -97,4 +97,34 @@ struct AppIconTests {
         reopened.restoreDefault()
         #expect(icons.current == .stage && calls == 2)
     }
+
+    @Test("Every applied choice notifies the Dock tile plug-in after the preference is stored")
+    func dockTileNotification() {
+        let (defaults, name) = defaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        var stored: [String?] = []
+        let icons = OrbitAppIconController(defaults: defaults, setDockIcon: { _ in },
+            notifyDockTile: { stored.append(defaults.string(forKey: OrbitAppIconController.preferenceKey)) },
+            setBundleIcon: { _ in true })
+        #expect(icons.apply(.ink))
+        icons.reapplyAtLaunch()
+        icons.restoreDefault()
+        #expect(stored == ["ink", "ink", nil])
+        #expect(OrbitAppIconController.changeNotificationName(applicationIdentifier: "lab.orbit.orbit.dock").rawValue
+            == "lab.orbit.orbit.dock.applicationIconChanged")
+    }
+
+    @Test("The Dock tile plug-in reads the same key, notification and icon identifiers as the app")
+    func dockTileContract() throws {
+        let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let resolver = try String(contentsOf: package.appendingPathComponent("OrbitChromium/DockTile/OrbitDockTileResolver.mm"), encoding: .utf8)
+        #expect(resolver.contains("OrbitDockTilePreferenceKey = @\"\(OrbitAppIconController.preferenceKey)\";"))
+        #expect(resolver.contains("OrbitDockTileChangeNotificationSuffix = @\"\(OrbitAppIconController.changeNotificationSuffix)\";"))
+        // Every icon the app can store except the default, which the bundle's own icon shows.
+        let custom = Set(OrbitAppIcon.allCases + [.paper]).subtracting([.defaultIcon]).map(\.rawValue)
+        let line = try #require(resolver.split(separator: "\n").first { $0.contains("return @[") })
+        let listed = line.split(separator: "\"").enumerated().filter { $0.offset % 2 == 1 }.map { String($0.element) }
+        #expect(Set(listed) == Set(custom) && listed.count == custom.count)
+        for icon in listed { #expect(OrbitAppIcon(rawValue: icon)?.iconURL != nil) }
+    }
 }

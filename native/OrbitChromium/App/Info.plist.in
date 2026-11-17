@@ -10,6 +10,7 @@
   <key>LSHasLocalizedDisplayName</key><true/>
   <key>CFBundleDisplayName</key><string>Circa</string>
   <key>CFBundleIconFile</key><string>Orbit.icns</string>
+  <key>NSDockTilePlugIn</key><string>OrbitDockTile.docktileplugin</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>fr</string></array>
   <key>CFBundlePackageType</key><string>APPL</string>

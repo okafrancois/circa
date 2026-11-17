@@ -192,7 +192,7 @@ struct BrowserSettingsIconGrid: View {
             .padding(.horizontal, 12).padding(.vertical, 11)
             .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
-            Text(uiText("Choose how Circa looks in the Dock and the Finder.")).font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary)
+            Text(uiText("Choose how Circa looks in the Dock.")).font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary)
         }.padding(.top, 8)
     }
 }

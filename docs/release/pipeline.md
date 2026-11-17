@@ -46,9 +46,12 @@
   | Helper (GPU process and utility services, including the Widevine CDM signed by its vendor) | `disable-library-validation` |
   | Helper (Plugin), unused by this engine | `allow-unsigned-executable-memory`, `disable-library-validation` |
   | Helper (Alerts) | none |
-  `release.py` fails after signing if the host carries any `cs.*` entitlement or a helper
-  carries more than its set. The `local` identity has no Team ID, so library validation cannot
-  pass between its binaries: local test bundles keep all three exceptions on every target.
+  | Dock tile plug-in (`Contents/PlugIns/OrbitDockTile.docktileplugin`) | none, no entitlement at all |
+  `release.py` fails after signing if the host carries any `cs.*` entitlement, a helper
+  carries more than its set, or a plug-in carries any entitlement or is not the Dock tile plug-in.
+  The `local` identity has no Team ID, so library validation cannot pass between its binaries:
+  local test bundles keep all three exceptions on every helper and the host; the Dock tile
+  plug-in never has any (the Dock's plug-in host loads it, not the app).
 
 ## Build and publish
 - Local: `python3 scripts/release.py --tag v0.1.0`.

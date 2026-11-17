@@ -290,6 +290,16 @@ orbit_app_executable(OrbitChromiumAppSmoke smoke "${CMAKE_CURRENT_SOURCE_DIR}/Sm
 add_dependencies(OrbitChromiumApp orbit_localization_resources)
 add_dependencies(OrbitChromiumAppSmoke orbit_localization_resources)
 
+# Dock tile plug-in of the product (Contents/PlugIns, NSDockTilePlugIn): draws the icon chosen in
+# Settings while the app is not running, from the app's preferences and resources (read-only).
+add_library(OrbitDockTile MODULE DockTile/OrbitDockTilePlugIn.mm DockTile/OrbitDockTileResolver.mm)
+target_compile_options(OrbitDockTile PRIVATE -fobjc-arc)
+target_link_libraries(OrbitDockTile PRIVATE "-framework AppKit")
+set_target_properties(OrbitDockTile PROPERTIES BUNDLE TRUE BUNDLE_EXTENSION docktileplugin
+  OUTPUT_NAME OrbitDockTile OBJCXX_STANDARD 20
+  MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/DockTile/Info.plist.in"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/dock-tile")
+
 set(ORBIT_APP_HELPER_TARGETS "")
 set(ORBIT_APP_HELPER_NAMES "")
 foreach(SUFFIX_LIST IN LISTS CEF_HELPER_APP_SUFFIXES)
@@ -318,9 +328,13 @@ foreach(VARIANT IN ITEMS product smoke)
   if(VARIANT STREQUAL "product")
     set(APP_TARGET OrbitChromiumApp)
     set(PACKAGE_TARGET package_orbit_app)
+    set(DOCK_TILE_ARGUMENT "-DDOCK_TILE_PLUGIN=$<TARGET_BUNDLE_DIR:OrbitDockTile>")
+    set(DOCK_TILE_TARGET OrbitDockTile)
   else()
     set(APP_TARGET OrbitChromiumAppSmoke)
     set(PACKAGE_TARGET package_orbit_app_smoke)
+    set(DOCK_TILE_ARGUMENT "-DDOCK_TILE_PLUGIN=")
+    set(DOCK_TILE_TARGET "")
   endif()
   add_custom_target(${PACKAGE_TARGET}
     COMMAND "${CMAKE_COMMAND}"
@@ -333,8 +347,9 @@ foreach(VARIANT IN ITEMS product smoke)
       "-DCEF_ROOT=${CEF_ROOT}"
       "-DCEF_FRAMEWORK_SHA256=${CEF_FRAMEWORK_SHA256}"
       "-DHELPER_NAMES=${ORBIT_APP_HELPER_NAMES_ARGUMENT}"
+      "${DOCK_TILE_ARGUMENT}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/PackageApp.cmake"
-    DEPENDS ${APP_TARGET} ${ORBIT_APP_HELPER_TARGETS}
+    DEPENDS ${APP_TARGET} ${ORBIT_APP_HELPER_TARGETS} ${DOCK_TILE_TARGET}
     VERBATIM)
 endforeach()
 

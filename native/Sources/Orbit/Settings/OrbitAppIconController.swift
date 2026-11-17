@@ -28,15 +28,37 @@ enum OrbitAppIcon: String, CaseIterable, Identifiable {
 
 @MainActor
 final class OrbitAppIconController: ObservableObject {
+    /// Read by the Dock tile plug-in (native/OrbitChromium/DockTile) from the preferences of the
+    /// application that contains it, so keep the key and the notification name in step with it.
     static let preferenceKey = "orbit.applicationIcon"
+    static let changeNotificationSuffix = ".applicationIconChanged"
+
+    /// Scoped to the bundle identifier: test bundles never notify the product's plug-in.
+    static func changeNotificationName(applicationIdentifier: String) -> Notification.Name {
+        Notification.Name(applicationIdentifier + changeNotificationSuffix)
+    }
+
+    private static var isOrbitApplication: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") as? String == "Orbit.icns"
+            && Bundle.main.bundleURL.pathExtension == "app"
+    }
+
     static let shared = OrbitAppIconController(defaults: .standard,
         setDockIcon: { NSApplication.shared.applicationIconImage = $0 },
+        notifyDockTile: {
+            // The Dock tile plug-in draws the chosen icon while the app is not running.
+            guard isOrbitApplication, let identifier = Bundle.main.bundleIdentifier else { return }
+            UserDefaults.standard.synchronize()
+            DistributedNotificationCenter.default().postNotificationName(
+                changeNotificationName(applicationIdentifier: identifier), object: nil, userInfo: nil,
+                deliverImmediately: true)
+        },
         setBundleIcon: { image in
             // Never modify a test runner or an unrelated host application.
-            guard Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") as? String == "Orbit.icns",
-                  Bundle.main.bundleURL.pathExtension == "app" else { return false }
+            guard isOrbitApplication else { return false }
             // The signed bundle is never written: a custom Finder icon adds a file inside it and
-            // breaks code signature verification. The choice applies to the Dock while running.
+            // breaks code signature verification. The choice applies to the Dock: the app sets it
+            // while running and the Dock tile plug-in draws it while the app is not running.
             // A custom icon left by an earlier version is removed once, which restores the seal.
             if FileManager.default.fileExists(atPath: Bundle.main.bundleURL.appendingPathComponent("Icon\r").path) {
                 _ = NSWorkspace.shared.setIcon(nil, forFile: Bundle.main.bundlePath, options: [])
@@ -49,11 +71,13 @@ final class OrbitAppIconController: ObservableObject {
     private let defaults: UserDefaults
     private let setDockIcon: (NSImage) -> Void
     private let setBundleIcon: (NSImage?) -> Bool
+    private let notifyDockTile: () -> Void
 
     init(defaults: UserDefaults, setDockIcon: @escaping (NSImage) -> Void,
-         setBundleIcon: @escaping (NSImage?) -> Bool) {
+         notifyDockTile: @escaping () -> Void = {}, setBundleIcon: @escaping (NSImage?) -> Bool) {
         self.defaults = defaults
         self.setDockIcon = setDockIcon
+        self.notifyDockTile = notifyDockTile
         self.setBundleIcon = setBundleIcon
         current = defaults.string(forKey: Self.preferenceKey).flatMap(OrbitAppIcon.init(rawValue:)) ?? .defaultIcon
     }
@@ -70,6 +94,7 @@ final class OrbitAppIconController: ObservableObject {
         if icon == .defaultIcon { defaults.removeObject(forKey: Self.preferenceKey) }
         else { defaults.set(icon.rawValue, forKey: Self.preferenceKey) }
         setDockIcon(image)
+        notifyDockTile()
         // A nil image removes Finder's custom icon; the shipped default then supplies every size.
         finderIconApplied = setBundleIcon(icon == .defaultIcon ? nil : image)
         current = icon

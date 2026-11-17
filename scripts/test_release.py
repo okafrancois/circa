@@ -514,6 +514,9 @@ class ScopedEntitlementTests(unittest.TestCase):
             executable = bundle / 'Contents/Frameworks' / (name + '.app') / 'Contents/MacOS' / name
             executable.parent.mkdir(parents=True)
             executable.write_bytes(b'\xcf\xfa\xed\xfe')
+        plug_in = bundle / 'Contents/PlugIns/OrbitDockTile.docktileplugin/Contents/MacOS/OrbitDockTile'
+        plug_in.parent.mkdir(parents=True)
+        plug_in.write_bytes(b'\xcf\xfa\xed\xfe')
         downloader = bundle / 'Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader'
         downloader.parent.mkdir(parents=True)
         downloader.write_bytes(b'\xcf\xfa\xed\xfe')
@@ -563,6 +566,9 @@ class ScopedEntitlementTests(unittest.TestCase):
             self.assertEqual(observed[framework], {})
             self.assertEqual(observed[framework / 'Chromium Embedded Framework'], {})
             self.assertTrue(all('Downloader' in str(path) for path in preserved) and len(preserved) == 2)
+            plug_in = bundle / 'Contents/PlugIns/OrbitDockTile.docktileplugin'
+            self.assertEqual(observed[plug_in], {})
+            self.assertEqual(observed[plug_in / 'Contents/MacOS/OrbitDockTile'], {})
 
     def test_local_identity_keeps_the_broad_set_everywhere(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -573,6 +579,10 @@ class ScopedEntitlementTests(unittest.TestCase):
             for suffix in self.HELPERS:
                 helper = bundle / 'Contents/Frameworks' / ('Orbit Helper' + suffix + '.app')
                 self.assertEqual(set(observed[helper]), broad)
+            # The Dock tile plug-in has no entitlement with the local identity either.
+            plug_in = bundle / 'Contents/PlugIns/OrbitDockTile.docktileplugin'
+            self.assertEqual(observed[plug_in], {})
+            self.assertEqual(observed[plug_in / 'Contents/MacOS/OrbitDockTile'], {})
 
     def test_unclassified_helpers_and_host_exceptions_are_refused(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -591,8 +601,10 @@ class ScopedEntitlementTests(unittest.TestCase):
         allowed = local_signing.DEVELOPER_ID_HELPER_ENTITLEMENTS
         for suffix in self.HELPERS:
             values[bundle / 'Contents/Frameworks' / ('Orbit Helper' + suffix + '.app')] = dict.fromkeys(allowed[suffix], True)
+        values[bundle / 'Contents/PlugIns/OrbitDockTile.docktileplugin'] = {}
         for name, entitlements in overrides.items():
-            values[bundle if name == 'host' else bundle / 'Contents/Frameworks' / name] = entitlements
+            parent = 'Contents/PlugIns' if name.endswith('.docktileplugin') else 'Contents/Frameworks'
+            values[bundle if name == 'host' else bundle / parent / name] = entitlements
         return values
 
     def test_release_assertion_accepts_only_the_scoped_table(self):
@@ -606,10 +618,17 @@ class ScopedEntitlementTests(unittest.TestCase):
                 {'Orbit Helper (Renderer).app': {self.JIT: True, self.UNSIGNED: True}},
                 {'Orbit Helper (GPU).app': {self.JIT: True, self.NO_LIBRARY_VALIDATION: True}},
                 {'Orbit Helper (Alerts).app': {self.JIT: True}},
+                {'OrbitDockTile.docktileplugin': {self.NO_LIBRARY_VALIDATION: True}},
+                {'OrbitDockTile.docktileplugin': {'com.apple.security.app-sandbox': True}},
             ]
             for overrides in failures:
                 with self.subTest(overrides=overrides), self.assertRaises(RuntimeError):
                     release.verify_scoped_entitlements(bundle, read=self.signed_table(bundle, **overrides).__getitem__)
+            unknown = bundle / 'Contents/PlugIns/Other.docktileplugin'
+            unknown.mkdir()
+            with self.assertRaisesRegex(RuntimeError, 'Unclassified plug-in'):
+                release.verify_scoped_entitlements(bundle, read=lambda path: {})
+            unknown.rmdir()
             import shutil
             shutil.rmtree(bundle / 'Contents/Frameworks/Orbit Helper (Alerts).app')
             with self.assertRaises(RuntimeError):

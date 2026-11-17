@@ -14,6 +14,14 @@ add_executable(OrbitBridgePolicyTests BridgePolicyTests.cc)
 target_include_directories(OrbitBridgePolicyTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../Bridge")
 set_target_properties(OrbitBridgePolicyTests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
+# Dock tile plug-in resolution (DockTile/OrbitDockTileResolver.mm) on a synthetic app layout and a
+# throwaway file-backed preference domain: `cmake --build <dir> --target OrbitDockTileTests`.
+add_executable(OrbitDockTileTests DockTileTests.mm ../DockTile/OrbitDockTileResolver.mm)
+target_include_directories(OrbitDockTileTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../DockTile")
+target_compile_options(OrbitDockTileTests PRIVATE -fobjc-arc)
+set_target_properties(OrbitDockTileTests PROPERTIES OBJCXX_STANDARD 20)
+target_link_libraries(OrbitDockTileTests PRIVATE "-framework Foundation")
+
 # Exercises the helper's compiled dyld interposition against a separately loaded image.
 add_library(NetworkQoSFixture SHARED NetworkQoSFixture.cc)
 add_executable(OrbitNetworkQoSTests NetworkQoSTests.cc)
