@@ -127,6 +127,7 @@ enum BrowserDailyCommands {
         case .manageExtensions: "puzzlepiece.extension"
         case .addExtension: "plus.app"
         case .preferences: "gearshape"
+        case .essentialKeyboardShortcuts: "keyboard"
         case .viewHistory: "clock.arrow.circlepath"
         case .viewDownloads: "arrow.down.circle"
         case .viewLibrary: "tray"

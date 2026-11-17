@@ -406,15 +406,20 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
 
     private func rebuild(preserveSelection: Bool) {
         guard let owner else { return }
-        let installedActions = extensionRows()
-        let actions = availableActions + (draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : installedActions)
         let selectedID = preserveSelection && selectionWasMoved && results.indices.contains(selection.index) ? results[selection.index].id : nil
         let bang = inlineBang
-        results = siteSearch?.results(query: draft) ?? bang.map { $0.site.results(query: $0.query, destination: $0.url) } ?? BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
-                                                candidates: opensEmptyAddress ? candidates.filter { $0.url?.absoluteString != "about:blank" } : candidates,
-                                                history: history.filter { !deletingHistory.contains($0.url.absoluteString) }, actions: opensEmptyAddress && draft.isEmpty ? [] : actions,
-                                                prepared: opensEmptyAddress ? preparedCandidates.filter { $0.result.url?.absoluteString != "about:blank" } : preparedCandidates)
-        if siteSearch == nil, bang == nil {
+        if let siteSearch {
+            results = siteSearch.results(query: draft)
+        } else if let bang {
+            results = bang.site.results(query: bang.query, destination: bang.url)
+        } else if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let help = availableActions.first { $0.action == .command(.essentialKeyboardShortcuts) }
+            results = BrowserPaletteRanking.emptyResults(candidates: candidates, help: help)
+        } else {
+            results = BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
+                candidates: opensEmptyAddress ? candidates.filter { $0.url?.absoluteString != "about:blank" } : candidates,
+                history: history.filter { !deletingHistory.contains($0.url.absoluteString) }, actions: availableActions + extensionRows(),
+                prepared: opensEmptyAddress ? preparedCandidates.filter { $0.result.url?.absoluteString != "about:blank" } : preparedCandidates)
             results = BrowserPaletteRanking.merging(searchSuggestions.values, into: results, engine: owner.addressResolver.searchEngine)
         }
         if siteSearch == nil, bang == nil, !isSkillQuery, owner.assistantEnabled,

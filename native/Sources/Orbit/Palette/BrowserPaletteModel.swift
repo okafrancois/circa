@@ -125,6 +125,19 @@ enum BrowserPaletteRanking {
         }
     }
 
+    static func emptyResults(candidates: [BrowserPaletteResult], help: BrowserPaletteResult?) -> [BrowserPaletteResult] {
+        let tabs = candidates.filter {
+            if case .tab = $0.action { return $0.url?.absoluteString != "about:blank" }
+            return false
+        }.sorted {
+            if $0.section != $1.section { return $0.section == .tabs }
+            return $0.scopePriority < $1.scopePriority
+        }
+        var rows = Array(deduplicatingTitlesAndHosts(tabs).prefix(help == nil ? 5 : 4))
+        if let help { rows.append(help) }
+        return rows
+    }
+
     static func results(query: String, mode: BrowserPaletteMode, resolver: AddressResolver,
                         candidates: [BrowserPaletteResult], history: [BrowserHistorySuggestion],
                         actions: [BrowserPaletteResult], limit: Int = 40, prepared: [PreparedCandidate]? = nil) -> [BrowserPaletteResult] {
