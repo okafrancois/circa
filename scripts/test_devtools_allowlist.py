@@ -30,10 +30,15 @@ EVENTS = {
 REFUSAL_PROBE = 'OrbitBridgeHardeningProbe.swift'
 INTENTIONALLY_REFUSED = {'Browser.close', 'Browser.grantPermissions', 'Network.setCookies', 'Target.createTarget'}
 LITERAL = re.compile(r'"([A-Z][A-Za-z]*)\.([a-z][A-Za-z]*)"')
-# Directories whose code ships and runs in product mode.
-PRODUCT = [NATIVE / 'Sources', NATIVE / 'OrbitChromium' / 'ChromiumEngine']
-LABORATORY = [NATIVE / 'OrbitChromium' / 'App', NATIVE / 'OrbitChromium' / 'Smoke',
-              NATIVE / 'OrbitChromium' / 'Tests']
+CHROMIUM = NATIVE / 'OrbitChromium'
+# The app target ships product launch code next to synthetic probes: only its `*Probe.swift`
+# files are laboratory code.
+APP = CHROMIUM / 'App'
+# Code that ships and runs in product mode, and laboratory-only code.
+PRODUCT = [NATIVE / 'Sources', CHROMIUM / 'ChromiumEngine', APP]
+LABORATORY = [APP, CHROMIUM / 'Smoke', CHROMIUM / 'Tests', CHROMIUM / 'Lab']
+# Swift tools that never talk to the engine.
+UNRELATED = [CHROMIUM / 'WindowWatch']
 
 
 def listed(name):
@@ -42,18 +47,26 @@ def listed(name):
     return set(re.findall(r'"([^"]+)"', block.group(1)))
 
 
-def used(directories):
-    found = {}
+def swift_files(directories):
+    laboratory = directories is LABORATORY
     for directory in directories:
         for path in directory.rglob('*.swift'):
             if '/.build' in str(path):
                 continue
-            for domain, method in LITERAL.findall(path.read_text(errors='replace')):
-                name = f'{domain}.{method}'
-                if path.name == REFUSAL_PROBE and name in INTENTIONALLY_REFUSED:
-                    continue
-                if domain in DOMAINS and name not in EVENTS:
-                    found.setdefault(name, set()).add(str(path.relative_to(ROOT)))
+            if directory == APP and path.name.endswith('Probe.swift') != laboratory:
+                continue
+            yield path
+
+
+def used(directories):
+    found = {}
+    for path in swift_files(directories):
+        for domain, method in LITERAL.findall(path.read_text(errors='replace')):
+            name = f'{domain}.{method}'
+            if path.name == REFUSAL_PROBE and name in INTENTIONALLY_REFUSED:
+                continue
+            if domain in DOMAINS and name not in EVENTS:
+                found.setdefault(name, set()).add(str(path.relative_to(ROOT)))
     return found
 
 
@@ -71,6 +84,15 @@ class DevToolsAllowlistTests(unittest.TestCase):
         allowed = listed('kDevToolsProductMethods') | listed('kDevToolsLaboratoryMethods')
         stray = {name: sorted(paths) for name, paths in used(LABORATORY).items() if name not in allowed}
         self.assertEqual(stray, {})
+
+    def test_every_engine_swift_file_is_classified(self):
+        classified = set(swift_files(PRODUCT)) | set(swift_files(LABORATORY))
+        everything = {path for path in CHROMIUM.rglob('*.swift') if '/.build' not in str(path)}
+        unrelated = {path for directory in UNRELATED for path in directory.rglob('*.swift')}
+        stray = sorted(str(path.relative_to(ROOT)) for path in everything - classified - unrelated)
+        self.assertEqual(stray, [])
+        both = sorted(str(path.relative_to(ROOT)) for path in set(swift_files(PRODUCT)) & set(swift_files(LABORATORY)))
+        self.assertEqual(both, [])
 
     def test_lists_are_exact(self):
         product, laboratory = listed('kDevToolsProductMethods'), listed('kDevToolsLaboratoryMethods')
