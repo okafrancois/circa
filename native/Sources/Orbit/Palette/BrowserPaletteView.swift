@@ -244,7 +244,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         keycapBackground.frame = NSRect(x: panel.bounds.width - 22 - capWidth, y: panel.bounds.height - 37, width: capWidth, height: 24)
         let keyHeight = tabKeycap.intrinsicContentSize.height
         tabKeycap.frame = NSRect(x: 0, y: (24 - keyHeight) / 2, width: capWidth, height: keyHeight)
-        let hintWidth = min(ceil(siteHint.intrinsicContentSize.width), panel.bounds.width / 3)
+        let hintWidth = compact && !siteHint.isHidden ? ceil(siteHint.attributedStringValue.size().width) + 4 : 0
         let trailing: CGFloat = compact ? (siteHint.isHidden ? 16 : capWidth + hintWidth + 38) : (siteHint.isHidden ? 48 : 144)
         input.frame = NSRect(x: inputX, y: panel.bounds.height - inputRowHeight / 2 - inputHeight / 2,
                              width: max(0, panel.bounds.width - inputX - trailing), height: inputHeight)
@@ -514,15 +514,12 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.layer?.borderColor = (usesMaterial ? OrbitTokens.Color.Line.commandBarMaterialOuterStroke : OrbitTokens.Color.Line.commandBarOuterStroke).resolvedCGColor(for: effectiveAppearance)
     }
     func completeURL(for result: BrowserPaletteResult, draft: String) {
-        guard !suppressCompletion, (siteSearchHint == nil || anchor != nil), !draft.isEmpty,
-              !draft.contains(where: \.isWhitespace), result.section != .search,
-              result.section != .commands, let url = result.url,
+        guard !suppressCompletion, (siteSearchHint == nil || anchor != nil),
+              let completion = result.completedURL(for: draft),
               let editor = input.currentEditor() as? NSTextView, !editor.hasMarkedText(),
               editor.selectedRange().location >= (draft as NSString).length else { return }
-        let full = BrowserPaletteRanking.displayURL(url)
-        guard full.count > draft.count, full.lowercased().hasPrefix(draft.lowercased()) else { return }
-        input.stringValue = draft + full.dropFirst(draft.count)
-        editor.string = input.stringValue
+        input.stringValue = completion
+        editor.string = completion
         editor.setSelectedRange(NSRange(location: (draft as NSString).length,
                                         length: (input.stringValue as NSString).length - (draft as NSString).length))
     }

@@ -68,6 +68,30 @@ struct NativePaletteViewTests {
         #expect(!h.view.infoButton.isHidden && !h.view.divider.isHidden)
     }
 
+    @Test("The compact site search hint fits a long engine name by narrowing the input")
+    func compactSiteSearchHint() throws {
+        let h = PaletteViewHarness()
+        defer { h.close() }
+        let field = NSView(frame: NSRect(x: 8, y: 44, width: 164, height: 32))
+        h.view.addSubview(field)
+        h.view.anchor = field
+        h.render([])
+        let panelFrame = h.view.panel.frame
+        let inputWidth = h.view.input.frame.width
+        let site = BrowserSiteSearch(name: "International Catalog", shortcut: "catalog",
+                                     template: "https://catalog.test/?q=%s")
+        h.view.siteSearchHint = site
+        h.render([])
+        let hint = h.view.siteHint
+        let cell = try #require(hint.cell)
+        #expect(!hint.isHidden && hint.stringValue == uiFormat("Search %@", site.name))
+        #expect(cell.drawingRect(forBounds: hint.bounds).width >= hint.attributedStringValue.size().width)
+        #expect(hint.frame.minX > h.view.input.frame.maxX)
+        #expect(hint.frame.maxX < h.view.panel.bounds.maxX)
+        #expect(h.view.input.frame.width > 0 && h.view.input.frame.width < inputWidth)
+        #expect(h.view.panel.frame == panelFrame)
+    }
+
     @Test("Extension rows keep the puzzle symbol separate from the named icon chip across reuse")
     func extensionChip() throws {
         let h = PaletteViewHarness(); defer { h.close() }

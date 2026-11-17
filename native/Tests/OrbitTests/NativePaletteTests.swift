@@ -372,15 +372,15 @@ struct NativePaletteTests {
     func defaultSelectionAndSearchIntent() async throws {
         let h = try await PaletteHarness()
         _ = try await h.recorder.importDocument(.init(profileID: h.profileID, visits: (0..<60).map {
-            .init(url: URL(string: "https://different\($0).test/")!, title: "Reference letter e \($0)", typedCount: 1)
+            .init(url: URL(string: "https://example\($0).test/")!, title: "Reference letter e \($0)", typedCount: 1)
         }))
         await h.show()
         h.window.palette.query("e")
         await h.window.palette.waitForResults()
         #expect(h.window.palette.results.first?.section == .history)
         #expect(h.window.palette.selection.index == 0)
-        #expect(h.window.palette.results.last?.id == "search")
         let search = try #require(h.window.palette.results.firstIndex { $0.id == "search" })
+        #expect(search == 1)
         h.window.palette.move(search)
         h.window.palette.query("e", preserveSelection: true, userInitiated: false)
         await h.window.palette.waitForResults()
@@ -921,6 +921,35 @@ extension NativeWebKitTests.NativePaletteTests {
         #expect(!h.window.palette.results.contains { $0.remoteSuggestion == "orbit news" })
         h.window.palette.showsSearchSuggestions = false
         #expect(!h.window.palette.results.contains { $0.remoteSuggestion != nil })
+        try await h.close()
+    }
+
+    @Test("Both presentations rank the exact draft before remote suggestions, below a URL completion when available",
+          arguments: [false, true])
+    func exactQueryOrder(compact: Bool) async throws {
+        let h = try await PaletteHarness()
+        _ = try await h.recorder.importDocument(.init(profileID: h.profileID, visits: [
+            .init(url: try #require(URL(string: "https://www.google.com/")), title: "Google", typedCount: 1)
+        ]))
+        let palette = try #require(h.window.palette)
+        palette.searchSuggestions = PaletteSuggestionURLProtocol.service()
+        if compact {
+            palette.registry = h.registry
+            h.window.addressField.onAddressPress?()
+            await palette.waitForResults()
+        } else {
+            await h.show()
+        }
+        #expect(palette.isPresented && (palette.view.anchor != nil) == compact)
+        for (draft, expected) in [
+            ("google", ["Google", "google", "google guide", "google news"]),
+            ("synthetic query", ["synthetic query", "synthetic query guide", "synthetic query news"])
+        ] {
+            palette.query(draft)
+            await palette.waitForResults()
+            #expect(palette.results.map(\.title) == expected)
+            #expect(palette.results.filter { $0.id == "search" }.map(\.title) == [draft])
+        }
         try await h.close()
     }
 }

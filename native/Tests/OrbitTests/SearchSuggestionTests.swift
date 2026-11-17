@@ -119,14 +119,14 @@ struct SearchSuggestionTests {
         #expect(service.values.isEmpty)
     }
 
-    @Test("Local rows remain first, remote duplicates disappear, and hidden text stays hidden after reopening")
+    @Test("The exact query leads ordinary matches, remote duplicates disappear, and hidden text stays hidden after reopening")
     func mergingAndHiding() async throws {
         SuggestionURLProtocol.state.reset()
         let local = [BrowserPaletteResult(id: "local", title: "Orbit guide", detail: "", section: .history, action: .navigate(URL(string: "https://example.test")!)),
                      BrowserPaletteResult(id: "search", title: "orbit", detail: "", section: .search, action: .navigate(SearchEngine.google.searchURL(for: "orbit")))]
         let merged = BrowserPaletteRanking.merging(["orbit", "orbit guide", "orbit news", "ORBIT NEWS"], into: local, engine: .google)
-        #expect(merged.map(\.title) == ["Orbit guide", "orbit news", "orbit"])
-        #expect(merged[1].remoteSuggestion == "orbit news")
+        #expect(merged.map(\.title) == ["orbit", "Orbit guide", "orbit news"])
+        #expect(merged[2].remoteSuggestion == "orbit news")
         let service = SuggestionURLProtocol.service(), profile = ProfileID()
         service.update(query: "orbit", engine: .google, profileID: profile, enabled: true, isPrivate: false)
         await service.waitForResults()

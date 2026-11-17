@@ -43,6 +43,15 @@ struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
     var url: URL? {
         if case .navigate(let url) = action { return url }; return sourceURL
     }
+
+    func completedURL(for draft: String) -> String? {
+        guard !draft.isEmpty, !draft.contains(where: \.isWhitespace),
+              section != .search, section != .commands, let url else { return nil }
+        let full = BrowserPaletteRanking.displayURL(url)
+        guard full.count > draft.count, full.lowercased().hasPrefix(draft.lowercased()) else { return nil }
+        return draft + full.dropFirst(draft.count)
+    }
+
     var symbol: String {
         if case .extensionAction = action { return "puzzlepiece.extension" }
         if case .ask = action { return "sparkles" }
@@ -217,7 +226,7 @@ enum BrowserPaletteRanking {
         rows += prefix([.archive], excluding: rows)
         rows = deduplicatingTitlesAndHosts(rows)
         // URL input remains authoritative (an exact open URL may switch to its live tab).
-        // Text matches autocomplete first; the explicit web search is always the last row.
+        // Reserve a slot for the exact query before merging suggestions for the palette.
         if let typed {
             if case .page = destination {
                 if mode == .newTab, limit > 1,
@@ -251,8 +260,16 @@ enum BrowserPaletteRanking {
             return .init(id: "remote:\(engine.rawValue):\(BrowserSearchSuggestions.identity(text))", title: text,
                          detail: "", section: .search, action: .navigate(url), remoteSuggestion: text)
         }
-        let explicit = local.filter { $0.id == "search" }
-        return Array((local.filter { $0.id != "search" } + searches).prefix(40 - explicit.count)) + explicit
+        guard let exactIndex = local.firstIndex(where: { $0.id == "search" }) else {
+            return Array((local + searches).prefix(40))
+        }
+        var rows = local
+        let exact = rows.remove(at: exactIndex)
+        // A leading command keeps its Return shortcut. For web queries only a URL
+        // completion takes precedence over searching the exact text.
+        let keepsTopHit = rows.first.map { $0.section == .commands || $0.completedURL(for: exact.title) != nil } ?? false
+        rows.insert(exact, at: keepsTopHit ? 1 : 0)
+        return Array((rows + searches).prefix(40))
     }
 
     /// Palette-only presentation: keep the navigation URL and search index unchanged.
