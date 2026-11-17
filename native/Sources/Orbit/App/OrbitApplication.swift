@@ -68,6 +68,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     var pendingBrowserImport: BrowserImportOfflineJob?
     /// First-run onboarding of this launch; main windows are held until it hands off.
     var onboarding: OrbitOnboardingWindowController?
+    private var launchRestoredWindowIDs: Set<UUID> = []
     var heldOnboardingWindows: [OrbitWindowController] = []
     var onOnboardingFinished: ((BrowserOnboardingRecord) -> Void)?
     lazy var browserImport = BrowserImportCoordinator()
@@ -135,6 +136,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     private(set) lazy var windows: BrowserWindowRouter<OrbitWindowController> = BrowserWindowRouter(
         create: { [weak self] id in
             guard let self, let environment = self.privateWindows[id]?.environment ?? self.environment else { throw CancellationError() }
+            let restoringAtLaunch = self.launchRestoredWindowIDs.remove(id) != nil
             defer { self.inheritedWindowProfiles[id] = nil }
             let spaceID: SpaceID?
             let tearOff = self.tearOffRequests.removeValue(forKey: id)
@@ -177,6 +179,10 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             }
             controller.favorites.bind(to: self.commands.registry)
             controller.palette.registry = self.commands.registry
+            if restoringAtLaunch {
+                await controller.session.waitForPendingCommands()
+                controller.prepareLaunchNewTab()
+            }
             controller.sidebar.spaceShortcutLabel = { [weak registry = self.commands.registry] index in
                 guard let registry else { return nil }
                 return BrowserSpaceCommands.shortcutLabel(at: index, definitions: registry.definitions)
@@ -273,6 +279,9 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             let restoredWindowCount = environment?.restoredWindowIDs.count ?? 0
             await prepareOnboarding()
             if let ids = environment?.restoredWindowIDs, !ids.isEmpty {
+                if onboarding == nil, pendingExternalURLs.isEmpty {
+                    launchRestoredWindowIDs = Set(ids.map(\.rawValue))
+                }
                 for id in ids { windows.newWindow(id: id.rawValue) }
             } else if pendingExternalURLs.isEmpty || environment?.settings.document.opensExternalLinksInQuickWindow != true {
                 windows.newWindow()
@@ -285,6 +294,11 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             if let onboarding { onboarding.present() }
             else { offerArcImportIfFirstRun(restoredWindowCount: restoredWindowCount) }
         }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // App activation and key-window notifications can arrive in either order.
+        (NSApp.keyWindow?.windowController as? OrbitWindowController)?.presentLaunchNewTabIfReady()
     }
 
     /// LaunchServices delivers cold-launch URL events before or during asynchronous restoration.

@@ -1,6 +1,41 @@
 import AppKit
+import BrowserCore
+
+struct BrowserLaunchNewTab {
+    private var pendingSpaceID: SpaceID?
+
+    mutating func restore(spaceID: SpaceID, hasSelectedTab: Bool) {
+        pendingSpaceID = hasSelectedTab ? nil : spaceID
+    }
+
+    mutating func reconcile(spaceID: SpaceID?, hasSelectedTab: Bool) {
+        if hasSelectedTab || spaceID != pendingSpaceID { pendingSpaceID = nil }
+    }
+
+    mutating func shouldPresent(isKeyWindow: Bool, isApplicationActive: Bool) -> Bool {
+        guard pendingSpaceID != nil, isKeyWindow, isApplicationActive else { return false }
+        pendingSpaceID = nil
+        return true
+    }
+}
 
 extension BrowserWindowController {
+    func prepareLaunchNewTab() {
+        guard !isPrivateWindow, let snapshot = session.snapshot, !snapshot.isStandalone else { return }
+        launchNewTab.restore(spaceID: snapshot.activeSpaceID, hasSelectedTab: snapshot.selectedOccurrenceID != nil)
+    }
+
+    func reconcileLaunchNewTab() {
+        launchNewTab.reconcile(spaceID: session.snapshot?.activeSpaceID,
+                               hasSelectedTab: session.snapshot?.selectedOccurrenceID != nil)
+    }
+
+    func presentLaunchNewTabIfReady() {
+        guard acceptsCommands, !session.isClosed, let window,
+              launchNewTab.shouldPresent(isKeyWindow: window.isKeyWindow, isApplicationActive: NSApp.isActive) else { return }
+        if !palette.isPresented { palette.present(.newTab) }
+    }
+
     func installPalette(in root: NSView) {
         palette.view.frame = root.bounds
         palette.view.autoresizingMask = [.width, .height]
