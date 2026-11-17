@@ -9,6 +9,34 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.0-nightly.7/</id>
+    <title>0.75.0-nightly.7 — The empty command bar starts with your open tabs.</title>
+    <link href="https://circabrowser.com/changelog/0.75.0-nightly.7/" />
+    <updated>2026-11-17T00:00:00Z</updated>
+    <published>2026-11-17T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>The empty command bar starts with your open tabs.
+
+1 fixed
+
+## Fixed
+
+- With nothing typed, the command bar now lists your open tabs and favorites first, ready to switch to, followed by the keyboard shortcuts help. New Window and the extension commands are still found by typing.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.0-nightly.7" data-version="0.75.0-nightly.7" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.0-nightly.7" aria-label="Link to version 0.75.0-nightly.7"&gt;0.75.0-nightly.7&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-17"&gt;November 17, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;The empty command bar starts with your open tabs.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;With nothing typed, the command bar now lists your open tabs and favorites first, ready to switch to, followed by the keyboard shortcuts help. New Window and the extension commands are still found by typing.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.0-nightly.7/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.0-nightly.6/</id>
     <title>0.75.0-nightly.6 — Click the address in the sidebar to search or edit it in place.</title>
     <link href="https://circabrowser.com/changelog/0.75.0-nightly.6/" />
