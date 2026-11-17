@@ -9,6 +9,49 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.0-nightly.6/</id>
+    <title>0.75.0-nightly.6 — Click the address in the sidebar to search or edit it in place.</title>
+    <link href="https://circabrowser.com/changelog/0.75.0-nightly.6/" />
+    <updated>2026-11-17T00:00:00Z</updated>
+    <published>2026-11-17T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Click the address in the sidebar to search or edit it in place.
+
+1 new
+
+## New
+
+- Clicking the address in the sidebar now opens a compact command bar right over it, with the current address selected. Type a search or a new address and press Return to load it in the same tab, or press Tab to search the suggested site.
+
+## Known limits
+
+- Command-L still opens the centered command bar.
+- The compact bar appears and disappears without an animation for now.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.0-nightly.6" data-version="0.75.0-nightly.6" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.0-nightly.6" aria-label="Link to version 0.75.0-nightly.6"&gt;0.75.0-nightly.6&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-17"&gt;November 17, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Click the address in the sidebar to search or edit it in place.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 new&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Clicking the address in the sidebar now opens a compact command bar right over it, with the current address selected. Type a search or a new address and press Return to load it in the same tab, or press Tab to search the suggested site.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Command-L still opens the centered command bar.&lt;/li&gt;
+    &lt;li&gt;The compact bar appears and disappears without an animation for now.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0-nightly.6/address-command-bar.jpg" aria-label="Clicking the sidebar address opens a compact command bar right over it."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0-nightly.6/address-command-bar.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0-nightly.6/address-command-bar.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Clicking the sidebar address opens a compact command bar right over it.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.0-nightly.6/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.0-nightly.5/</id>
     <title>0.75.0-nightly.5 — Starting Circa with no open tab takes you straight to search.</title>
     <link href="https://circabrowser.com/changelog/0.75.0-nightly.5/" />
