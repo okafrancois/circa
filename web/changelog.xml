@@ -9,6 +9,40 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.1/</id>
+    <title>0.75.1 — Readable downloads and Gmail previews you can actually use.</title>
+    <link href="https://circabrowser.com/changelog/0.75.1/" />
+    <updated>2026-11-18T00:00:00Z</updated>
+    <published>2026-11-18T00:00:00Z</published>
+    <category term="stable" />
+    <summary>Readable downloads and Gmail previews you can actually use.
+
+4 fixed
+
+## Fixed
+
+- The sidebar downloads list opens from anywhere on its button, including the badge, and stays open while you move into it. It sits on the sidebar's own background, hiding the tabs behind it and fading into the rest of the sidebar, so file names are readable.
+- Gmail and Calendar favorite previews stay open while you move into them, so you can scroll, open a message or click + to compose. The favorite's title tooltip no longer covers them, and Gmail previews have a solid background.
+- While the pointer is in the downloads list or a preview, tabs, favorites and page links behind it no longer highlight or change the cursor, and scrolling stays in the preview.
+- Clicking a message in a Gmail preview opens that conversation instead of the inbox or an error page; messages highlight under the pointer and the + button for a new message is clearly visible.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.1" data-version="0.75.1" data-channel="stable" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.1" aria-label="Link to version 0.75.1"&gt;0.75.1&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-18"&gt;November 18, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Stable&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Readable downloads and Gmail previews you can actually use.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;4 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;The sidebar downloads list opens from anywhere on its button, including the badge, and stays open while you move into it. It sits on the sidebar&amp;#x27;s own background, hiding the tabs behind it and fading into the rest of the sidebar, so file names are readable.&lt;/li&gt;
+    &lt;li&gt;Gmail and Calendar favorite previews stay open while you move into them, so you can scroll, open a message or click + to compose. The favorite&amp;#x27;s title tooltip no longer covers them, and Gmail previews have a solid background.&lt;/li&gt;
+    &lt;li&gt;While the pointer is in the downloads list or a preview, tabs, favorites and page links behind it no longer highlight or change the cursor, and scrolling stays in the preview.&lt;/li&gt;
+    &lt;li&gt;Clicking a message in a Gmail preview opens that conversation instead of the inbox or an error page; messages highlight under the pointer and the + button for a new message is clearly visible.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.1/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.1-nightly.4/</id>
     <title>0.75.1-nightly.4 — Gmail preview messages open instead of showing an error.</title>
     <link href="https://circabrowser.com/changelog/0.75.1-nightly.4/" />
