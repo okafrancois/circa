@@ -4,10 +4,161 @@
   <title>Circa releases</title>
   <link href="https://circabrowser.com/changelog.xml" rel="self" />
   <link href="https://circabrowser.com/changelog" rel="alternate" />
-  <updated>2026-11-17T00:00:00Z</updated>
+  <updated>2026-11-18T00:00:00Z</updated>
   <author>
     <name>Circa</name>
   </author>
+  <entry>
+    <id>https://circabrowser.com/changelog/0.75.0/</id>
+    <title>0.75.0 — Search right from the sidebar address, encrypted iCloud sync and a cleaner way to clear site data.</title>
+    <link href="https://circabrowser.com/changelog/0.75.0/" />
+    <updated>2026-11-18T00:00:00Z</updated>
+    <published>2026-11-18T00:00:00Z</published>
+    <category term="stable" />
+    <summary>Search right from the sidebar address, encrypted iCloud sync and a cleaner way to clear site data.
+
+7 new · 8 faster · 14 fixed · 1 smaller
+
+## New
+
+- Clicking the address in the sidebar opens a compact command bar right over it, with the current address selected. Type a search or a new address and press Return to load it in the same tab, or press Tab to search the suggested site.
+- When Circa starts and the restored window has no open tab, the New Tab search opens right away, focused and ready to type. Press Escape to keep the empty page.
+- **Sync passwords** is a separate switch under Settings › General. It is off on new setups and stays on if you already synced; turning it off stops password sync on this Mac and leaves the copies already in iCloud.
+- **Clear Site Data for This Profile…** removes cookies, cache, local storage, IndexedDB and service workers for that profile only; history, passwords and site permissions stay. Clearing one site's data also works when no tab shows that site.
+- Private windows are hidden from window captures by other apps.
+- Every profile now sends Global Privacy Control, asking sites not to sell or share your data.
+- The app icon you choose in Settings › Appearance stays in the Dock when Circa is not running, as long as Circa is kept in the Dock.
+
+## Faster
+
+- Library history search no longer blocks visit recording or sync: searching 200,000 visits for a common word takes 18.5 ms → 1.8 ms, and for a site name 62 ms → 0.8 ms.
+- History sync writes only what changed: about 33 KB per sync instead of rewriting about 160 MB for a 200,000-visit history (disk write per cycle 2.7 s → 2 ms).
+- Retyping a letter you just deleted shows search suggestions in 275–306 ms → 2–4 ms.
+- While the assistant writes, each new word costs 24 ms → 1.0 ms of main-thread time on a 30-message conversation (peaks 52–134 ms → 1.2 ms).
+- Opening the assistant panel on a 120 Hz display draws 20 → 47 frames, with no frozen frames.
+- Toggling a site permission costs 9.1 ms → 0.007 ms on the main thread.
+- Refreshing 100 sidebar rows without a cached icon takes 3 ms → 0.1 ms.
+- Session saves during sustained activity: 6.3 → 1.1 per second.
+
+## Fixed
+
+- With nothing typed, the command bar lists your open tabs and favorites first, followed by the keyboard shortcuts help; searching for exactly what you typed comes right after the top suggestion.
+- Spaces, tabs, settings and history now sync end-to-end encrypted in iCloud, like passwords already did.
+- Deleting a password no longer leaves its secret in the sync record that tells other Macs to delete it.
+- Turning iCloud sync off deletes its local caches.
+- Deleting history for a time range, a site or a single visit also removes it from the engine's own history.
+- Links opened with ⌘-click, ⌥-click into a split, ⇧-click into Peek, or Open Link in New Tab / Split View keep their originating page, so sites no longer receive their strict same-site cookies on cross-site opens.
+- Tabs opened in the background with ⌘-click no longer appear blank when you select them.
+- Browser-internal debug pages and `javascript:` addresses can no longer be loaded from session restore, AppleScript, link routing or other apps, and AppleScript can no longer run JavaScript in a private window.
+- Link routing rules match only a link's site and path; links opened from other apps have embedded user names and passwords removed.
+- Link previews refuse local-network and private addresses, including after redirects; update checks no longer send cookies.
+- Removing a profile also deletes its web cache and cookie backups, and resumes that cleanup after an interruption. Clearing one site's data also removes its cookies from migration backups.
+- Circa no longer writes inside its own app bundle, so its code signature stays valid; macOS no longer keeps its own snapshots of browser windows.
+- The Safe Browsing key no longer stays in the environment of processes Circa starts later, and password exports read during an import stay in memory.
+- Assistant animations, the Today sidebar accessory and palette transitions follow the display's refresh rate; Space switches no longer write settings during the swipe.
+
+## Smaller
+
+- Refreshed the bundled ad and tracker blocking lists.
+
+## Known limits
+
+- An older Circa cannot read the newly encrypted sync records until it updates; going back manually to 0.74.0 leaves history unavailable (not deleted) until the next update.
+- Command-L still opens the centered command bar, and the compact bar over the address appears without an animation.
+- Finder keeps showing the default app icon; the Dock may only pick up the chosen icon after the next login.
+- The engine deletes a URL's visits for a whole day, so deleting one visit can remove other visits of that URL the same day from the engine's history; history deletions received from another Mac are not yet removed from it.
+
+Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24; EasyList / EasyPrivacy pin fd7771846bc3bed3b5b6225de036652542817789
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.0" data-version="0.75.0" data-channel="stable" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.0" aria-label="Link to version 0.75.0"&gt;0.75.0&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-18"&gt;November 18, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Stable&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Search right from the sidebar address, encrypted iCloud sync and a cleaner way to clear site data.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;7 new · 8 faster · 14 fixed · 1 smaller&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Clicking the address in the sidebar opens a compact command bar right over it, with the current address selected. Type a search or a new address and press Return to load it in the same tab, or press Tab to search the suggested site.&lt;/li&gt;
+    &lt;li&gt;When Circa starts and the restored window has no open tab, the New Tab search opens right away, focused and ready to type. Press Escape to keep the empty page.&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;Sync passwords&lt;/strong&gt; is a separate switch under Settings › General. It is off on new setups and stays on if you already synced; turning it off stops password sync on this Mac and leaves the copies already in iCloud.&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;Clear Site Data for This Profile…&lt;/strong&gt; removes cookies, cache, local storage, IndexedDB and service workers for that profile only; history, passwords and site permissions stay. Clearing one site&amp;#x27;s data also works when no tab shows that site.&lt;/li&gt;
+    &lt;li&gt;Private windows are hidden from window captures by other apps.&lt;/li&gt;
+    &lt;li&gt;Every profile now sends Global Privacy Control, asking sites not to sell or share your data.&lt;/li&gt;
+    &lt;li&gt;The app icon you choose in Settings › Appearance stays in the Dock when Circa is not running, as long as Circa is kept in the Dock.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Faster&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Library history search no longer blocks visit recording or sync: searching 200,000 visits for a common word takes 18.5 ms → 1.8 ms, and for a site name 62 ms → 0.8 ms.&lt;/li&gt;
+    &lt;li&gt;History sync writes only what changed: about 33 KB per sync instead of rewriting about 160 MB for a 200,000-visit history (disk write per cycle 2.7 s → 2 ms).&lt;/li&gt;
+    &lt;li&gt;Retyping a letter you just deleted shows search suggestions in 275–306 ms → 2–4 ms.&lt;/li&gt;
+    &lt;li&gt;While the assistant writes, each new word costs 24 ms → 1.0 ms of main-thread time on a 30-message conversation (peaks 52–134 ms → 1.2 ms).&lt;/li&gt;
+    &lt;li&gt;Opening the assistant panel on a 120 Hz display draws 20 → 47 frames, with no frozen frames.&lt;/li&gt;
+    &lt;li&gt;Toggling a site permission costs 9.1 ms → 0.007 ms on the main thread.&lt;/li&gt;
+    &lt;li&gt;Refreshing 100 sidebar rows without a cached icon takes 3 ms → 0.1 ms.&lt;/li&gt;
+    &lt;li&gt;Session saves during sustained activity: 6.3 → 1.1 per second.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;With nothing typed, the command bar lists your open tabs and favorites first, followed by the keyboard shortcuts help; searching for exactly what you typed comes right after the top suggestion.&lt;/li&gt;
+    &lt;li&gt;Spaces, tabs, settings and history now sync end-to-end encrypted in iCloud, like passwords already did.&lt;/li&gt;
+    &lt;li&gt;Deleting a password no longer leaves its secret in the sync record that tells other Macs to delete it.&lt;/li&gt;
+    &lt;li&gt;Turning iCloud sync off deletes its local caches.&lt;/li&gt;
+    &lt;li&gt;Deleting history for a time range, a site or a single visit also removes it from the engine&amp;#x27;s own history.&lt;/li&gt;
+    &lt;li&gt;Links opened with ⌘-click, ⌥-click into a split, ⇧-click into Peek, or Open Link in New Tab / Split View keep their originating page, so sites no longer receive their strict same-site cookies on cross-site opens.&lt;/li&gt;
+    &lt;li&gt;Tabs opened in the background with ⌘-click no longer appear blank when you select them.&lt;/li&gt;
+    &lt;li&gt;Browser-internal debug pages and &lt;code&gt;javascript:&lt;/code&gt; addresses can no longer be loaded from session restore, AppleScript, link routing or other apps, and AppleScript can no longer run JavaScript in a private window.&lt;/li&gt;
+    &lt;li&gt;Link routing rules match only a link&amp;#x27;s site and path; links opened from other apps have embedded user names and passwords removed.&lt;/li&gt;
+    &lt;li&gt;Link previews refuse local-network and private addresses, including after redirects; update checks no longer send cookies.&lt;/li&gt;
+    &lt;li&gt;Removing a profile also deletes its web cache and cookie backups, and resumes that cleanup after an interruption. Clearing one site&amp;#x27;s data also removes its cookies from migration backups.&lt;/li&gt;
+    &lt;li&gt;Circa no longer writes inside its own app bundle, so its code signature stays valid; macOS no longer keeps its own snapshots of browser windows.&lt;/li&gt;
+    &lt;li&gt;The Safe Browsing key no longer stays in the environment of processes Circa starts later, and password exports read during an import stay in memory.&lt;/li&gt;
+    &lt;li&gt;Assistant animations, the Today sidebar accessory and palette transitions follow the display&amp;#x27;s refresh rate; Space switches no longer write settings during the swipe.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Smaller&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Refreshed the bundled ad and tracker blocking lists.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;An older Circa cannot read the newly encrypted sync records until it updates; going back manually to 0.74.0 leaves history unavailable (not deleted) until the next update.&lt;/li&gt;
+    &lt;li&gt;Command-L still opens the centered command bar, and the compact bar over the address appears without an animation.&lt;/li&gt;
+    &lt;li&gt;Finder keeps showing the default app icon; the Dock may only pick up the chosen icon after the next login.&lt;/li&gt;
+    &lt;li&gt;The engine deletes a URL&amp;#x27;s visits for a whole day, so deleting one visit can remove other visits of that URL the same day from the engine&amp;#x27;s history; history deletions received from another Mac are not yet removed from it.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;p class="release-engine"&gt;Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24; EasyList / EasyPrivacy pin fd7771846bc3bed3b5b6225de036652542817789&lt;/p&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0/address-command-bar.jpg" aria-label="Clicking the sidebar address opens a compact command bar right over it."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0/address-command-bar.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0/address-command-bar.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Clicking the sidebar address opens a compact command bar right over it.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0/launch-new-tab.jpg" aria-label="With no tab to restore, the window opens with the New Tab search ready to type."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0/launch-new-tab.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0/launch-new-tab.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;With no tab to restore, the window opens with the New Tab search ready to type.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0/sync-privacy.jpg" aria-label="Choose whether passwords sync, separately from the rest of iCloud sync."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0/sync-privacy.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0/sync-privacy.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Choose whether passwords sync, separately from the rest of iCloud sync.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0/site-data-clear.jpg" aria-label="Clear every website&amp;#x27;s data for one profile from Privacy &amp;amp; Site Settings."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0/site-data-clear.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0/site-data-clear.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Clear every website&amp;#x27;s data for one profile from Privacy &amp;amp; Site Settings.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0/private-window-capture.jpg" aria-label="A private window cannot be captured by another app; a normal window still can."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0/private-window-capture.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0/private-window-capture.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;A private window cannot be captured by another app; a normal window still can.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.0/dock-tile-icon.jpg" aria-label="The icon chosen in Settings stays in the Dock after quitting, and changes live."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.0/dock-tile-icon.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.0/dock-tile-icon.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;The icon chosen in Settings stays in the Dock after quitting, and changes live.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.0/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
   <entry>
     <id>https://circabrowser.com/changelog/0.75.0-nightly.8/</id>
     <title>0.75.0-nightly.8 — Searching for exactly what you typed is one row away.</title>

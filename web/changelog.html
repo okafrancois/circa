@@ -68,7 +68,8 @@
 <p class="mono vn-title">Releases</p>
 <label for="release-search" hidden id="search-label">Find a release</label>
 <input id="release-search" type="search" placeholder="Find a release" aria-label="Find a release" hidden>
-<nav aria-label="Versions" id="versions"><a href="#v0.75.0-nightly.8" data-channel="nightly" data-version="0.75.0-nightly.8">0.75.0-nightly.8</a>
+<nav aria-label="Versions" id="versions"><a href="#v0.75.0" data-channel="stable" data-version="0.75.0">0.75.0</a>
+<a href="#v0.75.0-nightly.8" data-channel="nightly" data-version="0.75.0-nightly.8">0.75.0-nightly.8</a>
 <a href="#v0.75.0-nightly.7" data-channel="nightly" data-version="0.75.0-nightly.7">0.75.0-nightly.7</a>
 <a href="#v0.75.0-nightly.6" data-channel="nightly" data-version="0.75.0-nightly.6">0.75.0-nightly.6</a>
 <a href="#v0.75.0-nightly.5" data-channel="nightly" data-version="0.75.0-nightly.5">0.75.0-nightly.5</a>
@@ -241,7 +242,95 @@
 <a href="#v0.1.0" data-channel="stable" data-version="0.1.0">0.1.0</a></nav>
 <a class="archive-link" href="changelog.xml">Subscribe via Atom ↗</a>
 </aside>
-<div class="timeline"><div id="releases"><article class="release" id="v0.75.0-nightly.8" data-version="0.75.0-nightly.8" data-channel="nightly" data-latest="false">
+<div class="timeline"><div id="releases"><article class="release" id="v0.75.0" data-version="0.75.0" data-channel="stable" data-latest="true">
+  <div class="release-meta"><h2><a href="#v0.75.0" aria-label="Link to version 0.75.0">0.75.0</a></h2>
+  <time datetime="2026-11-18">November 18, 2026</time><span class="release-channel">Stable</span></div>
+  <div class="release-copy"><h3>Search right from the sidebar address, encrypted iCloud sync and a cleaner way to clear site data.</h3>
+  <p class="release-counts">7 new · 8 faster · 14 fixed · 1 smaller</p>
+  <h4>New</h4>
+  <ul>
+    <li>Clicking the address in the sidebar opens a compact command bar right over it, with the current address selected. Type a search or a new address and press Return to load it in the same tab, or press Tab to search the suggested site.</li>
+    <li>When Circa starts and the restored window has no open tab, the New Tab search opens right away, focused and ready to type. Press Escape to keep the empty page.</li>
+    <li><strong>Sync passwords</strong> is a separate switch under Settings › General. It is off on new setups and stays on if you already synced; turning it off stops password sync on this Mac and leaves the copies already in iCloud.</li>
+    <li><strong>Clear Site Data for This Profile…</strong> removes cookies, cache, local storage, IndexedDB and service workers for that profile only; history, passwords and site permissions stay. Clearing one site&#x27;s data also works when no tab shows that site.</li>
+    <li>Private windows are hidden from window captures by other apps.</li>
+    <li>Every profile now sends Global Privacy Control, asking sites not to sell or share your data.</li>
+    <li>The app icon you choose in Settings › Appearance stays in the Dock when Circa is not running, as long as Circa is kept in the Dock.</li>
+  </ul>
+  <h4>Faster</h4>
+  <ul>
+    <li>Library history search no longer blocks visit recording or sync: searching 200,000 visits for a common word takes 18.5 ms → 1.8 ms, and for a site name 62 ms → 0.8 ms.</li>
+    <li>History sync writes only what changed: about 33 KB per sync instead of rewriting about 160 MB for a 200,000-visit history (disk write per cycle 2.7 s → 2 ms).</li>
+    <li>Retyping a letter you just deleted shows search suggestions in 275–306 ms → 2–4 ms.</li>
+    <li>While the assistant writes, each new word costs 24 ms → 1.0 ms of main-thread time on a 30-message conversation (peaks 52–134 ms → 1.2 ms).</li>
+    <li>Opening the assistant panel on a 120 Hz display draws 20 → 47 frames, with no frozen frames.</li>
+    <li>Toggling a site permission costs 9.1 ms → 0.007 ms on the main thread.</li>
+    <li>Refreshing 100 sidebar rows without a cached icon takes 3 ms → 0.1 ms.</li>
+    <li>Session saves during sustained activity: 6.3 → 1.1 per second.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>With nothing typed, the command bar lists your open tabs and favorites first, followed by the keyboard shortcuts help; searching for exactly what you typed comes right after the top suggestion.</li>
+    <li>Spaces, tabs, settings and history now sync end-to-end encrypted in iCloud, like passwords already did.</li>
+    <li>Deleting a password no longer leaves its secret in the sync record that tells other Macs to delete it.</li>
+    <li>Turning iCloud sync off deletes its local caches.</li>
+    <li>Deleting history for a time range, a site or a single visit also removes it from the engine&#x27;s own history.</li>
+    <li>Links opened with ⌘-click, ⌥-click into a split, ⇧-click into Peek, or Open Link in New Tab / Split View keep their originating page, so sites no longer receive their strict same-site cookies on cross-site opens.</li>
+    <li>Tabs opened in the background with ⌘-click no longer appear blank when you select them.</li>
+    <li>Browser-internal debug pages and <code>javascript:</code> addresses can no longer be loaded from session restore, AppleScript, link routing or other apps, and AppleScript can no longer run JavaScript in a private window.</li>
+    <li>Link routing rules match only a link&#x27;s site and path; links opened from other apps have embedded user names and passwords removed.</li>
+    <li>Link previews refuse local-network and private addresses, including after redirects; update checks no longer send cookies.</li>
+    <li>Removing a profile also deletes its web cache and cookie backups, and resumes that cleanup after an interruption. Clearing one site&#x27;s data also removes its cookies from migration backups.</li>
+    <li>Circa no longer writes inside its own app bundle, so its code signature stays valid; macOS no longer keeps its own snapshots of browser windows.</li>
+    <li>The Safe Browsing key no longer stays in the environment of processes Circa starts later, and password exports read during an import stay in memory.</li>
+    <li>Assistant animations, the Today sidebar accessory and palette transitions follow the display&#x27;s refresh rate; Space switches no longer write settings during the swipe.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Refreshed the bundled ad and tracker blocking lists.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
+    <li>An older Circa cannot read the newly encrypted sync records until it updates; going back manually to 0.74.0 leaves history unavailable (not deleted) until the next update.</li>
+    <li>Command-L still opens the centered command bar, and the compact bar over the address appears without an animation.</li>
+    <li>Finder keeps showing the default app icon; the Dock may only pick up the chosen icon after the next login.</li>
+    <li>The engine deletes a URL&#x27;s visits for a whole day, so deleting one visit can remove other visits of that URL the same day from the engine&#x27;s history; history deletions received from another Mac are not yet removed from it.</li>
+  </ul>
+  <p class="release-engine">Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24; EasyList / EasyPrivacy pin fd7771846bc3bed3b5b6225de036652542817789</p>
+  <figure class="release-media">
+    <video muted loop playsinline controls preload="none" poster="assets/releases/0.75.0/address-command-bar.jpg" aria-label="Clicking the sidebar address opens a compact command bar right over it.">
+      <source src="assets/releases/0.75.0/address-command-bar.mp4" type="video/mp4">
+      <a href="assets/releases/0.75.0/address-command-bar.mp4">Download the clip</a>
+    </video><figcaption>Clicking the sidebar address opens a compact command bar right over it.</figcaption></figure>
+  <figure class="release-media">
+    <video muted loop playsinline controls preload="none" poster="assets/releases/0.75.0/launch-new-tab.jpg" aria-label="With no tab to restore, the window opens with the New Tab search ready to type.">
+      <source src="assets/releases/0.75.0/launch-new-tab.mp4" type="video/mp4">
+      <a href="assets/releases/0.75.0/launch-new-tab.mp4">Download the clip</a>
+    </video><figcaption>With no tab to restore, the window opens with the New Tab search ready to type.</figcaption></figure>
+  <figure class="release-media">
+    <video muted loop playsinline controls preload="none" poster="assets/releases/0.75.0/sync-privacy.jpg" aria-label="Choose whether passwords sync, separately from the rest of iCloud sync.">
+      <source src="assets/releases/0.75.0/sync-privacy.mp4" type="video/mp4">
+      <a href="assets/releases/0.75.0/sync-privacy.mp4">Download the clip</a>
+    </video><figcaption>Choose whether passwords sync, separately from the rest of iCloud sync.</figcaption></figure>
+  <figure class="release-media">
+    <video muted loop playsinline controls preload="none" poster="assets/releases/0.75.0/site-data-clear.jpg" aria-label="Clear every website&#x27;s data for one profile from Privacy &amp; Site Settings.">
+      <source src="assets/releases/0.75.0/site-data-clear.mp4" type="video/mp4">
+      <a href="assets/releases/0.75.0/site-data-clear.mp4">Download the clip</a>
+    </video><figcaption>Clear every website&#x27;s data for one profile from Privacy &amp; Site Settings.</figcaption></figure>
+  <figure class="release-media">
+    <video muted loop playsinline controls preload="none" poster="assets/releases/0.75.0/private-window-capture.jpg" aria-label="A private window cannot be captured by another app; a normal window still can.">
+      <source src="assets/releases/0.75.0/private-window-capture.mp4" type="video/mp4">
+      <a href="assets/releases/0.75.0/private-window-capture.mp4">Download the clip</a>
+    </video><figcaption>A private window cannot be captured by another app; a normal window still can.</figcaption></figure>
+  <figure class="release-media">
+    <video muted loop playsinline controls preload="none" poster="assets/releases/0.75.0/dock-tile-icon.jpg" aria-label="The icon chosen in Settings stays in the Dock after quitting, and changes live.">
+      <source src="assets/releases/0.75.0/dock-tile-icon.mp4" type="video/mp4">
+      <a href="assets/releases/0.75.0/dock-tile-icon.mp4">Download the clip</a>
+    </video><figcaption>The icon chosen in Settings stays in the Dock after quitting, and changes live.</figcaption></figure>
+  <a class="release-source" href="changelog/0.75.0/">Release permalink ↗</a>
+  </div>
+</article>
+<article class="release" id="v0.75.0-nightly.8" data-version="0.75.0-nightly.8" data-channel="nightly" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.75.0-nightly.8" aria-label="Link to version 0.75.0-nightly.8">0.75.0-nightly.8</a></h2>
   <time datetime="2026-11-17">November 17, 2026</time><span class="release-channel">Nightly</span></div>
   <div class="release-copy"><h3>Searching for exactly what you typed is one row away.</h3>
@@ -449,7 +538,7 @@
   <a class="release-source" href="changelog/0.75.0-nightly.1/">Release permalink ↗</a>
   </div>
 </article>
-<article class="release" id="v0.74.0" data-version="0.74.0" data-channel="stable" data-latest="true">
+<article class="release" id="v0.74.0" data-version="0.74.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.74.0" aria-label="Link to version 0.74.0">0.74.0</a></h2>
   <time datetime="2026-11-15">November 15, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Extensions in the Command Bar, a volume slider for each tab and faster private windows.</h3>
