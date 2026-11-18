@@ -91,6 +91,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
     @objc private func stopErrandPressed() { onStopErrand?() }
     let recentDownloads = SidebarDownloadsView()
+    private let downloadVeilMask = CAGradientLayer()
     let downloadHoverTarget = SidebarDownloadHoverTarget()
     let updateCard = SidebarUpdateCard()
     /// Media still playing in tabs the user left, directly above the footer.
@@ -305,6 +306,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         errandStopButton.setAccessibilityIdentifier("sidebar-stop-errand")
         addSubview(errandStopButton)
         addSubview(recentDownloads)
+        recentDownloads.onVeilChange = { [weak self] in self?.updateDownloadVeil() }
         addSubview(downloadHoverTarget)
         privateIndicator.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -425,7 +427,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         let playerHeight = mediaPlayer.expandedHeight
         mediaPlayer.frame = NSRect(x: Metrics.paddingX, y: footer.frame.minY - playerHeight,
                                    width: max(0, bounds.width - 2 * Metrics.paddingX), height: playerHeight)
-        recentDownloads.frame = NSRect(x: 0, y: footer.frame.minY + footer.libraryButton.frame.midY - 14.5 - CGFloat(recentDownloads.items.count) * 56, width: bounds.width, height: CGFloat(recentDownloads.items.count) * 56)
+        let downloadHeight = CGFloat(recentDownloads.items.count) * SidebarDownloadListMetrics.rowHeight
+        recentDownloads.frame = NSRect(x: 0, y: footer.frame.minY + footer.libraryButton.frame.midY - 14.5 - downloadHeight,
+                                       width: bounds.width, height: downloadHeight)
+        updateDownloadVeil()
         layoutDownloadHoverTarget()
         if isPrivate {
             footer.isHidden = true
@@ -433,6 +438,36 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             page.isPrivate = true
             privateIndicator.isHidden = false
         }
+    }
+
+    private func updateDownloadVeil() {
+        footer.libraryButton.keepsHoverFill = recentDownloads.isPresented
+        guard let content = pageContainer.layer else { return }
+        guard !recentDownloads.isHidden, !recentDownloads.items.isEmpty, pageContainer.bounds.height > 0 else {
+            content.mask = nil
+            return
+        }
+
+        // Remove ink below the fade, revealing the very same sidebar material under the list.
+        let top = pageContainer.convert(recentDownloads.frame.origin, from: self).y
+            - SidebarDownloadListMetrics.veilClearance
+        let height = pageContainer.bounds.height
+        let fade = SidebarDownloadListMetrics.veilFadeHeight
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        downloadVeilMask.frame = content.bounds
+        let fromTop: CGFloat = content.isGeometryFlipped ? 1 : 0
+        downloadVeilMask.startPoint = CGPoint(x: 0.5, y: fromTop)
+        downloadVeilMask.endPoint = CGPoint(x: 0.5, y: 1 - fromTop)
+        let start = max(0, min(1, (top - fade) / height))
+        let end = max(0, min(1, top / height))
+        downloadVeilMask.locations = [NSNumber(value: start), NSNumber(value: end)]
+        let opacityAtTop = max(0, min(1, top / fade))
+        let opacityAtBottom = max(0, min(1, (top - height) / fade))
+        downloadVeilMask.colors = [NSColor.black.withAlphaComponent(opacityAtTop).cgColor,
+                                   NSColor.black.withAlphaComponent(opacityAtBottom).cgColor]
+        content.mask = downloadVeilMask
+        CATransaction.commit()
     }
 
     func layoutDownloadHoverTarget() {
@@ -1787,7 +1822,10 @@ final class SidebarAddressField: SidebarFlippedView {
         hoverArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovering = true }
+    override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
+        isHovering = true
+    }
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
     /// Tracking areas miss the exit when the app or window deactivates under the pointer.

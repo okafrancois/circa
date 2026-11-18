@@ -893,6 +893,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     override func mouseMoved(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
         let point = convert(event.locationInWindow, from: nil)
         isTodayHovered = point.y >= displayedLayout.separatorCenterY - Metrics.todayHoverSlop
     }

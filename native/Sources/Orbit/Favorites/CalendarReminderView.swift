@@ -104,6 +104,9 @@ final class CalendarJoinButton: NSButton {
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
     }
-    override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
+    override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
+        hovered = true; needsDisplay = true
+    }
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
 }

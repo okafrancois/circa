@@ -186,7 +186,10 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         hoverArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovering = true }
+    override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
+        isHovering = true
+    }
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
     override func viewDidMoveToWindow() {
@@ -1091,7 +1094,10 @@ final class SidebarNewTabRow: NSButton {
         hoverArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovering = true }
+    override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
+        isHovering = true
+    }
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
     private func refreshAccent() {
@@ -1216,7 +1222,10 @@ final class SidebarClearButton: NSButton {
         hoverArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovering = true }
+    override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
+        isHovering = true
+    }
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
     override func draw(_ dirtyRect: NSRect) {

@@ -140,6 +140,7 @@ class OrbitGlyphButton: NSButton {
         static let rowClose = HoverFill(color: OrbitTokens.Color.State.rowCloseButtonHover,
                                         side: OrbitTokens.Metrics.Sidebar.closeButtonSize, radius: OrbitTokens.Radius.closeButton)
     }
+    var keepsHoverFill = false { didSet { if keepsHoverFill != oldValue { invalidate("hover") } } }
     var hoverFill = HoverFill.standalone { didSet { if hoverFill != oldValue { invalidate("hoverFill") } } }
     /// Footer Space icons draw their own content.
     var customDrawing: ((OrbitGlyphButton, NSRect) -> Void)?
@@ -178,7 +179,10 @@ class OrbitGlyphButton: NSButton {
         hoverArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovering = true }
+    override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
+        isHovering = true
+    }
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
     override func viewDidMoveToWindow() {
@@ -197,7 +201,7 @@ class OrbitGlyphButton: NSButton {
             OrbitUIWorkCounters.record("glyphDraw.cause." + (pendingCauses.isEmpty ? "appKit" : pendingCauses.sorted().joined(separator: "+")))
         }
         if !pendingCauses.isEmpty { pendingCauses.removeAll() }
-        if showsHoverFill, isEnabled, isHovering || isHighlighted {
+        if showsHoverFill, isEnabled, keepsHoverFill || isHovering || isHighlighted {
             hoverFill.color.setFill()
             let rect = hoverFill.side.map { side in
                 NSRect(x: bounds.midX - side / 2, y: bounds.midY - side / 2, width: side, height: side)
