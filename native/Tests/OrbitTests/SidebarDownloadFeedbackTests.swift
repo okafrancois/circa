@@ -113,16 +113,36 @@ struct SidebarDownloadFeedbackTests {
         #expect(feedback.items.isEmpty && !feedback.isPresented)
     }
 
-    @Test("Recent file icons fill their measured canvas instead of retaining the smaller native size")
+    @Test("Recent rows paint the file icon and both labels in one backing store")
     func iconScale() throws {
         let coordinator = BrowserDownloadCoordinator(), profile = ProfileID(), feedback = SidebarDownloadFeedback()
         _ = try register(coordinator, profile); project(feedback, coordinator, profile)
         let view = SidebarDownloadsView(frame: NSRect(x: 0, y: 0, width: 500, height: 56))
         view.render(feedback.recentItems, presented: true); view.layoutSubtreeIfNeeded()
         let row = try #require(view.subviews.first)
-        let icon = try #require(row.subviews.compactMap { $0 as? NSImageView }.first)
-        #expect(icon.imageScaling == .scaleProportionallyUpOrDown)
-        #expect(icon.frame.size == NSSize(width: 40, height: 40))
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 500, pixelsHigh: 56,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let context = try #require(NSGraphicsContext(bitmapImageRep: bitmap))
+        let bytes = try #require(bitmap.bitmapData)
+        bytes.initialize(repeating: 0, count: bitmap.bytesPerRow * bitmap.pixelsHigh)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        row.draw(row.bounds)
+        NSGraphicsContext.restoreGraphicsState()
+
+        func hasInk(_ x: Int, _ y: Int) -> Bool {
+            (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.2
+        }
+        let iconRows = (0..<56).filter { y in (8..<48).contains { hasInk($0, y) } }
+        let iconColumns = (0..<60).filter { x in (0..<56).contains { hasInk(x, $0) } }
+        #expect((30...40).contains(iconRows.count))
+        #expect(iconColumns.first.map { $0 >= 8 } == true)
+        #expect(iconColumns.last.map { $0 < 48 } == true)
+        let labelRows = (0..<56).filter { y in (60..<240).contains { hasInk($0, y) } }
+        let spans = zip(labelRows, labelRows.dropFirst())
+        #expect(spans.contains { start, next in next > start + 1 })
+        #expect(labelRows.count > 14)
     }
 
     @Test("Reduced motion retains list and badge state with no flight state to schedule")

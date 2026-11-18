@@ -103,6 +103,14 @@ final class OrbitWindowRootView: NSView {
 
     override var mouseDownCanMoveWindow: Bool { true }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let window = window as? OrbitBrowserWindow,
+           let hit = window.hoverPopoverHit(at: superview?.convert(point, to: nil) ?? point) {
+            return hit
+        }
+        return super.hitTest(point)
+    }
+
     override func layout() {
         super.layout()
         onLayout?()

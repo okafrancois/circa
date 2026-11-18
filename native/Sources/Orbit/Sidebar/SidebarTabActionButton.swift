@@ -56,6 +56,7 @@ final class SidebarTabActionButton: OrbitGlyphButton {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
         super.mouseEntered(with: event)
         guard pinned, isEnabled, let row = superview as? SidebarTabRow,
               row.commandsEnabled, !row.isRenaming, let window, window.isKeyWindow else { return }

@@ -473,6 +473,7 @@ final class SidebarSpaceButton: OrbitGlyphButton {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
         super.mouseEntered(with: event)
         setEmphasis(animated: true)
         onHoverChange?(true)

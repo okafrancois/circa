@@ -13,6 +13,75 @@ struct SidebarHoverRegionTests {
         #expect(!region.contains(NSPoint(x: 150, y: 115)))
     }
 
+    @Test func routesPanelBeforeTriggerAndSeparatesTheTransferGap() {
+        let region = SidebarHoverRegion(trigger: NSRect(x: 0, y: 80, width: 50, height: 40),
+                                       popover: NSRect(x: 45, y: 0, width: 100, height: 85))
+        #expect(region.destination(at: NSPoint(x: 47, y: 82)) == .panel)
+        #expect(region.destination(at: NSPoint(x: 20, y: 100)) == .trigger)
+        #expect(region.destination(at: NSPoint(x: 60, y: 90)) == .corridor)
+        #expect(region.destination(at: NSPoint(x: 120, y: 105)) == .outside)
+    }
+
+    @Test @MainActor func windowHitsOnlyThePreviewInThePanelAndCorridor() {
+        let bounds = NSRect(x: 0, y: 0, width: 300, height: 200)
+        let root = OrbitWindowRootView(frame: bounds)
+        let window = OrbitBrowserWindow(contentRect: bounds, styleMask: [.borderless], backing: .buffered, defer: true)
+        window.contentView = root
+        let background = NSView(frame: bounds)
+        let trigger = NSView(frame: NSRect(x: 10, y: 80, width: 30, height: 30))
+        let panel = SidebarHoverPopoverSurface(frame: NSRect(x: 60, y: 20, width: 100, height: 70))
+        root.addSubview(background)
+        root.addSubview(trigger)
+        root.addSubview(panel)
+        let popover = SidebarHoverPopover(closeDelay: 0)
+        popover.start(trigger: trigger, popover: panel)
+        defer { popover.stop() }
+
+        let cardPoint = NSPoint(x: 70, y: 50)
+        let gapPoint = NSPoint(x: 50, y: 85)
+        let triggerPoint = NSPoint(x: 15, y: 90)
+        #expect(root.hitTest(cardPoint) === panel)
+        #expect(root.hitTest(gapPoint) === panel)
+        #expect(root.hitTest(triggerPoint) === trigger)
+        #expect(window.ownsPopoverHover(at: triggerPoint))
+        #expect(!window.permitsHover(for: background, at: gapPoint))
+        #expect(window.permitsHover(for: panel, at: cardPoint))
+
+        popover.stop()
+        #expect(root.hitTest(cardPoint) === background)
+        #expect(root.hitTest(gapPoint) === background)
+        #expect(window.permitsHover(for: background, at: gapPoint))
+    }
+
+    @Test @MainActor func routesWheelToThePanelAndConsumesTransferGapWheelInput() throws {
+        let bounds = NSRect(x: 0, y: 0, width: 300, height: 200)
+        let root = OrbitWindowRootView(frame: bounds)
+        let window = OrbitBrowserWindow(contentRect: bounds, styleMask: [.borderless], backing: .buffered, defer: true)
+        window.contentView = root
+        let trigger = NSView(frame: NSRect(x: 10, y: 80, width: 30, height: 30))
+        let panel = SidebarHoverPopoverSurface(frame: NSRect(x: 60, y: 20, width: 100, height: 70))
+        let receiver = RecordingScrollView(frame: panel.bounds)
+        panel.addSubview(receiver)
+        panel.scrollReceiver = receiver
+        root.addSubview(trigger)
+        root.addSubview(panel)
+        let popover = SidebarHoverPopover(closeDelay: 0)
+        popover.start(trigger: trigger, popover: panel)
+        defer { popover.stop() }
+
+        let wheel = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
+                                        wheel1: -40, wheel2: 0, wheel3: 0).flatMap(NSEvent.init(cgEvent:)))
+        let panelPoint = NSPoint(x: 70, y: 50)
+        #expect(window.routePopoverScroll(wheel, at: panelPoint))
+        #expect(window.routePopoverScroll(wheel, at: NSPoint(x: 50, y: 85)))
+        #expect(window.routePopoverScroll(wheel, at: NSPoint(x: 20, y: 95)))
+        #expect(!window.routePopoverScroll(wheel, at: NSPoint(x: 180, y: 105)))
+        #expect(receiver.events == [wheel])
+
+        popover.stop()
+        #expect(!window.routePopoverScroll(wheel, at: panelPoint))
+    }
+
     @Test func tracksResizedAndMirroredGeometry() {
         let popover = NSRect(x: 0, y: 50, width: 200, height: 130)
         let point = NSPoint(x: 247, y: 194)
@@ -70,4 +139,12 @@ struct SidebarHoverRegionTests {
         alreadyEnabled.cancel()
         #expect(window.acceptsMouseMovedEvents)
     }
+}
+
+
+@MainActor
+private final class RecordingScrollView: NSScrollView {
+    private(set) var events: [NSEvent] = []
+
+    override func scrollWheel(with event: NSEvent) { events.append(event) }
 }

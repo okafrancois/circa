@@ -38,6 +38,10 @@ extension NSColor {
 
 extension OrbitTokens {
     public enum Color {
+        enum Gmail {
+            static let previewBackground = NSColor.orbitDynamic("Gmail.previewBackground",
+                light: .orbitSRGB(0xF5F5F5), dark: .orbitSRGB(0x3D3C3F))
+        }
         public enum Calendar {
             public static let shell = NSColor.orbitDynamic("Calendar.shell", light: .orbitSRGB(0xF5F5F5), dark: .orbitSRGB(0x303030))
             public static let event = NSColor.orbitDynamic("Calendar.event", light: .orbitSRGB(0xE8E2DA), dark: .orbitSRGB(0x64584C))

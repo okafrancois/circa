@@ -626,13 +626,17 @@ final class BrowserDownloadIconCache {
     }
     private struct Icon: @unchecked Sendable { let image: NSImage }
     let capacity: Int
+    private let thumbnailSize: CGFloat
     private var files: [URL: Entry] = [:]
     private var types: [String: NSImage] = [:]
     private var clock: UInt64 = 0
     private var generation: UInt64 = 0
     var count: Int { files.count }
 
-    init(capacity: Int = 256) { self.capacity = capacity }
+    init(capacity: Int = 256, thumbnailSize: CGFloat = 24) {
+        self.capacity = capacity
+        self.thumbnailSize = thumbnailSize
+    }
 
     func typeIcon(forExtension pathExtension: String) -> NSImage {
         if let image = types[pathExtension] { return image }
@@ -656,7 +660,7 @@ final class BrowserDownloadIconCache {
         generation &+= 1
     }
 
-    /// Resolves the file icon off the main thread, then a 24-point thumbnail, as asked.
+    /// Resolves the file icon off the main thread, then a thumbnail, as asked.
     func load(_ url: URL, fileIcon: Bool, thumbnail wantsThumbnail: Bool, deliver: @escaping (NSImage) -> Void) -> Request {
         let request = Request(deliver)
         let generation = generation
@@ -667,7 +671,7 @@ final class BrowserDownloadIconCache {
             }
         }
         guard wantsThumbnail else { return request }
-        let thumbnail = QLThumbnailGenerator.Request(fileAt: url, size: NSSize(width: 24, height: 24), scale: 2, representationTypes: .thumbnail)
+        let thumbnail = QLThumbnailGenerator.Request(fileAt: url, size: NSSize(width: thumbnailSize, height: thumbnailSize), scale: 2, representationTypes: .thumbnail)
         request.thumbnail = thumbnail
         QLThumbnailGenerator.shared.generateBestRepresentation(for: thumbnail) { [weak self] representation, _ in
             let image = representation?.cgImage

@@ -26,12 +26,6 @@ final class GmailPreviewView: NSView {
         wantsLayer = true
         layer?.cornerRadius = GmailPreviewMetrics.cornerRadius
         layer?.masksToBounds = true
-        let material = NSVisualEffectView(frame: bounds)
-        material.material = .popover
-        material.blendingMode = .withinWindow
-        material.state = .active
-        material.autoresizingMask = [.width, .height]
-        addSubview(material)
         scroll.documentView = document
         scroll.hasVerticalScroller = true
         scroll.scrollerStyle = .overlay
@@ -86,6 +80,11 @@ final class GmailPreviewView: NSView {
         rows.removeAll()
         empty.isHidden = true
         scroll.contentView.scroll(to: .zero)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        OrbitTokens.Color.Gmail.previewBackground.setFill()
+        dirtyRect.fill()
     }
 
     override func layout() {

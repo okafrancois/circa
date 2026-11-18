@@ -63,7 +63,10 @@ final class SidebarSpaceDisclosure: NSControl {
         addTrackingArea(next)
         area = next
     }
-    override func mouseEntered(with event: NSEvent) { setHovered(true) }
+    override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
+        setHovered(true)
+    }
     override func mouseExited(with event: NSEvent) { setHovered(false) }
     func setHovered(_ hovered: Bool) {
         guard hovered != isHovering else { return }

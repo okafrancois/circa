@@ -159,7 +159,10 @@ final class FavoriteTileView: NSView {
         if let tracking { addTrackingArea(tracking) }
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovering = true; refreshFill(); onHover?(true) }
+    override func mouseEntered(with event: NSEvent) {
+        guard permitsPopoverHover(event) else { return }
+        isHovering = true; refreshFill(); onHover?(true)
+    }
     override func mouseExited(with event: NSEvent) { isHovering = false; refreshFill(); onHover?(false) }
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard commandsEnabled, let superview, bounds.contains(convert(point, from: superview)) else { return nil }

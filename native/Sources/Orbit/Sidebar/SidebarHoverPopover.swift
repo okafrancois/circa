@@ -6,6 +6,17 @@ struct SidebarHoverRegion {
     let trigger: NSRect?
     let popover: NSRect
 
+    enum Destination: Equatable {
+        case panel, trigger, corridor, outside
+    }
+
+    func destination(at point: NSPoint) -> Destination {
+        guard let trigger, !trigger.isEmpty else { return .outside }
+        if popover.contains(point) { return .panel }
+        if trigger.contains(point) { return .trigger }
+        return contains(point) ? .corridor : .outside
+    }
+
     func contains(_ point: NSPoint) -> Bool {
         guard let trigger, !trigger.isEmpty else { return false }
         if trigger.contains(point) || popover.contains(point) { return true }
@@ -33,19 +44,25 @@ struct SidebarHoverRegion {
     }
 }
 
-/// Lets sidebar scroll routing recognize a preview even where it covers the sidebar.
+/// Provides a hit target even over blank space and swallows unhandled pointer input.
 @MainActor
 class SidebarHoverPopoverSurface: NSView {
-    static func receivesScroll(_ event: NSEvent) -> Bool {
-        guard let root = event.window?.contentView else { return false }
-        let point = root.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow
-        var view = root.hitTest(point)
-        while let target = view {
-            if target is SidebarHoverPopoverSurface { return true }
-            view = target.superview
-        }
-        return false
+    var retiresPointerInput = false
+    weak var scrollReceiver: NSScrollView?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !retiresPointerInput else { return nil }
+        return super.hitTest(point)
     }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+    override func rightMouseUp(with event: NSEvent) {}
+    override func otherMouseDown(with event: NSEvent) {}
+    override func otherMouseUp(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
 }
 
 /// Tracks a presented preview in window coordinates, independently of AppKit's ordering of
@@ -55,7 +72,7 @@ final class SidebarHoverPopover: NSResponder {
     private let closeDelay: TimeInterval
     private var departure: (any OrbitCancellable)?
     private weak var host: NSView?
-    private weak var popover: NSView?
+    private(set) weak var popover: SidebarHoverPopoverSurface?
     private weak var sidebar: BrowserSidebarView?
     private var tracking: NSTrackingArea?
     private var monitor: Any?
@@ -78,11 +95,12 @@ final class SidebarHoverPopover: NSResponder {
         return rect.isEmpty ? nil : view.convert(rect, to: nil)
     }
 
-    func start(trigger: NSView, popover: NSView, rect: (() -> NSRect?)? = nil) {
+    func start(trigger: NSView, popover: SidebarHoverPopoverSurface, rect: (() -> NSRect?)? = nil) {
         stop()
         guard let window = trigger.window, let host = window.contentView else { return }
         self.host = host
         self.popover = popover
+        popover.retiresPointerInput = false
         var ancestor: NSView? = trigger
         while let view = ancestor {
             if let sidebar = view as? BrowserSidebarView { self.sidebar = sidebar; break }
@@ -111,6 +129,7 @@ final class SidebarHoverPopover: NSResponder {
         }
         center.addObserver(self, selector: #selector(interrupt(_:)), name: NSApplication.didResignActiveNotification, object: nil)
         center.addObserver(self, selector: #selector(resize(_:)), name: NSWindow.didResizeNotification, object: window)
+        (window as? OrbitBrowserWindow)?.presentHoverPopover(self)
     }
 
     func stop() {
@@ -119,7 +138,10 @@ final class SidebarHoverPopover: NSResponder {
         if let monitor { NSEvent.removeMonitor(monitor) }
         mouseMoves?.cancel(); mouseMoves = nil
         NotificationCenter.default.removeObserver(self)
+        popover?.retiresPointerInput = true
+        let window = host?.window as? OrbitBrowserWindow
         tracking = nil; monitor = nil; triggerRect = nil; host = nil; popover = nil; sidebar = nil
+        window?.retireHoverPopover(self)
     }
 
     var containsPointer: Bool {
@@ -134,6 +156,12 @@ final class SidebarHoverPopover: NSResponder {
         guard let window = host?.window else { return }
         update(at: window.convertPoint(fromScreen: NSEvent.mouseLocation))
     }
+
+    func destination(at point: NSPoint, in window: NSWindow) -> SidebarHoverRegion.Destination {
+        region(in: window)?.destination(at: point) ?? .outside
+    }
+
+    func displace() { onDismiss?(false) }
 
     private func region(in window: NSWindow) -> SidebarHoverRegion? {
         guard sidebar?.isPresentationHidden != true, let trigger = triggerRect?(),
@@ -168,9 +196,13 @@ final class SidebarHoverPopover: NSResponder {
         default: break
         }
         let point = event.locationInWindow
-        let inPopover = event.window === window
-            && popover.flatMap { Self.visibleRect(of: $0, in: window) }?.contains(point) == true
-        if inPopover { return event }
+        if event.window === window {
+            switch destination(at: point, in: window) {
+            case .panel, .corridor: return event
+            case .trigger where event.type == .scrollWheel: return event
+            default: break
+            }
+        }
         if event.type != .scrollWheel || (event.window === window
             && sidebar.flatMap { Self.visibleRect(of: $0, in: window) }?.contains(point) == true) {
             onDismiss?(false)
@@ -183,5 +215,11 @@ final class SidebarHoverPopover: NSResponder {
         host?.layoutSubtreeIfNeeded()
         onResize?()
         update()
+    }
+}
+
+extension NSView {
+    func permitsPopoverHover(_ event: NSEvent) -> Bool {
+        (window as? OrbitBrowserWindow)?.permitsHover(for: self, at: event.locationInWindow) ?? true
     }
 }

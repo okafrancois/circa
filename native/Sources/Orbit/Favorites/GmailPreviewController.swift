@@ -18,7 +18,7 @@ final class GmailPreviewController {
     var containsPointer: Bool { hoverPopover.containsPointer }
     private var armed = false
     private var epoch: UInt64 = 0
-    private var container: NSView?
+    private var container: SidebarHoverPopoverSurface?
     var isPresented: Bool { container != nil }
     var onPresentationChange: (() -> Void)?
 
@@ -41,6 +41,7 @@ final class GmailPreviewController {
             }
             return
         }
+        guard (tile.window as? OrbitBrowserWindow)?.isRestoringPopoverHover != true else { return }
         if (anchor === tile && self.tab?.id == tab.id) || containsPointer { return }
         dismiss()
         guard let account = BrowserGmailAccount(url: tab.pinnedURL ?? tab.url), permitted(tile, tab, account) else { return }
@@ -82,6 +83,7 @@ final class GmailPreviewController {
         container.layer?.shadowOpacity = 0.22
         container.layer?.shadowRadius = 14
         container.layer?.shadowOffset = .init(width: 0, height: -6)
+        container.scrollReceiver = view.scroll
         container.addSubview(view)
         host.addSubview(container, positioned: .above, relativeTo: nil)
         self.container = container

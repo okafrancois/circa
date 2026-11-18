@@ -19,7 +19,7 @@ final class CalendarPreviewController {
     var containsPointer: Bool { hoverPopover.containsPointer }
     private var armed = false
     private var epoch: UInt64 = 0
-    private var container: NSView?
+    private var container: SidebarHoverPopoverSurface?
     var isPresented: Bool { container != nil }
     var onPresentationChange: (() -> Void)?
 
@@ -45,6 +45,7 @@ final class CalendarPreviewController {
             }
             return
         }
+        guard (tile.window as? OrbitBrowserWindow)?.isRestoringPopoverHover != true else { return }
         if (anchor === tile && self.tab?.id == tab.id) || containsPointer { return }
         dismiss()
         guard let account = BrowserCalendarWebAccount(url: tab.pinnedURL ?? tab.url), permitted(tile, tab, account) else { return }
@@ -94,6 +95,7 @@ final class CalendarPreviewController {
         shadow.shadowBlurRadius = 18
         shadow.shadowOffset = .init(width: 0, height: -6)
         container.shadow = shadow
+        container.scrollReceiver = view.scroll
         container.addSubview(view)
         host.addSubview(container, positioned: .above, relativeTo: nil)
         self.container = container
