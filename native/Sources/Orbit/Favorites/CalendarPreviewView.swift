@@ -8,8 +8,6 @@ final class CalendarPreviewView: NSView {
     private let timeline = CalendarTimelineView()
     private let gear = NSButton(title: "", target: nil, action: nil)
     private let add = CalendarAddButton(title: "", target: nil, action: nil)
-    private var tracking: NSTrackingArea?
-    var onPointer: ((Bool) -> Void)?
     var onMenu: (() -> NSMenu?)?
     var onAdd: (() -> Void)?
     var contentHeight: CGFloat { 256 }
@@ -50,13 +48,6 @@ final class CalendarPreviewView: NSView {
         gear.frame = .init(x: bounds.width - 66, y: bounds.height - 34, width: 28, height: 28)
         add.frame = .init(x: bounds.width - 34, y: bounds.height - 34, width: 28, height: 28)
     }
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas(); if let tracking { removeTrackingArea(tracking) }
-        tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
-        if let tracking { addTrackingArea(tracking) }
-    }
-    override func mouseEntered(with event: NSEvent) { onPointer?(true) }
-    override func mouseExited(with event: NSEvent) { onPointer?(false) }
     @objc private func showMenu() { onMenu?()?.popUp(positioning: nil, at: .init(x: gear.frame.minX, y: gear.frame.maxY), in: self) }
     @objc private func createEvent() { onAdd?() }
 }

@@ -257,6 +257,7 @@ final class SidebarSpaceSwipeController {
             return event
         }
         guard !event.phase.isEmpty || !event.momentumPhase.isEmpty else { return event }
+        if SidebarHoverPopoverSurface.receivesScroll(event) { return event }
         if isActive && !environmentIsCurrent { cancel(); return event }
         let inside = sidebar.swipeContains(event.locationInWindow)
         guard inside || isActive || scrollInput.hasOwnedSequence else { return event }

@@ -99,8 +99,8 @@ extension DownloadRowPresentation {
 
 extension BrowserWindowController {
     func installDownloadFeedback() {
-        sidebar.footer.onDownloadHover = { [weak self] in self?.downloadHoverChanged($0) }
-        sidebar.recentDownloads.onHover = { [weak self] in self?.downloadHoverChanged($0) }
+        sidebar.downloadHoverTarget.onEnter = { [weak self] in self?.downloadHoverChanged(true) }
+        downloadHoverPopover.onDismiss = { [weak self] _ in self?.downloadHoverChanged(false) }
         sidebar.recentDownloads.onAction = { [weak self] context in
             guard let self, acceptsCommands, context.key.profileID == session.activeProfileID,
                   let item = downloads.coordinator.snapshot(for: context.key) else { return }
@@ -110,28 +110,47 @@ extension BrowserWindowController {
     }
 
     func renderDownloadFeedback() {
+        let wasPresented = sidebar.recentDownloads.isPresented
         let profile = downloads.coordinator.isClosed ? nil : session.activeProfileID
         downloadFeedback.update(profile.map { downloads.snapshots(profileID: $0) } ?? [], profileID: profile)
+        if library.isPresented || sidebar.isPresentationHidden {
+            downloadFeedback.hover(false)
+        }
         sidebar.footer.downloadBadge.render(active: downloadFeedback.hasActiveDownloads, completion: downloadFeedback.completionItem)
-        sidebar.recentDownloads.render(downloadFeedback.recentItems, presented: downloadFeedback.isPresented && !library.isPresented)
+        sidebar.recentDownloads.render(downloadFeedback.recentItems, presented: downloadFeedback.isPresented)
+        sidebar.layoutDownloadHoverTarget()
         sidebar.needsLayout = true
+        if wasPresented && !downloadFeedback.isPresented {
+            downloadHoverPopover.stop()
+            windowShell.hoverHoldDidChange()
+        }
     }
 
     func downloadHoverChanged(_ inside: Bool) {
-        downloadHoverTimer?.cancel(); downloadHoverTimer = nil
         if inside {
-            downloadFeedback.hover(true); renderDownloadFeedback()
-        } else {
-            // Bridge the small gap between the footer hit target and the final file row.
-            downloadHoverTimer = OrbitRunLoopTimer(after: 0.1) { [weak self] in
-                guard let self else { return }
-                downloadFeedback.hover(false); renderDownloadFeedback()
+            guard acceptsCommands, !isPrivateWindow, !library.isPresented, !sidebar.isPresentationHidden,
+                  !downloadFeedback.isHovering, !downloadFeedback.items.isEmpty else { return }
+            // Showing the list acknowledges the completion badge. Retain its footprint for the
+            // current handoff so the pointer can move off the badge even after it disappears.
+            let badgeBounds = sidebar.footer.downloadBadge.hoverBounds
+            downloadFeedback.hover(true)
+            renderDownloadFeedback()
+            sidebar.layoutSubtreeIfNeeded()
+            downloadHoverPopover.start(trigger: sidebar.downloadHoverTarget, popover: sidebar.recentDownloads) { [weak self] in
+                guard let self, let window, let rect = SidebarHoverPopover.visibleRect(of: sidebar.downloadHoverTarget, in: window) else { return nil }
+                guard let badgeBounds else { return rect }
+                let badge = sidebar.footer.downloadBadge.convert(badgeBounds, to: nil)
+                return rect.union(badge).intersection(sidebar.convert(sidebar.visibleRect, to: nil))
             }
+            windowShell.hoverHoldDidChange()
+        } else if downloadFeedback.isHovering {
+            downloadFeedback.hover(false)
+            renderDownloadFeedback()
         }
     }
 
     func stopDownloadFeedback() {
-        downloadHoverTimer?.cancel(); downloadHoverTimer = nil
+        downloadHoverPopover.stop()
         downloadFeedback.reset()
         sidebar.recentDownloads.render([], presented: false)
     }

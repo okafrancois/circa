@@ -176,3 +176,36 @@ final class OrbitSidebarResizeHandle: NSView {
         onEnd?()
     }
 }
+
+/// Requests window-level mouse moves while a feature needs them, including over hosted
+/// documents. Concurrent clients restore the window's previous setting on the last release.
+@MainActor
+final class OrbitMouseMoveTracking {
+    private final class State {
+        let previouslyAccepted: Bool
+        var clients = 0
+
+        init(previouslyAccepted: Bool) { self.previouslyAccepted = previouslyAccepted }
+    }
+
+    private static let states = NSMapTable<NSWindow, State>.weakToStrongObjects()
+    private weak var window: NSWindow?
+
+    init(in window: NSWindow) {
+        self.window = window
+        let state = Self.states.object(forKey: window) ?? State(previouslyAccepted: window.acceptsMouseMovedEvents)
+        state.clients += 1
+        Self.states.setObject(state, forKey: window)
+        window.acceptsMouseMovedEvents = true
+    }
+
+    func cancel() {
+        guard let window, let state = Self.states.object(forKey: window) else { return }
+        self.window = nil
+        state.clients -= 1
+        if state.clients == 0 {
+            window.acceptsMouseMovedEvents = state.previouslyAccepted
+            Self.states.removeObject(forKey: window)
+        }
+    }
+}

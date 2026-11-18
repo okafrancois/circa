@@ -5,14 +5,12 @@ import QuartzCore
 import UniformTypeIdentifiers
 
 @MainActor
-final class SidebarDownloadsView: NSView {
-    var onHover: ((Bool) -> Void)?
+final class SidebarDownloadsView: SidebarHoverPopoverSurface {
     var onAction: ((BrowserDownloadContext) -> Void)?
     var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { refreshRows() } }
     private(set) var items: [BrowserDownloadSnapshot] = []
     private var rows: [SidebarRecentDownloadRow] = []
-    private var tracking: NSTrackingArea?
-    private var presented = false
+    private(set) var isPresented = false
     private var generation = UUID()
     private var ageTimer: (any OrbitCancellable)?
     override var isFlipped: Bool { true }
@@ -42,26 +40,18 @@ final class SidebarDownloadsView: NSView {
         super.layout()
         for (index, row) in rows.enumerated() { row.frame = NSRect(x: 0, y: CGFloat(index) * 56, width: bounds.width, height: 56) }
     }
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
-        addTrackingArea(area); tracking = area
-    }
-    override func mouseEntered(with event: NSEvent) { onHover?(true) }
-    override func mouseExited(with event: NSEvent) { onHover?(false) }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if window == nil { ageTimer?.cancel(); ageTimer = nil } }
 
     private func scheduleAgeRefresh() {
         ageTimer = OrbitRunLoopTimer(after: 1) { [weak self] in
-            guard let self, presented else { return }
+            guard let self, isPresented else { return }
             refreshRows(); scheduleAgeRefresh()
         }
     }
 
     private func setPresented(_ value: Bool) {
-        guard value != presented else { return }
-        presented = value; generation = UUID(); let token = generation
+        guard value != isPresented else { return }
+        isPresented = value; generation = UUID(); let token = generation
         ageTimer?.cancel(); ageTimer = nil
         if value { scheduleAgeRefresh() }
         guard let layer else { isHidden = !value; return }
@@ -171,4 +161,34 @@ private final class SidebarRecentDownloadRow: NSButton {
     override func mouseEntered(with event: NSEvent) { hovering = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent) { hovering = false; needsDisplay = true }
     @objc private func activate() { onActivate?() }
+}
+
+/// The hit-transparent sibling follows the footer layout and can include a badge that extends
+/// above the footer's bounds. Clicks still go to the original Library button or download row.
+@MainActor
+final class SidebarDownloadHoverTarget: NSView {
+    var onEnter: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        clipsToBounds = true
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        guard trackingAreas.isEmpty else { return }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard let window, SidebarHoverPopover.visibleRect(of: self, in: window)?.contains(event.locationInWindow) == true else { return }
+        onEnter?()
+    }
+
+    override func mouseExited(with event: NSEvent) {}
 }

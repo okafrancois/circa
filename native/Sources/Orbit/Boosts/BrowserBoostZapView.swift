@@ -25,7 +25,7 @@ final class BrowserBoostZapView: NSView {
     private var ticket = UUID()
     private var task: Task<Void, Never>?
     private weak var trackingWindow: NSWindow?
-    private var previouslyAcceptedMoves = false
+    private var mouseMoves: OrbitMouseMoveTracking?
     private var inputMonitor: Any?
     private let confirmation = NSView()
     private let caption = NSTextField(labelWithString: uiText("Click elements on the page to Zap them"))
@@ -90,8 +90,10 @@ final class BrowserBoostZapView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let window, trackingWindow !== window {
-            trackingWindow = window; previouslyAcceptedMoves = window.acceptsMouseMovedEvents
-            window.acceptsMouseMovedEvents = true
+            trackingWindow = window
+            mouseMoves?.cancel()
+            mouseMoves = OrbitMouseMoveTracking(in: window)
+            if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
             // Hosted native documents may own hit testing. Intercept only the exposed page
             // area; the confirmation, Done and unzap controls retain native button dispatch.
             inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { [weak self] event in
@@ -150,7 +152,7 @@ final class BrowserBoostZapView: NSView {
         let heldFocus = (window?.firstResponder as? NSView)?.isDescendant(of: self) == true
         task?.cancel(); ticket = UUID()
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor); self.inputMonitor = nil }
-        trackingWindow?.acceptsMouseMovedEvents = previouslyAcceptedMoves
+        mouseMoves?.cancel(); mouseMoves = nil
         trackingWindow = nil; removeFromSuperview()
         if heldFocus { onStop?() }
     }

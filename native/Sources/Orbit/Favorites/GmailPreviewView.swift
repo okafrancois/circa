@@ -17,9 +17,7 @@ final class GmailPreviewView: NSView {
     private let empty = NSTextField(wrappingLabelWithString: uiText("No unread emails, you can exhale!"))
     private let compose = NSButton(title: "", target: nil, action: nil)
     private var rows: [GmailPreviewRow] = []
-    private var tracking: NSTrackingArea?
     private var inbox: BrowserGmailInbox?
-    var onPointer: ((Bool) -> Void)?
     var onMessage: ((String) -> Void)?
     var onCompose: (() -> Void)?
 
@@ -103,14 +101,6 @@ final class GmailPreviewView: NSView {
         compose.frame = .init(x: bounds.width - 40, y: bounds.height - 40, width: 32, height: 32)
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
-        if let tracking { addTrackingArea(tracking) }
-    }
-    override func mouseEntered(with event: NSEvent) { onPointer?(true) }
-    override func mouseExited(with event: NSEvent) { onPointer?(false) }
     @objc private func composeMessage() { onCompose?() }
 }
 

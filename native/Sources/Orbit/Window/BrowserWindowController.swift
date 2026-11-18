@@ -158,7 +158,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     // MARK: Downloads
     let downloadFeedback = SidebarDownloadFeedback()
-    var downloadHoverTimer: (any OrbitCancellable)?
+    let downloadHoverPopover = SidebarHoverPopover(closeDelay: 0.1)
     let downloads: BrowserDownloadsController
     lazy var downloadsPane = BrowserDownloadsPane()
     var downloadsProfileID: ProfileID?
