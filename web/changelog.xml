@@ -9,6 +9,34 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.1-nightly.4/</id>
+    <title>0.75.1-nightly.4 — Gmail preview messages open instead of showing an error.</title>
+    <link href="https://circabrowser.com/changelog/0.75.1-nightly.4/" />
+    <updated>2026-11-18T00:00:00Z</updated>
+    <published>2026-11-18T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Gmail preview messages open instead of showing an error.
+
+1 fixed
+
+## Fixed
+
+- Clicking a message in a Gmail favorite's preview opens that conversation instead of an "Error 403" page.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.1-nightly.4" data-version="0.75.1-nightly.4" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.1-nightly.4" aria-label="Link to version 0.75.1-nightly.4"&gt;0.75.1-nightly.4&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-18"&gt;November 18, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Gmail preview messages open instead of showing an error.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Clicking a message in a Gmail favorite&amp;#x27;s preview opens that conversation instead of an &amp;quot;Error 403&amp;quot; page.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.1-nightly.4/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.1-nightly.3/</id>
     <title>0.75.1-nightly.3 — Gmail previews open the message you click.</title>
     <link href="https://circabrowser.com/changelog/0.75.1-nightly.3/" />
