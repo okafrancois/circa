@@ -88,7 +88,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
                   let tab = current.tab(captured.id), tab.section.keepsPinnedURL else { return false }
             return captured.section == tab.section && BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) == account
         }
-        gmailPreview.open = { [weak self] tab, account, message in self?.openGmail(tab, account: account, message: message) }
+        gmailPreview.open = { [weak self] tab, account, url in self?.openGmail(tab, account: account, url: url) }
         owner.sidebar.onTabHover = { [weak self] row, inside in
             guard let self, let owner = self.owner else { return false }
             if inside && (self.calendarPreview.containsPointer || self.gmailPreview.containsPointer) { return true }
@@ -411,10 +411,9 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             failed: { [weak owner] in owner?.session.onError?($0) })
     }
 
-    private func openGmail(_ tab: BrowserOrganizationTabItem, account: BrowserGmailAccount, message: String?) {
+    private func openGmail(_ tab: BrowserOrganizationTabItem, account: BrowserGmailAccount, url: URL) {
         guard let owner, let current = owner.session.organization,
-              tab.section.keepsPinnedURL,
-              let url = message.flatMap({ account.messageURL(id: $0) }) ?? (message == nil ? account.composeURL : nil) else { return }
+              tab.section.keepsPinnedURL else { return }
         let id = tab.id, profile = current.profileID, space = current.spaceID
         owner.submitInput { controller in
             guard !controller.isPrivateWindow, let current = controller.session.organization,
@@ -423,9 +422,11 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
                   BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) == account else { return }
             controller.session.selectTab(id)
             controller.session.performOnSelectedSurface { [weak controller] surface in
-                guard let controller, controller.session.organization?.selectedTab?.id == id,
-                      controller.session.activeProfileID == profile,
-                      controller.session.organization?.spaceID == space else { return }
+                guard let controller, !controller.isPrivateWindow,
+                      let current = controller.session.organization,
+                      current.profileID == profile, current.spaceID == space,
+                      let selected = current.selectedTab, selected.id == id, selected.section.keepsPinnedURL,
+                      BrowserGmailAccount(url: selected.pinnedURL ?? selected.url) == account else { return }
                 surface.navigate(to: url)
                 controller.focusSelectedDocument()
             }

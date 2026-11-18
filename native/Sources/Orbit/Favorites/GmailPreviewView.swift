@@ -15,8 +15,9 @@ final class GmailPreviewView: NSView {
     let scroll = NSScrollView()
     private let document = SidebarFlippedView()
     private let empty = NSTextField(wrappingLabelWithString: uiText("No unread emails, you can exhale!"))
-    private let compose = NSButton(title: "", target: nil, action: nil)
+    private let compose = SidebarPreviewAddButton(title: "", target: nil, action: nil)
     private var rows: [GmailPreviewRow] = []
+    private weak var hoveredRow: GmailPreviewRow?
     private var inbox: BrowserGmailInbox?
     var onMessage: ((String) -> Void)?
     var onCompose: (() -> Void)?
@@ -36,8 +37,8 @@ final class GmailPreviewView: NSView {
         empty.textColor = .secondaryLabelColor
         empty.alignment = .center
         document.addSubview(empty)
+        compose.pressedFill = OrbitTokens.Color.State.sidebarItemHovered
         compose.bezelStyle = .circular
-        compose.isBordered = true
         compose.image = OrbitIcon.image(sfName: "plus", pointSize: 16, accessibilityDescription: nil)
         compose.imagePosition = .imageOnly
         compose.target = self
@@ -74,7 +75,19 @@ final class GmailPreviewView: NSView {
         scroll.contentView.scroll(to: .init(x: 0, y: min(position.y, max(0, document.frame.height - scroll.contentSize.height))))
     }
 
+    func updatePointerTarget(_ target: NSView?) -> NSCursor? {
+        let row = target as? GmailPreviewRow
+        if hoveredRow !== row {
+            hoveredRow?.isHovering = false
+            row?.isHovering = true
+            hoveredRow = row
+        }
+        compose.isHovering = target === compose
+        return row != nil || compose.isHovering ? .pointingHand : .arrow
+    }
+
     func clear() {
+        _ = updatePointerTarget(nil)
         inbox = nil
         for row in rows { row.removeFromSuperview() }
         rows.removeAll()
@@ -111,6 +124,7 @@ private final class GmailPreviewRow: NSView {
     private let date = NSTextField(labelWithString: "")
     var onChoose: (() -> Void)?
     private var pressed = false
+    var isHovering = false { didSet { if isHovering != oldValue { needsDisplay = true } } }
     init(message: BrowserGmailMessage) {
         super.init(frame: .zero)
         sender.stringValue = message.sender
@@ -155,6 +169,11 @@ private final class GmailPreviewRow: NSView {
         summary.frame = .init(x: 12, y: 44, width: max(0, bounds.width - 24), height: 28)
     }
     override func draw(_ dirtyRect: NSRect) {
+        if isHovering {
+            let style = OrbitTokens.SidebarRowHover.self
+            style.fill.setFill()
+            NSBezierPath(roundedRect: style.frame(in: bounds), xRadius: style.radius, yRadius: style.radius).fill()
+        }
         NSColor.separatorColor.setFill()
         NSRect(x: 0, y: bounds.maxY - 0.5, width: bounds.width, height: 0.5).fill()
     }

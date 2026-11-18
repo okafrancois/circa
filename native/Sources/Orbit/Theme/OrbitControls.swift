@@ -383,3 +383,31 @@ enum OrbitAddressFieldStyle {
         field.cell?.truncatesLastVisibleLine = true
     }
 }
+
+@MainActor
+final class SidebarPreviewAddButton: NSButton {
+    var pressedFill = OrbitTokens.Color.State.sidebarItem
+    var isHovering = false { didSet { if isHovering != oldValue { needsDisplay = true } } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.75, dy: 0.75))
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.15)
+        shadow.shadowBlurRadius = 2; shadow.shadowOffset = .init(width: 0, height: -1)
+        shadow.set()
+        OrbitTokens.Color.previewAddButton.setFill(); circle.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.separatorColor.setStroke(); circle.lineWidth = 0.5; circle.stroke()
+        if isHighlighted || isHovering {
+            let state = OrbitTokens.Color.State.self
+            (isHighlighted ? pressedFill : state.sidebarItem).setFill()
+            circle.fill()
+        }
+        if let image {
+            OrbitIcon.draw(image, in: .init(x: bounds.midX - image.size.width / 2,
+                y: bounds.midY - image.size.height / 2, width: image.size.width, height: image.size.height),
+                tint: OrbitTokens.Color.Text.primary)
+        }
+    }
+}

@@ -164,13 +164,19 @@ final class OrbitBrowserWindow: NSWindow {
 
     private func reconcilePopoverHover(at point: NSPoint) {
         let owned = ownsPopoverHover(at: point)
-        guard ownsPointerHover != owned else { return }
+        // Background cursor rects stay disabled while the frontmost popover supplies its cursor.
+        let cursor = hoverPopover?.popover?.pointerReceiver?(hoverPopoverHit(at: point))
+        guard ownsPointerHover != owned else {
+            if owned { cursor?.set() }
+            return
+        }
         ownsPointerHover = owned
         if owned {
             restoreCursorRects = areCursorRectsEnabled
             if restoreCursorRects { disableCursorRects() }
-            NSCursor.arrow.set()
+            (cursor ?? .arrow).set()
         } else {
+            NSCursor.arrow.set()
             if restoreCursorRects { enableCursorRects() }
             restoreCursorRects = false
         }
@@ -214,7 +220,10 @@ final class OrbitBrowserWindow: NSWindow {
         guard let hoverPopover else { return false }
         let destination = hoverPopover.destination(at: point, in: self)
         guard destination != .outside else { return false }
-        if destination == .panel { hoverPopover.popover?.scrollReceiver?.scrollWheel(with: event) }
+        if destination == .panel {
+            hoverPopover.popover?.scrollReceiver?.scrollWheel(with: event)
+            reconcilePopoverHover(at: point)
+        }
         return true
     }
 
