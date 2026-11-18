@@ -9,6 +9,38 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.1-nightly.2/</id>
+    <title>0.75.1-nightly.2 — Readable downloads and mail previews that keep the pointer to themselves.</title>
+    <link href="https://circabrowser.com/changelog/0.75.1-nightly.2/" />
+    <updated>2026-11-18T00:00:00Z</updated>
+    <published>2026-11-18T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Readable downloads and mail previews that keep the pointer to themselves.
+
+3 fixed
+
+## Fixed
+
+- The sidebar downloads list now sits on the sidebar's own background, hiding the tabs behind it and fading into the rest of the sidebar, so file names are readable.
+- Gmail previews have a solid background; nothing behind shows through.
+- While the pointer is in the downloads list or a Gmail or Calendar preview, tabs, favorites and page links behind it no longer highlight or change the cursor, and scrolling stays in the preview.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.1-nightly.2" data-version="0.75.1-nightly.2" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.1-nightly.2" aria-label="Link to version 0.75.1-nightly.2"&gt;0.75.1-nightly.2&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-18"&gt;November 18, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Readable downloads and mail previews that keep the pointer to themselves.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;3 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;The sidebar downloads list now sits on the sidebar&amp;#x27;s own background, hiding the tabs behind it and fading into the rest of the sidebar, so file names are readable.&lt;/li&gt;
+    &lt;li&gt;Gmail previews have a solid background; nothing behind shows through.&lt;/li&gt;
+    &lt;li&gt;While the pointer is in the downloads list or a Gmail or Calendar preview, tabs, favorites and page links behind it no longer highlight or change the cursor, and scrolling stays in the preview.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.1-nightly.2/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.1-nightly.1/</id>
     <title>0.75.1-nightly.1 — Downloads, Gmail and Calendar previews stay open while you reach them.</title>
     <link href="https://circabrowser.com/changelog/0.75.1-nightly.1/" />
