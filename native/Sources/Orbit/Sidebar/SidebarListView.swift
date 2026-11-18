@@ -567,8 +567,8 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     private func rowFrame(centerY: CGFloat) -> NSRect {
-        NSRect(x: Metrics.paddingX, y: centerY - Metrics.rowHeight / 2,
-               width: max(0, bounds.width - 2 * Metrics.paddingX), height: Metrics.rowHeight)
+        OrbitTokens.SidebarRowHover.frame(in: NSRect(x: 0, y: centerY - Metrics.rowPitch / 2,
+                                                    width: bounds.width, height: Metrics.rowPitch))
     }
 
     /// Creates views for rows near the visible rect and recycles the others.

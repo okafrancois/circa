@@ -52,10 +52,14 @@ public struct BrowserGmailAccount: Hashable, Sendable {
         return value.url!
     }
 
-    public func messageURL(id: String) -> URL? {
-        guard Self.validMessageID(id) else { return nil }
+    public func messageURL(for message: BrowserGmailMessage) -> URL? {
+        guard let id = message.conversationID, Self.validMessageID(id) else { return nil }
         var value = URLComponents(url: inboxURL, resolvingAgainstBaseURL: false)!
-        value.fragment = "inbox/" + id
+        value.queryItems = [
+            .init(name: "message_id", value: id),
+            .init(name: "view", value: "conv"),
+            .init(name: "extsrc", value: "atom")
+        ]
         return value.url
     }
 
@@ -68,12 +72,14 @@ public struct BrowserGmailAccount: Hashable, Sendable {
 
 public struct BrowserGmailMessage: Equatable, Sendable, Identifiable {
     public let id: String
+    let conversationID: String?
     public let sender: String
     public let subject: String
     public let summary: String
     public let receivedAt: Date?
 
-    public init(id: String, sender: String, subject: String, summary: String, receivedAt: Date?) {
+    public init(id: String, sender: String, subject: String, summary: String, receivedAt: Date?, conversationID: String? = nil) {
+        self.conversationID = conversationID
         self.id = id; self.sender = sender; self.subject = subject; self.summary = summary; self.receivedAt = receivedAt
     }
 }
@@ -112,6 +118,7 @@ private final class GmailFeedDecoder: NSObject, XMLParserDelegate {
     private var path: [String] = []
     private var fields: [String: String] = [:]
     private var ids: Set<String> = []
+    private var conversationIDs: Set<String> = []
     private var rootNamespace: String?
     private let acceptedFields: Set<String> = ["feed/fullcount", "feed/entry/id", "feed/entry/title",
         "feed/entry/summary", "feed/entry/issued", "feed/entry/modified", "feed/entry/author/name", "feed/entry/author/email"]
@@ -127,7 +134,15 @@ private final class GmailFeedDecoder: NSObject, XMLParserDelegate {
         }
         path.append(elementName)
         guard path.count <= 12 else { reject(parser); return }
-        if path == ["feed", "entry"] { fields = fields.filter { $0.key == "feed/fullcount" } }
+        if path == ["feed", "entry"] {
+            fields = fields.filter { $0.key == "feed/fullcount" }
+            conversationIDs.removeAll()
+        }
+        if path == ["feed", "entry", "link"], namespaceURI == rootNamespace,
+           (attributeDict["rel"] ?? "alternate") == "alternate",
+           let id = conversationID(from: attributeDict["href"]) {
+            conversationIDs.insert(id)
+        }
         if acceptedFields.contains(path.joined(separator: "/")), namespaceURI != rootNamespace { reject(parser) }
     }
 
@@ -163,9 +178,27 @@ private final class GmailFeedDecoder: NSObject, XMLParserDelegate {
                 messages.append(.init(id: id, sender: sender,
                     subject: clean(fields["feed/entry/title"] ?? "", limit: 300),
                     summary: clean(fields["feed/entry/summary"] ?? "", limit: 400),
-                    receivedAt: date(fields["feed/entry/issued"] ?? fields["feed/entry/modified"])))
+                    receivedAt: date(fields["feed/entry/issued"] ?? fields["feed/entry/modified"]),
+                    conversationID: conversationIDs.count == 1 ? conversationIDs.first : nil))
             }
         }
+    }
+
+    private func conversationID(from href: String?) -> String? {
+        guard let href, href.utf8.count <= 8_192, let url = URLComponents(string: href),
+              let scheme = url.scheme?.lowercased(), ["https", "http"].contains(scheme),
+              url.host?.lowercased() == "mail.google.com", url.user == nil, url.password == nil,
+              url.port == nil, url.fragment == nil else { return nil }
+        var route = url
+        route.scheme = "https"
+        route.query = nil
+        guard let routeURL = route.url, BrowserGmailAccount(url: routeURL) != nil else { return nil }
+        let query = url.queryItems ?? []
+        let views = query.filter { $0.name == "view" }
+        let ids = query.filter { $0.name == "message_id" }
+        guard views.count == 1, views.first?.value == "conv", ids.count == 1,
+              let id = ids.first?.value, BrowserGmailAccount.validMessageID(id) else { return nil }
+        return id.lowercased()
     }
 
     private func clean(_ value: String, limit: Int) -> String {

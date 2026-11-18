@@ -12,7 +12,7 @@ final class GmailPreviewController {
     var permitted: (NSView, BrowserOrganizationTabItem, BrowserGmailAccount) -> Bool = { _, _, _ in false }
     var inbox: (BrowserGmailAccount) -> BrowserGmailInbox? = { _ in nil }
     var refresh: (BrowserGmailAccount) -> Void = { _ in }
-    var open: (BrowserOrganizationTabItem, BrowserGmailAccount, String?) -> Void = { _, _, _ in }
+    var open: (BrowserOrganizationTabItem, BrowserGmailAccount, URL) -> Void = { _, _, _ in }
     private var timer: (any OrbitCancellable)?
     private let hoverPopover = SidebarHoverPopover(closeDelay: 0.18)
     var containsPointer: Bool { hoverPopover.containsPointer }
@@ -84,6 +84,7 @@ final class GmailPreviewController {
         container.layer?.shadowRadius = 14
         container.layer?.shadowOffset = .init(width: 0, height: -6)
         container.scrollReceiver = view.scroll
+        container.pointerReceiver = view.updatePointerTarget
         container.addSubview(view)
         host.addSubview(container, positioned: .above, relativeTo: nil)
         self.container = container
@@ -107,10 +108,15 @@ final class GmailPreviewController {
     }
 
     private func choose(_ id: String?) {
-        guard let tile = anchor, let tab, let account, validate(tile, tab, account),
-              id == nil || inbox(account)?.messages.contains(where: { $0.id == id }) == true else { dismiss(); return }
-        open(tab, account, id)
-        dismiss()
+        defer { dismiss() }
+        guard let tile = anchor, let tab, let account, validate(tile, tab, account) else { return }
+        if let id {
+            guard let message = inbox(account)?.messages.first(where: { $0.id == id }),
+                  let url = account.messageURL(for: message) else { return }
+            open(tab, account, url)
+        } else {
+            open(tab, account, account.composeURL)
+        }
     }
 
     func dismiss() {

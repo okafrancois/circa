@@ -49,6 +49,7 @@ struct SidebarHoverRegion {
 class SidebarHoverPopoverSurface: NSView {
     var retiresPointerInput = false
     weak var scrollReceiver: NSScrollView?
+    var pointerReceiver: ((NSView?) -> NSCursor?)?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !retiresPointerInput else { return nil }

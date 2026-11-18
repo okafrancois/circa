@@ -9,8 +9,6 @@ struct GmailPreviewTests {
         #expect(account.selector == "1")
         #expect(account.feedURL.absoluteString == "https://mail.google.com/mail/u/1/feed/atom")
         #expect(account.composeURL.fragment == "inbox?compose=new")
-        #expect(account.messageURL(id: "abcdef")?.absoluteString == "https://mail.google.com/mail/u/1/#inbox/abcdef")
-        #expect(account.messageURL(id: "../sent?compose=new") == nil)
         #expect(account != BrowserGmailAccount(url: URL(string: "https://gmail.com/")!))
         #expect(BrowserGmailAccount(url: URL(string: "https://mail.google.com/mail/u/0/?authuser=2")!)?.selector == "2")
         #expect(BrowserGmailAccount(url: URL(string: "https://mail.google.com/mail/ca/u/1/")!) == account)
@@ -22,10 +20,10 @@ struct GmailPreviewTests {
         }
     }
 
-    private func entry(_ id: String = "abcdef") -> String {
+    private func entry(_ id: String = "abcdef", links: String = "") -> String {
         """
         <entry><title>One &amp; Two</title><summary>Plain &lt;safe&gt; text</summary>
-        <id>tag:gmail.google.com,2004:\(id)</id><issued>2026-11-03T12:00:00Z</issued>
+        <id>tag:gmail.google.com,2004:\(id)</id>\(links)<issued>2026-11-03T12:00:00Z</issued>
         <author><name>Synthetic Sender</name><email>sender@example.test</email></author></entry>
         """
     }
@@ -45,6 +43,43 @@ struct GmailPreviewTests {
         #expect(try BrowserGmailInbox.decodeFeed(feed("<fullcount>0</fullcount>")).messages.isEmpty)
         let many = try BrowserGmailInbox.decodeFeed(feed("<fullcount>22</fullcount>" + (1...22).map { entry(String($0, radix: 16)) }.joined()))
         #expect(many.unreadCount == 22 && many.messages.count == 20)
+    }
+
+    private func link(_ href: String) -> String {
+        "<link rel='alternate' type='text/html' href='\(href.replacingOccurrences(of: "&", with: "&amp;"))'/>"
+    }
+
+    @Test("The Atom alternate link supplies the conversation while the favorite supplies the account")
+    func conversationLink() throws {
+        let account = try #require(BrowserGmailAccount(url: URL(string: "https://mail.google.com/mail/u/2/")!))
+        let href = "http://mail.google.com/mail?account_id=person@example.test&message_id=19a72Bc&view=conv&extsrc=atom"
+        let home = link("https://mail.google.com/mail?message_id=123&view=conv")
+        let inbox = try BrowserGmailInbox.decodeFeed(feed("<fullcount>2</fullcount>" + home
+            + entry("1298971088706490756", links: link(href)) + entry("abcdef")))
+        let message = try #require(inbox.messages.first)
+        #expect(message.id == "1298971088706490756")
+        #expect(account.messageURL(for: message)?.absoluteString ==
+            "https://mail.google.com/mail/u/2/?message_id=19a72bc&view=conv&extsrc=atom")
+        #expect(account.messageURL(for: inbox.messages[1]) == nil)
+    }
+
+    @Test("Invalid or ambiguous Atom links leave no conversation destination")
+    func invalidConversationLinks() throws {
+        let account = try #require(BrowserGmailAccount(url: URL(string: "https://mail.google.com/mail/u/0/")!))
+        let route = "https://mail.google.com/mail?view=conv&message_id="
+        for links in [
+            link("https://mail.google.com/mail"),
+            link("https://mail.google.com.example.test/mail?view=conv&message_id=abc"),
+            link("https://identity@mail.google.com/mail?view=conv&message_id=abc"),
+            link("https://mail.google.com/mail/feed/atom?view=conv&message_id=abc"),
+            link(route + "abc&message_id=def"),
+            link(route + "abc&view=conv"),
+            link(route + "abc%2Finbox"),
+            link(route + "abc") + link(route + "def")
+        ] {
+            let inbox = try BrowserGmailInbox.decodeFeed(feed("<fullcount>1</fullcount>" + entry(links: links)))
+            #expect(account.messageURL(for: try #require(inbox.messages.first)) == nil)
+        }
     }
 
     @Test("Sign-in pages, inconsistent totals, duplicate identities and XML entities cannot become an empty inbox")

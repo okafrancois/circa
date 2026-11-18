@@ -59,7 +59,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         if mark.tint != effectiveAccent.icon { mark.tint = effectiveAccent.icon }
 
     }
-    let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
+    let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.SidebarRowHover.radius)
     let titleLabel = NSTextField(labelWithString: "")
     weak var events: (any SidebarRowEventHandler)?
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
@@ -153,7 +153,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     var isSelected: Bool { false }
     var isMultiSelected: Bool { false }
     var isRenaming: Bool { renameField != nil }
-    var hoverFill: NSColor { OrbitTokens.Color.State.sidebarItem }
+    var hoverFill: NSColor { OrbitTokens.SidebarRowHover.fill }
     var backgroundLeadingInset: CGFloat { 0 }
     var backgroundTrailingOutset: CGFloat { 0 }
     var titleOffsetY: CGFloat { 0 }

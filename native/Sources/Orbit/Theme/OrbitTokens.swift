@@ -37,7 +37,22 @@ extension NSColor {
 // MARK: - Colours
 
 extension OrbitTokens {
+    enum SidebarRowHover {
+        static let fill = Color.State.sidebarItem
+        static let radius = Radius.tabRow
+        static let horizontalInset = Metrics.Sidebar.paddingX
+        static let verticalInset = Metrics.Sidebar.rowSpacing / 2
+
+        static func frame(in slot: NSRect) -> NSRect {
+            NSRect(x: slot.minX + horizontalInset, y: slot.minY + verticalInset,
+                   width: max(0, slot.width - 2 * horizontalInset),
+                   height: max(0, slot.height - 2 * verticalInset))
+        }
+    }
+
     public enum Color {
+        static let previewAddButton = NSColor.orbitDynamic("previewAddButton", light: .white, dark: .orbitSRGB(0x606060))
+
         enum Gmail {
             static let previewBackground = NSColor.orbitDynamic("Gmail.previewBackground",
                 light: .orbitSRGB(0xF5F5F5), dark: .orbitSRGB(0x3D3C3F))
@@ -48,7 +63,6 @@ extension OrbitTokens {
             public static let outline = NSColor.orbitDynamic("Calendar.outline", light: .orbitSRGB(0xF1ECE5), dark: .orbitSRGB(0x72695B))
             public static let join = NSColor.orbitDynamic("Calendar.join", light: .orbitSRGB(0x744B63), dark: .orbitSRGB(0x744B63))
             public static let now = NSColor.orbitDynamic("Calendar.now", light: ThemePicker.drab[0], dark: ThemePicker.pastel[2])
-            public static let addButton = NSColor.orbitDynamic("Calendar.addButton", light: .white, dark: .orbitSRGB(0x606060))
         }
         // MARK: Text tiers
         public enum Text {
