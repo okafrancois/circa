@@ -106,7 +106,7 @@ enum OrbitGmailProbe {
             if let first = rows.first {
                 checks["messageNativeClick"] = click(first)
                 await settle()
-                checks["messageUsesAccount"] = surface.currentURL?.absoluteString == "https://mail.google.com/mail/u/0/?message_id=19a72bc&view=conv&extsrc=atom"
+                checks["messageUsesAccount"] = surface.currentURL?.absoluteString == "https://mail.google.com/mail/u/0/#all/19a72bc"
             }
             owner.favorites.gmailPreview.dismiss()
             // Restore the harmless loopback document while retaining the favorite's home identity.

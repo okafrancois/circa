@@ -55,11 +55,9 @@ public struct BrowserGmailAccount: Hashable, Sendable {
     public func messageURL(for message: BrowserGmailMessage) -> URL? {
         guard let id = message.conversationID, Self.validMessageID(id) else { return nil }
         var value = URLComponents(url: inboxURL, resolvingAgainstBaseURL: false)!
-        value.queryItems = [
-            .init(name: "message_id", value: id),
-            .init(name: "view", value: "conv"),
-            .init(name: "extsrc", value: "atom")
-        ]
+        // The web app answers the feed's query-style conversation link with 403 when the
+        // account parameter is absent; its fragment route resolves the same hexadecimal ID.
+        value.fragment = "all/" + id
         return value.url
     }
 

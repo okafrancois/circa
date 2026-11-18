@@ -59,7 +59,7 @@ struct GmailPreviewTests {
         let message = try #require(inbox.messages.first)
         #expect(message.id == "1298971088706490756")
         #expect(account.messageURL(for: message)?.absoluteString ==
-            "https://mail.google.com/mail/u/2/?message_id=19a72bc&view=conv&extsrc=atom")
+            "https://mail.google.com/mail/u/2/#all/19a72bc")
         #expect(account.messageURL(for: inbox.messages[1]) == nil)
     }
 
