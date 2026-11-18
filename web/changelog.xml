@@ -9,6 +9,38 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.1-nightly.3/</id>
+    <title>0.75.1-nightly.3 — Gmail previews open the message you click.</title>
+    <link href="https://circabrowser.com/changelog/0.75.1-nightly.3/" />
+    <updated>2026-11-18T00:00:00Z</updated>
+    <published>2026-11-18T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Gmail previews open the message you click.
+
+3 fixed
+
+## Fixed
+
+- Clicking a message in a Gmail favorite's preview opens that conversation in the favorite's tab instead of the inbox.
+- Gmail preview messages highlight under the pointer and show a pointing hand.
+- The + button for a new message in the Gmail preview has a solid background and is clearly visible.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.1-nightly.3" data-version="0.75.1-nightly.3" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.1-nightly.3" aria-label="Link to version 0.75.1-nightly.3"&gt;0.75.1-nightly.3&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-18"&gt;November 18, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Gmail previews open the message you click.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;3 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Clicking a message in a Gmail favorite&amp;#x27;s preview opens that conversation in the favorite&amp;#x27;s tab instead of the inbox.&lt;/li&gt;
+    &lt;li&gt;Gmail preview messages highlight under the pointer and show a pointing hand.&lt;/li&gt;
+    &lt;li&gt;The + button for a new message in the Gmail preview has a solid background and is clearly visible.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.1-nightly.3/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.1-nightly.2/</id>
     <title>0.75.1-nightly.2 — Readable downloads and mail previews that keep the pointer to themselves.</title>
     <link href="https://circabrowser.com/changelog/0.75.1-nightly.2/" />
