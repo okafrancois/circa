@@ -14,10 +14,8 @@ final class GmailPreviewController {
     var refresh: (BrowserGmailAccount) -> Void = { _ in }
     var open: (BrowserOrganizationTabItem, BrowserGmailAccount, String?) -> Void = { _, _, _ in }
     private var timer: (any OrbitCancellable)?
-    private var departure: (any OrbitCancellable)?
-    private var monitor: Any?
-    private var observations: [NSObjectProtocol] = []
-    private var anchorFrame: NSRect = .zero
+    private let hoverPopover = SidebarHoverPopover(closeDelay: 0.18)
+    var containsPointer: Bool { hoverPopover.containsPointer }
     private var armed = false
     private var epoch: UInt64 = 0
     private var container: NSView?
@@ -25,10 +23,8 @@ final class GmailPreviewController {
     var onPresentationChange: (() -> Void)?
 
     init() {
-        view.onPointer = { [weak self] inside in
-            if inside { self?.departure?.cancel(); self?.departure = nil }
-            else { self?.leave() }
-        }
+        hoverPopover.onDismiss = { [weak self] _ in self?.dismiss() }
+        hoverPopover.onResize = { [weak self] in self?.reconcile() }
         view.onMessage = { [weak self] id in self?.choose(id) }
         view.onCompose = { [weak self] in self?.choose(nil) }
     }
@@ -38,12 +34,17 @@ final class GmailPreviewController {
     }
 
     func hover(_ tile: NSView, tab: BrowserOrganizationTabItem, inside: Bool) {
-        if !inside { if anchor === tile { leave() }; return }
-        if anchor === tile, self.tab?.id == tab.id { departure?.cancel(); departure = nil; return }
+        if !inside {
+            if anchor === tile {
+                if isPresented { hoverPopover.update() }
+                else { dismiss() }
+            }
+            return
+        }
+        if (anchor === tile && self.tab?.id == tab.id) || containsPointer { return }
         dismiss()
         guard let account = BrowserGmailAccount(url: tab.pinnedURL ?? tab.url), permitted(tile, tab, account) else { return }
         anchor = tile; self.tab = tab; self.account = account
-        anchorFrame = tile.convert(tile.visibleRect, to: nil)
         refresh(account)
         let token = epoch
         timer = OrbitRunLoopTimer(after: 0.3) { [weak self] in
@@ -61,7 +62,7 @@ final class GmailPreviewController {
         }
         view.render(inbox)
         if container == nil { show(tile) }
-        layout(tile)
+        else { layout(tile) }
     }
 
     private func validate(_ tile: NSView, _ tab: BrowserOrganizationTabItem, _ account: BrowserGmailAccount) -> Bool {
@@ -70,12 +71,12 @@ final class GmailPreviewController {
         let identity = (tile as? FavoriteTileView)?.item.tab.id ?? (tile as? SidebarTabRow)?.item.id
         return enabled && identity == tab.id && NSApp.isActive && tile.window?.isKeyWindow == true && tile.window?.attachedSheet == nil
             && !tile.isHiddenOrHasHiddenAncestor && !tile.visibleRect.isEmpty
-            && tile.convert(tile.visibleRect, to: nil) == anchorFrame && permitted(tile, tab, account)
+            && permitted(tile, tab, account)
     }
 
     private func show(_ tile: NSView) {
         guard let window = tile.window, let host = window.contentView else { return }
-        let container = NSView()
+        let container = SidebarHoverPopoverSurface()
         container.wantsLayer = true
         container.layer?.shadowColor = NSColor.black.cgColor
         container.layer?.shadowOpacity = 0.22
@@ -84,32 +85,10 @@ final class GmailPreviewController {
         container.addSubview(view)
         host.addSubview(container, positioned: .above, relativeTo: nil)
         self.container = container
+        layout(tile)
+        (tile as? FavoriteTileView)?.suppressesTitleTooltip = true
+        hoverPopover.start(trigger: tile, popover: container)
         onPresentationChange?()
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]) { [weak self] event in
-            guard let self else { return event }
-            if event.type == .keyDown {
-                guard event.window === self.anchor?.window else { self.dismiss(); return event }
-                if event.keyCode == 53 { self.dismiss(); return nil }
-                self.dismiss()
-            } else if let container = self.container {
-                let point = container.convert(event.locationInWindow, from: nil)
-                if event.window !== container.window || !container.bounds.contains(point) { self.dismiss() }
-            }
-            return event
-        }
-        for name in [NSWindow.willCloseNotification, NSWindow.didResizeNotification, NSWindow.didMoveNotification,
-                     NSWindow.didResignKeyNotification, NSWindow.willBeginSheetNotification,
-                     NSWindow.willEnterFullScreenNotification, NSWindow.willExitFullScreenNotification] {
-            observations.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.dismiss() }
-            })
-        }
-        observations.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.dismiss() }
-        })
-        observations.append(NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.dismiss() }
-        })
     }
 
     private func layout(_ tile: NSView) {
@@ -125,16 +104,6 @@ final class GmailPreviewController {
         view.frame = container.bounds
     }
 
-    private func leave() {
-        if !armed && !isPresented { dismiss(); return }
-        departure?.cancel()
-        let token = epoch
-        departure = OrbitRunLoopTimer(after: 0.18) { [weak self] in
-            guard let self, self.epoch == token else { return }
-            self.dismiss()
-        }
-    }
-
     private func choose(_ id: String?) {
         guard let tile = anchor, let tab, let account, validate(tile, tab, account),
               id == nil || inbox(account)?.messages.contains(where: { $0.id == id }) == true else { dismiss(); return }
@@ -145,10 +114,9 @@ final class GmailPreviewController {
     func dismiss() {
         let wasPresented = isPresented
         epoch &+= 1
-        timer?.cancel(); timer = nil; departure?.cancel(); departure = nil
-        if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil
-        for observation in observations { NotificationCenter.default.removeObserver(observation) }
-        observations.removeAll()
+        timer?.cancel(); timer = nil
+        hoverPopover.stop()
+        (anchor as? FavoriteTileView)?.suppressesTitleTooltip = false
         view.removeFromSuperview(); view.clear(); container?.removeFromSuperview(); container = nil
         anchor = nil; tab = nil; account = nil; armed = false
         if wasPresented { onPresentationChange?() }

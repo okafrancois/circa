@@ -65,9 +65,15 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         grid.makeContextMenu = { [weak self] id in self?.contextMenu(for: id) }
         installCalendar()
         grid.onHover = { [weak self] tile, inside in
+            guard let self else { return }
+            if inside && (calendarPreview.containsPointer || gmailPreview.containsPointer) { return }
             if BrowserCalendarWebAccount(url: tile.item.tab.pinnedURL ?? tile.item.tab.url) != nil {
-                self?.calendarPreview.hover(tile, inside: inside)
-            } else { self?.gmailPreview.hover(tile, inside: inside) }
+                if inside { gmailPreview.dismiss() }
+                calendarPreview.hover(tile, inside: inside)
+            } else {
+                if inside { calendarPreview.dismiss() }
+                gmailPreview.hover(tile, inside: inside)
+            }
         }
         gmail.onChange = { [weak self] in self?.render() }
         gmailPreview.onPresentationChange = { [weak owner] in owner?.windowShell.hoverHoldDidChange() }
@@ -85,6 +91,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         gmailPreview.open = { [weak self] tab, account, message in self?.openGmail(tab, account: account, message: message) }
         owner.sidebar.onTabHover = { [weak self] row, inside in
             guard let self, let owner = self.owner else { return false }
+            if inside && (self.calendarPreview.containsPointer || self.gmailPreview.containsPointer) { return true }
             if let tab = owner.session.organization?.tab(row.item.id), tab.section.keepsPinnedURL,
                BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) != nil {
                 if inside { owner.richTabPreview.dismiss() }

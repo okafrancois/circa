@@ -54,6 +54,9 @@ final class FavoriteTileView: NSView {
     var onDrag: ((NSEvent) -> Void)?
     var makeContextMenu: (() -> NSMenu?)?
     var onHover: ((Bool) -> Void)?
+    var suppressesTitleTooltip = false {
+        didSet { toolTip = suppressesTitleTooltip ? nil : item.title }
+    }
 
     init(item: FavoriteTileItem) {
         self.item = item
@@ -118,7 +121,7 @@ final class FavoriteTileView: NSView {
         if let count = item.unreadCount { states.append(String(format: uiText("Unread: %d"), count)) }
         setAccessibilityValue(states.joined(separator: ", "))
         setAccessibilityHelp(item.tab.isAwayFromPinnedURL ? uiText("Use the menu to reset the favorite to its original URL.") : nil)
-        toolTip = item.title
+        toolTip = suppressesTitleTooltip ? nil : item.title
         refreshFill()
         needsLayout = true
     }
@@ -164,7 +167,11 @@ final class FavoriteTileView: NSView {
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { isHovering = false; cancelPress() }
+        if window == nil { isHovering = false; cancelPress(); onHover?(false) }
+    }
+    override func viewDidHide() {
+        super.viewDidHide()
+        onHover?(false)
     }
     override func mouseDown(with event: NSEvent) {
         guard commandsEnabled else { return }

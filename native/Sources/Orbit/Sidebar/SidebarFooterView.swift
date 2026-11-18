@@ -9,7 +9,6 @@ private typealias Metrics = OrbitTokens.Metrics.Sidebar
 final class SidebarFooterView: NSView {
     let libraryButton = OrbitGlyphButton(glyph: OrbitGlyph.library, label: OrbitShellText.library)
     let downloadBadge = SidebarDownloadBadge()
-    var onDownloadHover: ((Bool) -> Void)?
     let plusButton = OrbitGlyphButton(glyph: OrbitGlyph.footerPlus, label: OrbitShellText.create)
     private(set) var spaceButtons: [SidebarSpaceButton] = []
     private var spaces: [BrowserSpace] = []
@@ -62,9 +61,6 @@ final class SidebarFooterView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override var isFlipped: Bool { true }
-
-    override func mouseEntered(with event: NSEvent) { onDownloadHover?(true) }
-    override func mouseExited(with event: NSEvent) { onDownloadHover?(false) }
 
     func setCommandsEnabled(_ enabled: Bool) {
         if !enabled { cancelContextMenu(); cancelIconPicker(); authority = UUID() }

@@ -24,7 +24,7 @@ extension BrowserWindowController {
         }
         windowShell.isHoverHeld = { [weak self] in
             guard let self else { return false }
-            return sidebar.hasFooterPresentation || isEditingInSidebar || folderPreview.isPresented || richTabPreview.isPresented || favorites?.gmailPreview.isPresented == true || favorites?.calendarPreview.isPresented == true || siteControls?.isPopoverShown == true
+            return sidebar.hasFooterPresentation || sidebar.recentDownloads.isPresented || isEditingInSidebar || folderPreview.isPresented || richTabPreview.isPresented || favorites?.gmailPreview.isPresented == true || favorites?.calendarPreview.isPresented == true || siteControls?.isPopoverShown == true
                 || themeEditor?.panel?.isVisible == true
         }
         for name in [NSControl.textDidBeginEditingNotification, NSControl.textDidEndEditingNotification] {
@@ -102,6 +102,11 @@ extension BrowserWindowController {
         if sidebar.isHidden != sidebarHidden { sidebar.isHidden = sidebarHidden }
         sidebar.isShellHidden = !onScreen
         sidebar.setAccessibilityHidden(!onScreen)
+        if !onScreen || library.isPresented {
+            downloadHoverChanged(false)
+            favorites?.gmailPreview.dismiss()
+            favorites?.calendarPreview.dismiss()
+        }
         if library.contentsInstalled, downloadsPane.isHidden != paneHidden { downloadsPane.isHidden = paneHidden }
     }
 
@@ -130,6 +135,7 @@ extension BrowserWindowController {
         closeThemeEditorIfNeeded(activeSpaceID: spaceID)
         let theme = resolvedSpaceTheme(for: spaceID)
         let switching = displayedSpaceID != nil && displayedSpaceID != spaceID
+        if switching { downloadHoverChanged(false) }
         // A late swipe publication can finish the preview inside willRender. Install its
         // stored theme first so clearing the interactive blend cannot flash the old Space.
         windowShell.onThemePaint = { [weak self] painted in

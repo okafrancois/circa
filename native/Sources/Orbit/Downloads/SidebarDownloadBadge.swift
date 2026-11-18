@@ -7,6 +7,13 @@ final class SidebarDownloadBadge: NSView {
     private var active = false
     private var file: BrowserDownloadKey?
     private var image: NSImage?
+    private static let activeOffsets: [CGFloat] = [-7.0, -5.5, -4.0, -3.5, -3.5, 6.0, 10.0, 11.5, 12.0, 12.0, 11.0, 8.0, 6.0, 2.0, 0.5, -1.0, -1.5, -2.0, -2.0, -2.0, -1.0, -1.0, -1.0, -0.5, 0]
+    private static let maximumDisplacement = activeOffsets.map(abs).max() ?? 0
+    private let activeGlyph = NSRect(x: 7, y: 9, width: 18, height: 18)
+    var hoverBounds: NSRect? {
+        guard !isHidden else { return nil }
+        return active ? activeGlyph.insetBy(dx: -1, dy: -1 - Self.maximumDisplacement) : bounds
+    }
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     func render(active: Bool, completion: BrowserDownloadSnapshot?) {
@@ -22,7 +29,7 @@ final class SidebarDownloadBadge: NSView {
         guard changed, active, window?.isVisible == true, !OrbitMotionPreferences.prefersReducedMotion else { return }
         wantsLayer = true
         let motion = CAKeyframeAnimation(keyPath: "transform.translation.y")
-        motion.values = [-7.0, -5.5, -4.0, -3.5, -3.5, 6.0, 10.0, 11.5, 12.0, 12.0, 11.0, 8.0, 6.0, 2.0, 0.5, -1.0, -1.5, -2.0, -2.0, -2.0, -1.0, -1.0, -1.0, -0.5, 0]
+        motion.values = Self.activeOffsets
         motion.keyTimes = [0.0, 0.036364, 0.072727, 0.109091, 0.145455, 0.200001, 0.236363, 0.272727, 0.309092, 0.345454, 0.381818, 0.418183, 0.454545, 0.509091, 0.545455, 0.581819, 0.618182, 0.654546, 0.69091, 0.727273, 0.781818, 0.818182, 0.854547, 0.890909, 1]
         motion.duration = 0.458333
         let fade = CAKeyframeAnimation(keyPath: "opacity")
@@ -32,7 +39,7 @@ final class SidebarDownloadBadge: NSView {
     }
     override func draw(_ dirtyRect: NSRect) {
         if active {
-            let rect = NSRect(x: 7, y: 9, width: 18, height: 18)
+            let rect = activeGlyph
             OrbitFloatingMaterial.style(for: effectiveAppearance).tint.setFill(); NSBezierPath(ovalIn: rect).fill()
             OrbitTokens.Color.Text.vibrant.setStroke()
             let circle = NSBezierPath(ovalIn: rect); circle.lineWidth = 2; circle.stroke()

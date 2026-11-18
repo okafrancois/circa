@@ -91,7 +91,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
     @objc private func stopErrandPressed() { onStopErrand?() }
     let recentDownloads = SidebarDownloadsView()
-    private var downloadTracking: NSTrackingArea?
+    let downloadHoverTarget = SidebarDownloadHoverTarget()
     let updateCard = SidebarUpdateCard()
     /// Media still playing in tabs the user left, directly above the footer.
     let mediaPlayer = SidebarMediaPlayerView()
@@ -305,6 +305,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         errandStopButton.setAccessibilityIdentifier("sidebar-stop-errand")
         addSubview(errandStopButton)
         addSubview(recentDownloads)
+        addSubview(downloadHoverTarget)
         privateIndicator.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             privateIndicator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
@@ -340,17 +341,6 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     required init?(coder: NSCoder) { nil }
 
     override var isFlipped: Bool { true }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let downloadTracking { removeTrackingArea(downloadTracking) }
-        downloadTracking = nil
-        guard !isPrivate else { return }
-        let rect = convert(footer.libraryButton.frame.union(footer.downloadBadge.frame), from: footer)
-        let area = NSTrackingArea(rect: rect, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: footer)
-        addTrackingArea(area); downloadTracking = area
-    }
-
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -436,12 +426,21 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         mediaPlayer.frame = NSRect(x: Metrics.paddingX, y: footer.frame.minY - playerHeight,
                                    width: max(0, bounds.width - 2 * Metrics.paddingX), height: playerHeight)
         recentDownloads.frame = NSRect(x: 0, y: footer.frame.minY + footer.libraryButton.frame.midY - 14.5 - CGFloat(recentDownloads.items.count) * 56, width: bounds.width, height: CGFloat(recentDownloads.items.count) * 56)
+        layoutDownloadHoverTarget()
         if isPrivate {
             footer.isHidden = true
             favoritesContainer.isHidden = true
             page.isPrivate = true
             privateIndicator.isHidden = false
         }
+    }
+
+    func layoutDownloadHoverTarget() {
+        downloadHoverTarget.isHidden = isPrivate || footer.isHidden
+        let button = footer.libraryButton.frame
+        let badge = footer.downloadBadge.hoverBounds
+        let frame = badge.map { button.union(footer.downloadBadge.convert($0, to: footer)) } ?? button
+        downloadHoverTarget.frame = convert(frame, from: footer)
     }
 
     // MARK: Projection
