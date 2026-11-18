@@ -9,6 +9,38 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.1-nightly.1/</id>
+    <title>0.75.1-nightly.1 — Downloads, Gmail and Calendar previews stay open while you reach them.</title>
+    <link href="https://circabrowser.com/changelog/0.75.1-nightly.1/" />
+    <updated>2026-11-18T00:00:00Z</updated>
+    <published>2026-11-18T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Downloads, Gmail and Calendar previews stay open while you reach them.
+
+3 fixed
+
+## Fixed
+
+- The sidebar downloads list now opens from anywhere on its button, including the badge, and stays open while you move into it to click a file.
+- Gmail and Calendar favorite previews stay open while you move into them, so you can scroll, open a message or click + to compose.
+- A favorite's title tooltip no longer covers its open preview.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.1-nightly.1" data-version="0.75.1-nightly.1" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.1-nightly.1" aria-label="Link to version 0.75.1-nightly.1"&gt;0.75.1-nightly.1&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-18"&gt;November 18, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Downloads, Gmail and Calendar previews stay open while you reach them.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;3 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;The sidebar downloads list now opens from anywhere on its button, including the badge, and stays open while you move into it to click a file.&lt;/li&gt;
+    &lt;li&gt;Gmail and Calendar favorite previews stay open while you move into them, so you can scroll, open a message or click + to compose.&lt;/li&gt;
+    &lt;li&gt;A favorite&amp;#x27;s title tooltip no longer covers its open preview.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.1-nightly.1/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.0/</id>
     <title>0.75.0 — Search right from the sidebar address, encrypted iCloud sync and a cleaner way to clear site data.</title>
     <link href="https://circabrowser.com/changelog/0.75.0/" />
