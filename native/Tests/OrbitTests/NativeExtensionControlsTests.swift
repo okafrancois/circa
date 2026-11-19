@@ -165,8 +165,9 @@ struct NativeExtensionControlsTests {
         #expect(owner.siteControls.cycleSelectionID == nil)
         owner.extensionControls.finishCycle()
         #expect(host.actionIDs.count == 1)
+        // From a menu there is no Command release: the control center opens for a click.
         owner.extensionControls.cycle()
-        #expect(host.actionIDs == [first, first])
+        #expect(host.actionIDs == [first] && !owner.extensionControls.isCycling)
         try await environment.finalize()
     }
 
@@ -213,8 +214,8 @@ struct NativeExtensionControlsTests {
         try await environment.finalize()
     }
 
-    @Test("A single enabled pinned action opens on the press without waiting for the modifier release")
-    func singleActionOpensOnPress() async throws {
+    @Test("Cycling covers unpinned extensions and waits for the release even with a single pin")
+    func cyclingIncludesUnpinnedExtensions() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
         host.supportsActions = true; host.supportsPinning = true; host.item.isPinned = true
@@ -224,10 +225,23 @@ struct NativeExtensionControlsTests {
         defer { owner.session.close(); owner.window?.close() }
         owner.submitAddress("https://extensions.example.invalid")
         await owner.session.waitForPendingCommands()
+        let profile = try #require(owner.session.selectedSurface).profileID
+        let unpinned = String(repeating: "d", count: 32)
+        host.itemsByProfile[profile] = [host.item,
+            .init(id: unpinned, name: "Unpinned", version: "1", isEnabled: true, hasAction: true, isPinned: false)]
+        owner.extensionControls.render()
         owner.extensionControls.cycle(holding: .command)
-        #expect(host.actionIDs == [host.item.id] && !owner.extensionControls.isCycling)
+        #expect(host.actionIDs.isEmpty && owner.siteControls.cycleSelectionID == host.item.id)
+        owner.extensionControls.cycle(holding: .command)
+        #expect(host.actionIDs.isEmpty && owner.siteControls.cycleSelectionID == unpinned)
         owner.extensionControls.finishCycle()
-        #expect(host.actionIDs.count == 1)
+        #expect(host.actionIDs == [unpinned] && !owner.extensionControls.isCycling)
+        host.itemsByProfile[profile] = [host.item]
+        owner.extensionControls.render()
+        owner.extensionControls.cycle(holding: .command)
+        #expect(host.actionIDs == [unpinned] && owner.extensionControls.isCycling)
+        owner.extensionControls.finishCycle()
+        #expect(host.actionIDs == [unpinned, host.item.id])
         try await environment.finalize()
     }
 
@@ -253,7 +267,8 @@ struct NativeExtensionControlsTests {
         case "navigation": owner.session.selectedSurface?.navigate(to: URL(string: "https://extensions.example.invalid/new")!)
         case "selection": owner.openTab(url: URL(string: "https://extensions.example.invalid/other")!)
         case "removal":
-            host.itemsByProfile[profile] = host.itemsByProfile[profile]?.map { var item = $0; item.isPinned = false; return item }
+            // Unpinning keeps an extension in the control center; removing it ends the cycle.
+            host.itemsByProfile[profile] = []
             host.changes.emit(profile)
         default: NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: owner.window)
         }

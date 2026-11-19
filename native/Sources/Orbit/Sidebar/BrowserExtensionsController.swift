@@ -356,9 +356,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             view.isEnabled = surface?.profileID == profile && surface != nil && previewProfile == nil
                 && owner.acceptsCommands && item.actionState?.isEnabled != false
         }
-        if let cyclingID, !pinnedButtons.contains(where: {
-            $0.accessibilityIdentifier() == cyclingID && $0.isEnabled
-        }) { cancelCycle() }
+        if let cyclingID, !cycleCandidates().contains(cyclingID) { cancelCycle() }
         placePinnedButtons(in: owner)
         owner.sidebar.addressContainer.needsLayout = true
         if let surface { owner.engine.extensions?.setActionAnchor(owner.siteControls.actionAnchor, on: surface) }
@@ -377,41 +375,61 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     var isCycling: Bool { cyclingID != nil }
 
     var canCycle: Bool {
-        guard let owner, owner.acceptsCommands, !owner.isPrivateWindow,
+        guard let owner, owner.acceptsCommands, !owner.isPrivateWindow, previewProfile == nil,
               owner.engine.extensions?.supportsActions == true,
               owner.session.selectedSurface != nil else { return false }
-        return pinnedButtons.contains { $0.isEnabled }
+        return !cycleCandidates().isEmpty
+    }
+
+    /// Every extension action the control center shows, in its order, pinned or not.
+    private func cycleCandidates() -> [String] {
+        guard let owner, let surface = owner.session.selectedSurface, let host = owner.engine.extensions,
+              let installed = try? host.installedExtensions(in: surface.profileID) else { return [] }
+        // A pinned button reflects the tab's own action state (disabled for this page).
+        let disabledActions = Set(pinnedButtons.filter { !$0.isEnabled }.map {
+            String($0.accessibilityIdentifier().dropFirst("pinned-extension-".count))
+        })
+        return installed.filter { $0.isEnabled && $0.hasAction && $0.actionState?.isEnabled != false
+            && !disabledActions.contains($0.id) }.map(\.id)
     }
 
     /// The cycle's control center was requested; it shows the selection even when the
     /// sidebar is hidden (the sidebar slides in as the floating panel, as on hover).
     private var isPresentingCycle = false
 
-    /// Hold Command: the first press opens the control center on the first pinned action, each
-    /// further press selects the next one, and releasing Command opens the selection.
+    /// Hold Command: the first press slides the sidebar in and opens the control center on the
+    /// first extension, each further press selects the next one (wrapping), and releasing
+    /// Command opens the selection. From a menu, the control center opens for a click.
     func cycle(holding modifiers: NSEvent.ModifierFlags? = nil) {
         render()
-        guard canCycle else { cancelCycle(); return }
-        let buttons = pinnedButtons.filter { $0.isEnabled }
-        let current = buttons.firstIndex { $0.accessibilityIdentifier() == cyclingID }
-        let selected = buttons[current.map { ($0 + 1) % buttons.count } ?? 0]
-        for button in pinnedButtons { button.isHighlighted = button === selected }
-        cyclingID = selected.accessibilityIdentifier()
+        let candidates = cycleCandidates()
+        guard canCycle, !candidates.isEmpty else { cancelCycle(); return }
+        guard modifiers?.contains(.command) == true else {
+            cancelCycle()
+            revealSidebarIfHidden()
+            owner?.siteControls.show()
+            return
+        }
+        let current = cyclingID.flatMap { candidates.firstIndex(of: $0) }
+        let selected = candidates[current.map { ($0 + 1) % candidates.count } ?? 0]
+        cyclingID = selected
         cyclingEpoch = selectionEpoch
-        // With a single enabled action there is nothing to cycle to: open it on the press.
-        if modifiers?.contains(.command) != true || buttons.count == 1 { finishCycle(); return }
-        presentCycle(selecting: cyclingID.map { String($0.dropFirst("pinned-extension-".count)) })
+        for button in pinnedButtons { button.isHighlighted = button.accessibilityIdentifier() == "pinned-extension-" + selected }
+        presentCycle(selecting: selected)
     }
 
-    private func presentCycle(selecting extensionID: String?) {
+    private func revealSidebarIfHidden() {
+        guard let owner, !owner.isSidebarVisible, !owner.isToolbarVisible else { return }
+        owner.windowShell.revealFloatingSidebar()
+        owner.window?.contentView?.layoutSubtreeIfNeeded()
+    }
+
+    private func presentCycle(selecting extensionID: String) {
         guard let owner else { return }
         owner.siteControls.cycleSelectionID = extensionID
         guard !isPresentingCycle else { return }
         isPresentingCycle = true
-        if !owner.isSidebarVisible, !owner.isToolbarVisible {
-            owner.windowShell.revealFloatingSidebar()
-            owner.window?.contentView?.layoutSubtreeIfNeeded()
-        }
+        revealSidebarIfHidden()
         owner.siteControls.show()
     }
 
@@ -431,17 +449,17 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     func endCycleKeepingControlCenter() { cancelCycle(closingControlCenter: false) }
 
     func finishCycle() {
-        guard let owner, let id = cyclingID, cyclingEpoch == selectionEpoch,
+        guard let owner, let extensionID = cyclingID, cyclingEpoch == selectionEpoch,
               owner.session.selectedSurface === selectedSurface,
               selectedSurface?.documentGeneration == generation, canCycle,
-              let button = pinnedButtons.first(where: { $0.accessibilityIdentifier() == id && $0.isEnabled }),
+              cycleCandidates().contains(extensionID),
               let surface = owner.session.selectedSurface else { cancelCycle(); return }
         cancelCycle()
-        let extensionID = String(id.dropFirst("pinned-extension-".count))
         // Overflow buttons are detached from visible geometry, and a hidden sidebar slides away
         // before the popup loads: anchor to the toolbar, the docked address field, or the page.
+        let button = pinnedButtons.first { $0.accessibilityIdentifier() == "pinned-extension-" + extensionID }
         let anchor: NSView
-        if !(button.isHiddenOrHasHiddenAncestor || button.visibleRect.isEmpty),
+        if let button, !(button.isHiddenOrHasHiddenAncestor || button.visibleRect.isEmpty),
            owner.isToolbarVisible || owner.isSidebarVisible { anchor = button }
         else if owner.isSidebarVisible || owner.isToolbarVisible { anchor = owner.siteControls.actionAnchor }
         else { anchor = owner.contentPopupAnchor }
