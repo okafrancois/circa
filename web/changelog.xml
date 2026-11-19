@@ -9,6 +9,36 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.2-nightly.2/</id>
+    <title>0.75.2-nightly.2 — Command-E opens Site Controls and cycles through every extension.</title>
+    <link href="https://circabrowser.com/changelog/0.75.2-nightly.2/" />
+    <updated>2026-11-19T00:00:00Z</updated>
+    <published>2026-11-19T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Command-E opens Site Controls and cycles through every extension.
+
+2 fixed
+
+## Fixed
+
+- Command-E now always opens Site Controls with the first extension outlined, even when only one extension is pinned, instead of opening that extension directly.
+- Pressing E again while holding Command moves through every extension in Site Controls, pinned or not. Releasing Command opens the selected one.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.2-nightly.2" data-version="0.75.2-nightly.2" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.2-nightly.2" aria-label="Link to version 0.75.2-nightly.2"&gt;0.75.2-nightly.2&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-19"&gt;November 19, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Command-E opens Site Controls and cycles through every extension.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;2 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Command-E now always opens Site Controls with the first extension outlined, even when only one extension is pinned, instead of opening that extension directly.&lt;/li&gt;
+    &lt;li&gt;Pressing E again while holding Command moves through every extension in Site Controls, pinned or not. Releasing Command opens the selected one.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.2-nightly.2/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.2-nightly.1/</id>
     <title>0.75.2-nightly.1 — Command-E shows your extensions even with the sidebar hidden.</title>
     <link href="https://circabrowser.com/changelog/0.75.2-nightly.1/" />
