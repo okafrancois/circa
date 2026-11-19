@@ -544,6 +544,26 @@ struct HoverRevealTests {
         #expect(events() == [true, false])
     }
 
+    @Test("A command reveal skips the dwell and leaves when its hold ends outside the panel")
+    func commandReveal() {
+        let (reveal, clock, events) = makeReveal()
+        var held = true
+        reveal.isHeld = { held }
+        reveal.isPointerInside = { false }
+        reveal.revealNow()
+        reveal.revealNow()
+        #expect(events() == [true] && reveal.phase == .revealed)
+        clock.advance(by: 1)
+        #expect(events() == [true])
+        held = false
+        reveal.holdDidChange()
+        clock.advance(by: 0.3)
+        #expect(events() == [true, false])
+        reveal.setEnabled(false)
+        reveal.revealNow()
+        #expect(events() == [true, false] && reveal.phase == .disabled)
+    }
+
     @Test("A disabled reveal ignores the edge until it is enabled again")
     func disabled() {
         let (reveal, clock, events) = makeReveal()

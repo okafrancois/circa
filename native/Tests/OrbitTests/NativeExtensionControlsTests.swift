@@ -155,11 +155,14 @@ struct NativeExtensionControlsTests {
         for expected in [first, second, first] {
             owner.extensionControls.cycle(holding: .command)
             #expect(highlighted() == "pinned-extension-" + expected)
+            // The control center shows the same selection, sidebar open or hidden.
+            #expect(owner.siteControls.cycleSelectionID == expected)
             #expect(host.actionIDs.isEmpty)
         }
         owner.extensionControls.finishCycle()
         #expect(host.actionIDs == [first])
         #expect(highlighted() == nil && !owner.extensionControls.isCycling)
+        #expect(owner.siteControls.cycleSelectionID == nil)
         owner.extensionControls.finishCycle()
         #expect(host.actionIDs.count == 1)
         owner.extensionControls.cycle()

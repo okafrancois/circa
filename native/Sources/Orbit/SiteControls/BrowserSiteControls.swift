@@ -31,6 +31,10 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     private let button = SiteControlButton("", identifier: "site-controls", onPress: {})
     private var extensionObservation: BrowserExtensionObservation?
     private var extensionTiles: [String: ControlCenterActionTile] = [:]
+    /// Extension tile selected by the ⌘E cycle; kept across inventory re-renders of the panel.
+    var cycleSelectionID: String? { didSet { applyCycleSelection() } }
+    /// Called when the control center closes, whatever closed it.
+    var onControlCenterClose: (() -> Void)?
     private var displayedExtensionIDs: [String] = []
     private var displayedPinStates: [String: Bool] = [:]
     private var hasPendingPinChange = false
@@ -315,6 +319,18 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     }
 
     var actionAnchor: NSView { button }
+    /// The shown control center's window, which takes key focus from the browser window.
+    var controlCenterWindow: NSWindow? {
+        panel.popover.isShown ? panel.popover.contentViewController?.view.window : nil
+    }
+    func closeControlCenter() {
+        guard panel.popover.isShown || presentationTask != nil else { return }
+        invalidateSitePresentation()
+        panel.close(animating: false)
+    }
+    private func applyCycleSelection() {
+        for (id, tile) in extensionTiles { tile.isCycleSelected = id == cycleSelectionID }
+    }
 
     var canShow: Bool {
         pendingPermission == nil && owner?.acceptsCommands == true && owner?.siteControlSurface != nil
@@ -450,6 +466,8 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
         }
         panel.onClose = { [weak self, weak surface] in
             self?.invalidateSitePresentation()
+            self?.cycleSelectionID = nil
+            self?.onControlCenterClose?()
             guard valid(), let self, let surface, self.owner?.window?.isKeyWindow == true else { return }
             _ = surface.focusDocument()
         }
@@ -634,6 +652,7 @@ extension BrowserSiteControls {
                     pin = pinButton
                 } else { pin = nil }
                 let container = ControlCenterActionTile(button: tile, pin: pin, pinned: item.isPinned == true)
+                container.isCycleSelected = item.id == cycleSelectionID
                 extensionTiles[item.id] = container
                 tiles.append(container)
             }

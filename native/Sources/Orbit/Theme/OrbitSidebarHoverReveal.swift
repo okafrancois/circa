@@ -84,6 +84,16 @@ final class OrbitSidebarHoverReveal {
         }
     }
 
+    /// Reveals without a pointer dwell, for a keyboard command that presents from the sidebar.
+    /// The panel then leaves like a hover reveal once its holds end with the pointer outside.
+    func revealNow() {
+        guard phase != .disabled else { return }
+        cancelPending()
+        let wasRevealed = isRevealed
+        phase = .revealed
+        if !wasRevealed { onRevealChange?(true) }
+    }
+
     /// Dismisses immediately (Escape, focus moved to the page by keyboard).
     func dismiss() {
         guard isRevealed else { return }

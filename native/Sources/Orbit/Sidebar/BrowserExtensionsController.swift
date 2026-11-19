@@ -78,7 +78,11 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             object: owner.window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    self.cancelCycle()
+                    // The cycle's own control center takes key focus once it is shown; its
+                    // closing (app switch, click outside) ends the cycle instead.
+                    if !self.isPresentingCycle || self.owner?.siteControls.controlCenterWindow == nil {
+                        self.cancelCycle()
+                    }
                     if case .armed = self.popupHold { self.popupHold = .open }
                 }
             }
@@ -98,6 +102,10 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
                   let items = try? owner.engine.extensions?.installedExtensions(on: surface),
                   let item = items.first(where: { $0.id == id }) else { return nil }
             return contextMenu(for: item, surface: surface)
+        }
+        owner.siteControls.onControlCenterClose = { [weak self] in
+            guard let self, self.isPresentingCycle else { return }
+            self.cancelCycle(closingControlCenter: false)
         }
         let strip = owner.sidebar.extensionsContainer
         owner.sidebar.addressContainer.installAccessory(strip, onHover: true, order: 10)
@@ -375,7 +383,12 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         return pinnedButtons.contains { $0.isEnabled }
     }
 
-    /// Use the existing pressed appearance; keep the action pending until Command is released.
+    /// The cycle's control center was requested; it shows the selection even when the
+    /// sidebar is hidden (the sidebar slides in as the floating panel, as on hover).
+    private var isPresentingCycle = false
+
+    /// Hold Command: the first press opens the control center on the first pinned action, each
+    /// further press selects the next one, and releasing Command opens the selection.
     func cycle(holding modifiers: NSEvent.ModifierFlags? = nil) {
         render()
         guard canCycle else { cancelCycle(); return }
@@ -386,14 +399,36 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         cyclingID = selected.accessibilityIdentifier()
         cyclingEpoch = selectionEpoch
         // With a single enabled action there is nothing to cycle to: open it on the press.
-        if modifiers?.contains(.command) != true || buttons.count == 1 { finishCycle() }
+        if modifiers?.contains(.command) != true || buttons.count == 1 { finishCycle(); return }
+        presentCycle(selecting: cyclingID.map { String($0.dropFirst("pinned-extension-".count)) })
     }
 
-    func cancelCycle() {
+    private func presentCycle(selecting extensionID: String?) {
+        guard let owner else { return }
+        owner.siteControls.cycleSelectionID = extensionID
+        guard !isPresentingCycle else { return }
+        isPresentingCycle = true
+        if !owner.isSidebarVisible, !owner.isToolbarVisible {
+            owner.windowShell.revealFloatingSidebar()
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+        }
+        owner.siteControls.show()
+    }
+
+    func cancelCycle() { cancelCycle(closingControlCenter: true) }
+
+    private func cancelCycle(closingControlCenter: Bool) {
         for button in pinnedButtons { button.isHighlighted = false }
         cyclingID = nil
         cyclingEpoch = nil
+        guard isPresentingCycle else { return }
+        isPresentingCycle = false
+        owner?.siteControls.cycleSelectionID = nil
+        if closingControlCenter { owner?.siteControls.closeControlCenter() }
     }
+
+    /// A click inside the cycle's control center ends the cycle but keeps the panel usable.
+    func endCycleKeepingControlCenter() { cancelCycle(closingControlCenter: false) }
 
     func finishCycle() {
         guard let owner, let id = cyclingID, cyclingEpoch == selectionEpoch,
@@ -403,9 +438,13 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
               let surface = owner.session.selectedSurface else { cancelCycle(); return }
         cancelCycle()
         let extensionID = String(id.dropFirst("pinned-extension-".count))
-        // Overflow buttons are detached from visible geometry; use the persistent toolbar anchor.
-        let anchor = button.isHiddenOrHasHiddenAncestor || button.visibleRect.isEmpty
-            ? owner.siteControls.actionAnchor : button
+        // Overflow buttons are detached from visible geometry, and a hidden sidebar slides away
+        // before the popup loads: anchor to the toolbar, the docked address field, or the page.
+        let anchor: NSView
+        if !(button.isHiddenOrHasHiddenAncestor || button.visibleRect.isEmpty),
+           owner.isToolbarVisible || owner.isSidebarVisible { anchor = button }
+        else if owner.isSidebarVisible || owner.isToolbarVisible { anchor = owner.siteControls.actionAnchor }
+        else { anchor = owner.contentPopupAnchor }
         armPopupHold()
         do { try owner.engine.extensions?.performAction(extensionID: extensionID, on: surface, anchor: anchor) }
         catch { clearPopupHold(); owner.session.onError?(error) }

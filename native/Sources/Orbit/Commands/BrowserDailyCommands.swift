@@ -21,7 +21,11 @@ enum BrowserDailyCommands {
         weak var cyclingOwner: BrowserWindowController<Engine>?
         registry.registerInputHandler("extensions") { [weak registry] controller, event in
             guard let active = cyclingOwner, active.extensionControls.isCycling else { return false }
-            guard controller === active, event.window == nil || event.window === active.window else {
+            // The cycle's control center is an auxiliary key window: no browser window is the
+            // command target while it is shown, but its events still belong to the cycle.
+            let panel = active.siteControls.controlCenterWindow
+            let inPanel = panel != nil && event.window === panel
+            guard inPanel || (controller === active && (event.window == nil || event.window === active.window)) else {
                 active.extensionControls.cancelCycle()
                 return false
             }
@@ -29,7 +33,11 @@ enum BrowserDailyCommands {
                 active.extensionControls.finishCycle()
                 return false
             }
-            if event.type == .leftMouseDown { active.extensionControls.cancelCycle(); return false }
+            if event.type == .leftMouseDown {
+                if inPanel { active.extensionControls.endCycleKeepingControlCenter() }
+                else { active.extensionControls.cancelCycle() }
+                return false
+            }
             guard event.type == .keyDown else { return false }
             if event.keyCode == 53 { active.extensionControls.cancelCycle(); return true }
             if registry?.resolve(event) == .cycleExtensions {

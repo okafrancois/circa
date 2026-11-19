@@ -115,6 +115,23 @@ extension BrowserWindowController {
         windowShell.isSidebarOnScreen && !sidebar.isHidden
     }
 
+    /// Popup anchor at the page's top leading corner, for extension actions opened while the
+    /// sidebar and toolbar are hidden. It never takes clicks from the page.
+    var contentPopupAnchor: NSView {
+        let identifier = NSUserInterfaceItemIdentifier("content-popup-anchor")
+        let anchor = contentCard.subviews.first { $0.identifier == identifier } ?? {
+            let view = BrowserPassthroughAnchorView()
+            view.identifier = identifier
+            contentCard.addSubview(view)
+            return view
+        }()
+        let size = SiteControlTokens.anchorSize, bounds = contentCard.bounds
+        let x = windowShell.sidebarOnRight ? bounds.maxX - SiteControlTokens.inset - size : bounds.minX + SiteControlTokens.inset
+        let y = contentCard.isFlipped ? bounds.minY : bounds.maxY - size
+        anchor.frame = NSRect(x: x, y: y, width: size, height: size)
+        return anchor
+    }
+
     /// Editing a sidebar field, or any other sidebar responder (the tab list after a click).
     var isFocusInSidebar: Bool {
         if isEditingInSidebar { return true }
@@ -161,4 +178,10 @@ extension BrowserWindowController {
 
     var isSidebarFloating: Bool { windowShell.isFloatingRevealed }
     var shellGeometry: OrbitShellGeometry? { windowShell.geometry }
+}
+
+/// An invisible positioning view: hit testing passes through to the page beneath it.
+final class BrowserPassthroughAnchorView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func isAccessibilityElement() -> Bool { false }
 }

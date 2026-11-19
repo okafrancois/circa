@@ -122,6 +122,8 @@ final class ControlCenterActionTile: NSView {
     private var pinned: Bool
     private let dark: Bool
     private var hovered = false
+    /// The extension the ⌘E cycle would open on release.
+    var isCycleSelected = false { didSet { if isCycleSelected != oldValue { needsDisplay = true } } }
     private var hoverArea: NSTrackingArea?
     private var hoverTask: Task<Void, Never>?
     override var isFlipped: Bool { true }
@@ -197,7 +199,12 @@ final class ControlCenterActionTile: NSView {
                        ending: NSColor(white: 0.07, alpha: 1))?.draw(in: path, angle: 90)
             NSColor.white.withAlphaComponent(0.28).setStroke(); path.lineWidth = 0.5; path.stroke()
         } else {
-            OrbitFloatingMaterial.body.withAlphaComponent(hovered ? 0.10 : 0.055).setFill(); path.fill()
+            OrbitFloatingMaterial.body.withAlphaComponent(hovered || isCycleSelected ? 0.10 : 0.055).setFill(); path.fill()
+        }
+        if isCycleSelected {
+            let ring = NSBezierPath(roundedRect: rect.insetBy(dx: 0.75, dy: 0.75), xRadius: 6, yRadius: 6)
+            ring.lineWidth = 1.5
+            OrbitFloatingMaterial.body.withAlphaComponent(0.85).setStroke(); ring.stroke()
         }
     }
 }

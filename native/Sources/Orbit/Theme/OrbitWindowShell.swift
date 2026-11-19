@@ -288,6 +288,12 @@ final class OrbitWindowShell {
         updateHoverRegions()
     }
 
+    /// Slides a hidden sidebar in as the floating panel, as a hover reveal would.
+    func revealFloatingSidebar() {
+        guard !isDocked else { return }
+        hoverReveal.revealNow()
+    }
+
     /// Re-evaluates the hold of a revealed sidebar (editing ended, focus moved).
     func hoverHoldDidChange() { hoverReveal.holdDidChange() }
 
