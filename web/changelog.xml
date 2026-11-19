@@ -4,10 +4,40 @@
   <title>Circa releases</title>
   <link href="https://circabrowser.com/changelog.xml" rel="self" />
   <link href="https://circabrowser.com/changelog" rel="alternate" />
-  <updated>2026-11-19T00:00:00Z</updated>
+  <updated>2026-11-20T00:00:00Z</updated>
   <author>
     <name>Circa</name>
   </author>
+  <entry>
+    <id>https://circabrowser.com/changelog/0.75.2/</id>
+    <title>0.75.2 — Command-E opens Site Controls and cycles through your extensions.</title>
+    <link href="https://circabrowser.com/changelog/0.75.2/" />
+    <updated>2026-11-20T00:00:00Z</updated>
+    <published>2026-11-20T00:00:00Z</published>
+    <category term="stable" />
+    <summary>Command-E opens Site Controls and cycles through your extensions.
+
+2 fixed
+
+## Fixed
+
+- Command-E now works with the sidebar hidden or in full screen: the sidebar slides in and Site Controls opens with the first extension outlined, even when only one extension is pinned.
+- Pressing E again while holding Command moves through every extension in Site Controls, pinned or not, and wraps around. Releasing Command opens the selected extension; Escape cancels.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.2" data-version="0.75.2" data-channel="stable" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.2" aria-label="Link to version 0.75.2"&gt;0.75.2&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-20"&gt;November 20, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Stable&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Command-E opens Site Controls and cycles through your extensions.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;2 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Command-E now works with the sidebar hidden or in full screen: the sidebar slides in and Site Controls opens with the first extension outlined, even when only one extension is pinned.&lt;/li&gt;
+    &lt;li&gt;Pressing E again while holding Command moves through every extension in Site Controls, pinned or not, and wraps around. Releasing Command opens the selected extension; Escape cancels.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.2/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
   <entry>
     <id>https://circabrowser.com/changelog/0.75.2-nightly.2/</id>
     <title>0.75.2-nightly.2 — Command-E opens Site Controls and cycles through every extension.</title>
