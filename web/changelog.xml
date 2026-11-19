@@ -4,10 +4,38 @@
   <title>Circa releases</title>
   <link href="https://circabrowser.com/changelog.xml" rel="self" />
   <link href="https://circabrowser.com/changelog" rel="alternate" />
-  <updated>2026-11-18T00:00:00Z</updated>
+  <updated>2026-11-19T00:00:00Z</updated>
   <author>
     <name>Circa</name>
   </author>
+  <entry>
+    <id>https://circabrowser.com/changelog/0.75.2-nightly.1/</id>
+    <title>0.75.2-nightly.1 — Command-E shows your extensions even with the sidebar hidden.</title>
+    <link href="https://circabrowser.com/changelog/0.75.2-nightly.1/" />
+    <updated>2026-11-19T00:00:00Z</updated>
+    <published>2026-11-19T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Command-E shows your extensions even with the sidebar hidden.
+
+1 fixed
+
+## Fixed
+
+- Holding Command and pressing E now slides the sidebar in and opens Site Controls with the selected extension outlined, in full screen or with the sidebar hidden. Press E again to move to the next pinned extension, then release Command to open it.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.2-nightly.1" data-version="0.75.2-nightly.1" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.2-nightly.1" aria-label="Link to version 0.75.2-nightly.1"&gt;0.75.2-nightly.1&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-19"&gt;November 19, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Command-E shows your extensions even with the sidebar hidden.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Holding Command and pressing E now slides the sidebar in and opens Site Controls with the selected extension outlined, in full screen or with the sidebar hidden. Press E again to move to the next pinned extension, then release Command to open it.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.2-nightly.1/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
   <entry>
     <id>https://circabrowser.com/changelog/0.75.1/</id>
     <title>0.75.1 — Readable downloads and Gmail previews you can actually use.</title>
