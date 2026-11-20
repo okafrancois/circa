@@ -1,0 +1,52 @@
+{
+  "chromium_tag": "158.0.8127.65",
+  "chromium_commit": "23488bfea997a90790ac10099d1793c829c18a4c",
+  "previous_chromium_tag": "158.0.8127.37",
+  "previous_chromium_commit": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
+  "cef_branch": "8127",
+  "cef_base": "8c29be240971eebee960ac92114d3efccb5780ff",
+  "cef_tree": "3458780009fafc59717e4621b38c64952df9e078",
+  "previous_flavor": "orbit-engine-extensions-r24",
+  "flavor": "orbit-engine-extensions-r25",
+  "side_api_version": 19,
+  "patch_composition": "The complete r24 composition, unchanged (engine-r21/cef.patch, engine-r21/chromium.patch, engine-r22/os-crypt-owned-directory.patch, engine-r23/system-passkeys.patch, engine-r24/chromium-delta.patch and engine-r24/cef-delta.patch), carried onto the 158.0.8127.65 release of the same branch by scripts/cef-engine-security-update.py. No new delta.",
+  "dependencies": {
+    "third_party/angle": "eae431b4e9b9f8cbd2ef289066ff69b46d523278",
+    "third_party/dawn": "534b718adcc75d4b3e1d30fefd0715b374ac5d11",
+    "third_party/devtools-frontend/src": "047c90eca37c7170d826d72245d5df9281989cf3",
+    "third_party/icu": "c66ba5d8cda8b645d16778c92c902a871c0fd45c",
+    "third_party/leveldatabase/src": "29465588d3dfdc80fba5e198037582b8fdb5dd60",
+    "third_party/libaom/source/libaom": "8f126544519961bb3d5afe83455f4caf5d312d05",
+    "third_party/libvpx/source/libvpx": "fb1279dcc6db0cbfb0b6015d0ba7587759c5625a",
+    "third_party/pdfium": "65a1784fbce7c80d4e3e226f69d56e28de06425b",
+    "third_party/skia": "9f8fb9da7e434d74187003c2431f13d0f11641f7",
+    "third_party/webrtc": "fb1c41a93d92d4188f068f437d80ef2c4b50c3a9",
+    "v8": "e613b92ff31da46781a39135cca49bdf4403f28a"
+  },
+  "depot_tools": "132599ebbd8d22d1b1bd5ea703a6d3bc493edd71",
+  "cef_patch_sha256": "2a582b1205830fa84e942735f23ec063404a7940c8632b47a0a81f03ac94e9be",
+  "chromium_patch_sha256": "76d92c0839c1afed0d151edde1c023aec911a9c597ecfe967489cc1f44dda1f2",
+  "previous_deltas": {
+    "r22": {
+      "patch": "engine-r22/os-crypt-owned-directory.patch",
+      "sha256": "594fd444b407b4e75f9ea97605e046419b39ac56e3af9e76d7ede1066d9c29dc"
+    },
+    "r23": {
+      "patch": "engine-r23/system-passkeys.patch",
+      "sha256": "a148a95343c015ee66820b7c0cad130571feb38028ba5e140efdd13d2bd284df"
+    },
+    "r24": {
+      "chromium": {
+        "patch": "engine-r24/chromium-delta.patch",
+        "sha256": "d2f27bd6f07f57dbd8c2b6f3ff1567d790996c2d4883adb38eb24e759b91cbbc"
+      },
+      "cef": {
+        "patch": "engine-r24/cef-delta.patch",
+        "sha256": "69340dcacde58c9c2bd560689534a14d67a1bdb76de3d24d2dd3ee2abde9550f"
+      }
+    }
+  },
+  "rebuild": "On the r24 tree, python3 scripts/cef-engine-security-update.py --version 158.0.8127.65 --logs <fresh dir>, then python3 scripts/cef-engine-r25-build.py --jobs 8",
+  "union_from": "engine-r24",
+  "webauthn_keychain_access_group": "5Y39TTNCM7.io.github.okatech.orbit.webauthn"
+}

@@ -98,13 +98,17 @@ class EngineR24Tests(unittest.TestCase):
         self.assertNotIn('"load-extension",\n          (loaded.empty()', bridge)
         self.assertNotIn('ContentBlockingAckReader', bridge)
 
-    def test_release_points_at_r24(self):
+    def test_release_keeps_side_api_v19(self):
+        # Later flavors carry this composition unchanged; the shell relies on side API v19.
         config = json.loads((ROOT / 'release/config.json').read_text())
         engine = json.loads((ROOT / 'release/engine.json').read_text())
-        self.assertEqual(config['cef_flavor'], self.pins['flavor'])
-        self.assertEqual(engine['flavor'], self.pins['flavor'])
-        self.assertEqual(engine['url'], 'https://github.com/okafrancois/circa/releases/download/engine-r24/'
-                                        'orbit-engine-extensions-r24.tar.gz')
+        self.assertEqual(config['cef_flavor'], engine['flavor'])
+        self.assertGreaterEqual(int(engine['flavor'].rsplit('-r', 1)[1]), 24)
+        number = engine['flavor'].rsplit('-r', 1)[1]
+        self.assertEqual(engine['url'], 'https://github.com/okafrancois/circa/releases/download/engine-r%s/'
+                                        'orbit-engine-extensions-r%s.tar.gz' % (number, number))
+        pins = json.loads((PATCHES / ('engine-r%s/source.json' % number)).read_text())
+        self.assertEqual(pins['side_api_version'], self.pins['side_api_version'])
 
     def test_builder_and_flavor_registry(self):
         builder = (ROOT / 'scripts/cef-engine-r24-build.py').read_text()
