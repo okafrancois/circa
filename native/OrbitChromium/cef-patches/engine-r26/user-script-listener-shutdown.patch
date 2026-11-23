@@ -1,0 +1,117 @@
+diff --git a/chrome/browser/extensions/user_script_listener.cc b/chrome/browser/extensions/user_script_listener.cc
+index 91ca147..25cb7d2 100644
+--- a/chrome/browser/extensions/user_script_listener.cc
++++ b/chrome/browser/extensions/user_script_listener.cc
+@@ -284,8 +284,18 @@ void UserScriptListener::OnExtensionUnloaded(
+   ReplaceURLPatterns(browser_context, new_patterns);
+ }
+ 
++void UserScriptListener::ProfileDestroyed(content::BrowserContext* context) {
++  // A profile shut down before its user scripts were ready would otherwise keep
++  // user_scripts_ready_ false forever and defer every matching navigation of
++  // the remaining profiles. Its own navigations are gone with its WebContents
++  // (the throttle list only holds weak pointers).
++  profile_data_.erase(context);
++  CheckIfAllUserScriptsReady();
++}
++
+ void UserScriptListener::OnShutdown(ExtensionRegistry* registry) {
+   extension_registry_observations_.RemoveObservation(registry);
++  ProfileDestroyed(registry->browser_context());
+ }
+ 
+ }  // namespace extensions
+diff --git a/chrome/browser/extensions/user_script_listener_unittest.cc b/chrome/browser/extensions/user_script_listener_unittest.cc
+index 92eb882..8aac7c2 100644
+--- a/chrome/browser/extensions/user_script_listener_unittest.cc
++++ b/chrome/browser/extensions/user_script_listener_unittest.cc
+@@ -312,6 +312,48 @@ TEST_F(UserScriptListenerTest, MultiProfile) {
+   EXPECT_TRUE(was_navigation_resumed_);
+ }
+ 
++// A profile destroyed before its user scripts were ready must not keep
++// deferring navigations of the remaining profiles.
++TEST_F(UserScriptListenerTest, ProfileDestroyedBeforeScriptsReady) {
++  LoadTestExtension();
++
++  TestingProfile* profile2 =
++      profile_manager_->CreateTestingProfile("test-profile2");
++  ASSERT_TRUE(profile2);
++  std::u16string error;
++  scoped_refptr<Extension> extension =
++      LoadExtension("content_script_yahoo.json", &error);
++  ASSERT_TRUE(extension.get());
++  ExtensionRegistry* extension_registry = ExtensionRegistry::Get(profile2);
++  extension_registry->AddEnabled(extension);
++  extension_registry->TriggerOnLoaded(extension.get());
++
++  content::MockNavigationHandle handle(GURL(kMatchingUrl),
++                                       web_contents_->GetPrimaryMainFrame());
++  content::MockNavigationThrottleRegistry throttle_registry(
++      &handle,
++      content::MockNavigationThrottleRegistry::RegistrationMode::kHold);
++  CreateListenerNavigationThrottle(throttle_registry);
++  EXPECT_EQ(NavigationThrottle::DEFER,
++            throttle_registry.throttles().back()->WillStartRequest());
++
++  listener_->TriggerUserScriptsReadyForTesting(profile_);
++  EXPECT_FALSE(was_navigation_resumed_);
++
++  // profile2 goes away without ever reporting its scripts ready.
++  profile_manager_->DeleteTestingProfile("test-profile2");
++  EXPECT_TRUE(was_navigation_resumed_);
++
++  // Later matching navigations are no longer delayed.
++  content::MockNavigationHandle later(GURL(kMatchingUrl),
++                                      web_contents_->GetPrimaryMainFrame());
++  content::MockNavigationThrottleRegistry later_registry(
++      &later,
++      content::MockNavigationThrottleRegistry::RegistrationMode::kHold);
++  listener_->CreateAndAddNavigationThrottle(later_registry);
++  EXPECT_EQ(later_registry.throttles().size(), 0u);
++}
++
+ // Test when the user scripts ready trigger occurs before the throttle's
+ // WillStartRequest function is called.  This can occur when there are multiple
+ // throttles.
+diff --git a/content/public/test/mock_navigation_throttle_registry.cc b/content/public/test/mock_navigation_throttle_registry.cc
+index ee0d0ca..30ea21a 100644
+--- a/content/public/test/mock_navigation_throttle_registry.cc
++++ b/content/public/test/mock_navigation_throttle_registry.cc
+@@ -25,14 +25,20 @@ NavigationHandle& MockNavigationThrottleRegistry::GetNavigationHandle() {
+ }
+ 
+ void MockNavigationThrottleRegistry::AddThrottle(
+-    std::unique_ptr<NavigationThrottle> throttle) {
++    std::unique_ptr<NavigationThrottle> throttle,
++    bool first) {
+   CHECK(throttle);
+   switch (registration_mode_) {
+     case RegistrationMode::kAutoRegistrationForTesting:
+       GetNavigationHandle().RegisterThrottleForTesting(std::move(throttle));
+       break;
+     case RegistrationMode::kHold:
+-      throttles_.push_back(std::move(throttle));
++      // Same order as NavigationThrottleRegistryImpl: `first` goes in front.
++      if (first) {
++        throttles_.insert(throttles_.begin(), std::move(throttle));
++      } else {
++        throttles_.push_back(std::move(throttle));
++      }
+       break;
+   }
+ }
+diff --git a/content/public/test/mock_navigation_throttle_registry.h b/content/public/test/mock_navigation_throttle_registry.h
+index 23bff81..7f94cde 100644
+--- a/content/public/test/mock_navigation_throttle_registry.h
++++ b/content/public/test/mock_navigation_throttle_registry.h
+@@ -49,7 +49,8 @@ class MockNavigationThrottleRegistry : public NavigationThrottleRegistry {
+ 
+   // Implements NavigationThrottleRegistry:
+   NavigationHandle& GetNavigationHandle() override;
+-  void AddThrottle(std::unique_ptr<NavigationThrottle> throttle) override;
++  void AddThrottle(std::unique_ptr<NavigationThrottle> throttle,
++                   bool first = false) override;
+ 
+   // Following methods are not supported in this mock, and returns false always.
+   bool HasThrottle(const std::string& name) override;
