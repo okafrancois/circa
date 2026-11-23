@@ -50,13 +50,17 @@ class EngineR25Tests(unittest.TestCase):
         # No new patch ships with r25.
         self.assertEqual(sorted(p.name for p in (PATCHES / 'engine-r25').iterdir()), ['README.md', 'source.json'])
 
-    def test_release_points_at_r25(self):
+    def test_release_keeps_the_158_0_8127_65_release(self):
+        # Later flavors carry this composition on the same release.
         config = json.loads((ROOT / 'release/config.json').read_text())
         engine = json.loads((ROOT / 'release/engine.json').read_text())
-        self.assertEqual(config['cef_flavor'], self.pins['flavor'])
-        self.assertEqual(engine['flavor'], self.pins['flavor'])
-        self.assertEqual(engine['url'], 'https://github.com/okafrancois/circa/releases/download/engine-r25/'
-                                        'orbit-engine-extensions-r25.tar.gz')
+        self.assertEqual(config['cef_flavor'], engine['flavor'])
+        number = engine['flavor'].rsplit('-r', 1)[1]
+        self.assertGreaterEqual(int(number), 25)
+        self.assertEqual(engine['url'], 'https://github.com/okafrancois/circa/releases/download/engine-r%s/'
+                                        'orbit-engine-extensions-r%s.tar.gz' % (number, number))
+        pins = json.loads((PATCHES / ('engine-r%s/source.json' % number)).read_text())
+        self.assertEqual(pins['previous_deltas']['r24'], self.pins['previous_deltas']['r24'])
         for key in ('archive_sha256', 'framework_sha256', 'wrapper_sha256'):
             self.assertRegex(engine[key], r'^[0-9a-f]{64}$')
 
