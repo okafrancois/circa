@@ -4,10 +4,49 @@
   <title>Circa releases</title>
   <link href="https://circabrowser.com/changelog.xml" rel="self" />
   <link href="https://circabrowser.com/changelog" rel="alternate" />
-  <updated>2026-11-20T00:00:00Z</updated>
+  <updated>2026-11-23T00:00:00Z</updated>
   <author>
     <name>Circa</name>
   </author>
+  <entry>
+    <id>https://circabrowser.com/changelog/0.75.3/</id>
+    <title>0.75.3 — The stable engine moves to Chromium 158.0.8127.65.</title>
+    <link href="https://circabrowser.com/changelog/0.75.3/" />
+    <updated>2026-11-23T00:00:00Z</updated>
+    <published>2026-11-23T00:00:00Z</published>
+    <category term="stable" />
+    <summary>The stable engine moves to Chromium 158.0.8127.65.
+
+1 fixed
+
+## Fixed
+
+- Security: the engine moves to Chromium 158.0.8127.65, which carries the 158 branch's later navigation, input, media, PDF, networking and extension hardening fixes.
+
+## Known limits
+
+- Removing a profile while an extension's content scripts are still loading can leave matching pages loading in other profiles until Circa restarts.
+
+Engine / bundled components: Chromium 158.0.8127.65; maintained engine r25; side API v19
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.3" data-version="0.75.3" data-channel="stable" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.3" aria-label="Link to version 0.75.3"&gt;0.75.3&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-23"&gt;November 23, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Stable&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;The stable engine moves to Chromium 158.0.8127.65.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Security: the engine moves to Chromium 158.0.8127.65, which carries the 158 branch&amp;#x27;s later navigation, input, media, PDF, networking and extension hardening fixes.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Removing a profile while an extension&amp;#x27;s content scripts are still loading can leave matching pages loading in other profiles until Circa restarts.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;p class="release-engine"&gt;Engine / bundled components: Chromium 158.0.8127.65; maintained engine r25; side API v19&lt;/p&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.3/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
   <entry>
     <id>https://circabrowser.com/changelog/0.75.3-nightly.1/</id>
     <title>0.75.3-nightly.1 — The engine moves to Chromium 158.0.8127.65 with the branch's later security fixes.</title>

@@ -68,7 +68,8 @@
 <p class="mono vn-title">Releases</p>
 <label for="release-search" hidden id="search-label">Find a release</label>
 <input id="release-search" type="search" placeholder="Find a release" aria-label="Find a release" hidden>
-<nav aria-label="Versions" id="versions"><a href="#v0.75.3-nightly.1" data-channel="nightly" data-version="0.75.3-nightly.1">0.75.3-nightly.1</a>
+<nav aria-label="Versions" id="versions"><a href="#v0.75.3" data-channel="stable" data-version="0.75.3">0.75.3</a>
+<a href="#v0.75.3-nightly.1" data-channel="nightly" data-version="0.75.3-nightly.1">0.75.3-nightly.1</a>
 <a href="#v0.75.2" data-channel="stable" data-version="0.75.2">0.75.2</a>
 <a href="#v0.75.2-nightly.2" data-channel="nightly" data-version="0.75.2-nightly.2">0.75.2-nightly.2</a>
 <a href="#v0.75.2-nightly.1" data-channel="nightly" data-version="0.75.2-nightly.1">0.75.2-nightly.1</a>
@@ -251,7 +252,24 @@
 <a href="#v0.1.0" data-channel="stable" data-version="0.1.0">0.1.0</a></nav>
 <a class="archive-link" href="changelog.xml">Subscribe via Atom ↗</a>
 </aside>
-<div class="timeline"><div id="releases"><article class="release" id="v0.75.3-nightly.1" data-version="0.75.3-nightly.1" data-channel="nightly" data-latest="false">
+<div class="timeline"><div id="releases"><article class="release" id="v0.75.3" data-version="0.75.3" data-channel="stable" data-latest="true">
+  <div class="release-meta"><h2><a href="#v0.75.3" aria-label="Link to version 0.75.3">0.75.3</a></h2>
+  <time datetime="2026-11-23">November 23, 2026</time><span class="release-channel">Stable</span></div>
+  <div class="release-copy"><h3>The stable engine moves to Chromium 158.0.8127.65.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Security: the engine moves to Chromium 158.0.8127.65, which carries the 158 branch&#x27;s later navigation, input, media, PDF, networking and extension hardening fixes.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
+    <li>Removing a profile while an extension&#x27;s content scripts are still loading can leave matching pages loading in other profiles until Circa restarts.</li>
+  </ul>
+  <p class="release-engine">Engine / bundled components: Chromium 158.0.8127.65; maintained engine r25; side API v19</p>
+  <a class="release-source" href="changelog/0.75.3/">Release permalink ↗</a>
+  </div>
+</article>
+<article class="release" id="v0.75.3-nightly.1" data-version="0.75.3-nightly.1" data-channel="nightly" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.75.3-nightly.1" aria-label="Link to version 0.75.3-nightly.1">0.75.3-nightly.1</a></h2>
   <time datetime="2026-11-20">November 20, 2026</time><span class="release-channel">Nightly</span></div>
   <div class="release-copy"><h3>The engine moves to Chromium 158.0.8127.65 with the branch&#x27;s later security fixes.</h3>
@@ -264,7 +282,7 @@
   <a class="release-source" href="changelog/0.75.3-nightly.1/">Release permalink ↗</a>
   </div>
 </article>
-<article class="release" id="v0.75.2" data-version="0.75.2" data-channel="stable" data-latest="true">
+<article class="release" id="v0.75.2" data-version="0.75.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.75.2" aria-label="Link to version 0.75.2">0.75.2</a></h2>
   <time datetime="2026-11-20">November 20, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Command-E opens Site Controls and cycles through your extensions.</h3>
