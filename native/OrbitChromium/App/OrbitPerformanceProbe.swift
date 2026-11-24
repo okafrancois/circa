@@ -2879,9 +2879,6 @@ private final class SplitParityMenuCapture: NSObject {
 }
 
 extension OrbitPerformanceProbe {
-    /// A tab switched to WebKit ("Reload with WebKit") shows its WebKit address, follows a History
-    /// API navigation, opens a pinned extension's popup, and shows its Chromium address again after
-    /// "Reload with Chromium".
     /// chrome.action.openPopup() requested by a content script from a trusted page click, on the
     /// selected hosted tab: unpinned then pinned action with the sidebar shown, a second request
     /// while the popup is up, Escape to dismiss, then the hidden-sidebar case. Each popup's own
@@ -3069,6 +3066,9 @@ extension OrbitPerformanceProbe {
         }
     }
 
+    /// A tab switched to WebKit ("Reload with WebKit") shows its WebKit address, follows a History
+    /// API navigation, opens a pinned extension's popup, and shows its Chromium address again after
+    /// "Reload with Chromium".
     private static func webKitPopup(_ owner: OrbitWindowController, host: any BrowserExtensionHost,
                                     item: BrowserExtensionSummary, surface: ChromiumSurface, root: URL,
                                     bundleID: String) async -> [String: Any] {
