@@ -51,8 +51,13 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
     /// replacing the bundle cannot break a running process; the kernel can then report the clone
     /// as the executable path, outside the path the witness attests. The product keeps it (it is
     /// replaced in place by its packager); the hidden smoke turns it off.
+    /// A hidden window never becomes key, so its views never have focus, and Chromium 158 refuses
+    /// page fullscreen from an unfocused view (`SuppressFullscreenFromUnfocusedView`). Only hidden
+    /// runs lift that check, so the essentials still prove Orbit's fullscreen layout and CEF
+    /// callback order; the product and visible smokes keep the hardening.
     var runtimeSwitches: [String] {
-        ["--disable-features=MacAppCodeSignClone"] +
+        [hiddenApplication ? "--disable-features=MacAppCodeSignClone,SuppressFullscreenFromUnfocusedView"
+                           : "--disable-features=MacAppCodeSignClone"] +
             (arguments.contains("--orbit-smoke-site-data") ? ["--use-fake-device-for-media-stream"] : [])
     }
     private var visibleSmoke: Bool {
@@ -140,7 +145,13 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
 
     func record(_ id: String, _ status: String, _ evidence: [String: Any] = [:]) {
         results.append(["id": id, "status": status, "evidence": evidence])
-        event("result", ["id": id, "status": status])
+        // A phase cut short by its time bound never writes the results file: a failed check also
+        // carries its evidence in the event stream, so the failure stays diagnosable.
+        var fields: [String: Any] = ["id": id, "status": status]
+        if status == "failed", !evidence.isEmpty {
+            fields["evidence"] = JSONSerialization.isValidJSONObject(evidence) ? evidence : String(describing: evidence)
+        }
+        event("result", fields)
     }
 
     func check(_ id: String, _ condition: Bool, _ evidence: [String: Any] = [:]) {

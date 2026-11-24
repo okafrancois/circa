@@ -4,10 +4,41 @@
   <title>Circa releases</title>
   <link href="https://circabrowser.com/changelog.xml" rel="self" />
   <link href="https://circabrowser.com/changelog" rel="alternate" />
-  <updated>2026-11-23T00:00:00Z</updated>
+  <updated>2026-11-24T00:00:00Z</updated>
   <author>
     <name>Circa</name>
   </author>
+  <entry>
+    <id>https://circabrowser.com/changelog/0.75.4/</id>
+    <title>0.75.4 — Removing an extension profile no longer stalls other pages.</title>
+    <link href="https://circabrowser.com/changelog/0.75.4/" />
+    <updated>2026-11-24T00:00:00Z</updated>
+    <published>2026-11-24T00:00:00Z</published>
+    <category term="stable" />
+    <summary>Removing an extension profile no longer stalls other pages.
+
+1 fixed
+
+## Fixed
+
+- Pages no longer stay loading forever after a profile is removed while one of its extensions with content scripts is still starting.
+
+Engine / bundled components: Chromium 158.0.8127.65; maintained engine r26; side API v19
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.4" data-version="0.75.4" data-channel="stable" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.4" aria-label="Link to version 0.75.4"&gt;0.75.4&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-24"&gt;November 24, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Stable&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Removing an extension profile no longer stalls other pages.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Pages no longer stay loading forever after a profile is removed while one of its extensions with content scripts is still starting.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;p class="release-engine"&gt;Engine / bundled components: Chromium 158.0.8127.65; maintained engine r26; side API v19&lt;/p&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.4/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
   <entry>
     <id>https://circabrowser.com/changelog/0.75.4-nightly.1/</id>
     <title>0.75.4-nightly.1 — Removing an extension profile no longer stalls other pages.</title>
