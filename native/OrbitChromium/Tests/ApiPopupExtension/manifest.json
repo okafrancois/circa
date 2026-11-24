@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "API Popup Fixture",
+  "version": "1.0",
+  "description": "Synthetic inline unlock: a content-script button asks the service worker to call chrome.action.openPopup().",
+  "action": {"default_popup": "popup.html", "default_title": "API Popup Fixture"},
+  "background": {"service_worker": "worker.js"},
+  "content_scripts": [{"matches": ["http://127.0.0.1/*"], "js": ["content.js"], "run_at": "document_idle"}]
+}

@@ -313,6 +313,9 @@ struct State {
   const orbit_cef_api_t* orbit = nullptr;
   int32_t (*extension_set_pinned)(const char*, const char*, int32_t) = nullptr;
   int32_t (*extension_shortcut)(int32_t, int32_t, uint32_t, char*, uint32_t) = nullptr;
+  // chrome.action.openPopup() of hosted tabs: registration and answer (NULL before engine r27).
+  int32_t (*extension_popup_observe)(void (*)(void*, int32_t, const char*, uint64_t), void*) = nullptr;
+  int32_t (*extension_open_popup)(uint64_t, void*, uint64_t, uint64_t, uint64_t, uint64_t) = nullptr;
   // EXT-OUTCOME-R1: optional registration of the unowned-tabs patch (NULL on the shipped framework).
   orbit_cef_set_unowned_tab_handler_t set_unowned_tab_handler = nullptr;
   // Changes whenever that registration is installed or cleared (EXT-OUTCOME-R2).
@@ -2106,6 +2109,8 @@ orbit_cef_set_unowned_tab_handler_t ResolveUnownedTabRegistration() {
   return set;
 }
 
+void ExtensionPopupRequested(void*, int32_t browser_id, const char* extension_id, uint64_t request);
+
 template <typename Function>
 Function ResolveExtensionToolbarFunction(const char* name) {
   NSString* executable = [[NSBundle mainBundle] executablePath];
@@ -2293,6 +2298,17 @@ class App final : public CefApp, public CefBrowserProcessHandler {
         "orbit_cef_extension_set_pinned");
     g_state->extension_shortcut = ResolveExtensionToolbarFunction<decltype(g_state->extension_shortcut)>(
         "orbit_cef_extension_shortcut");
+    // Both functions or neither; the answer uses the action leases (side API v4).
+    g_state->extension_open_popup = ResolveExtensionToolbarFunction<decltype(g_state->extension_open_popup)>(
+        "orbit_cef_extension_open_popup");
+    g_state->extension_popup_observe = g_state->extension_open_popup && g_state->HasExtensionLeases() ?
+        ResolveExtensionToolbarFunction<decltype(g_state->extension_popup_observe)>(
+            "orbit_cef_extension_popup_observe") : nullptr;
+    if (!g_state->extension_popup_observe ||
+        g_state->extension_popup_observe(&ExtensionPopupRequested, nullptr) != 1) {
+      g_state->extension_popup_observe = nullptr;
+      g_state->extension_open_popup = nullptr;
+    }
     g_state->essentials_level = ResolveEssentialsLevel();
     // Only hosted Chrome style has logical Browsers whose tabs Chrome can create by itself.
     g_state->set_unowned_tab_handler = g_state->orbit ? ResolveUnownedTabRegistration() : nullptr;
@@ -2617,6 +2633,10 @@ extern "C" int32_t ACRRequestQuit() {
   // No Chrome-created tab is offered to a quitting shell.
   ++g_state->unowned_handler_generation;
   if (g_state->set_unowned_tab_handler) g_state->set_unowned_tab_handler(nullptr, nullptr);
+  // Nor is any extension popup opened for one.
+  if (g_state->extension_popup_observe) g_state->extension_popup_observe(nullptr, nullptr);
+  g_state->extension_popup_observe = nullptr;
+  g_state->extension_open_popup = nullptr;
   StopAuthenticationOperations(/*before_shutdown=*/true);
   std::vector<uint64_t> extension_surfaces;
   for (const auto& [token, host] : g_state->hosts) extension_surfaces.push_back(token);
@@ -4056,6 +4076,65 @@ class ExtensionActionAnchor {
   NSView* __strong anchor_ = nil;
   NSWindow* __weak window_ = nil;
 };
+
+// chrome.action.openPopup() for the hosted tab `browser_id`, asked synchronously by the engine.
+// The answer is the action anchor the shell registered for that exact selected surface (the one
+// an action's keyboard shortcut uses), with the same invocation bookkeeping as a native action;
+// without a usable anchor (hidden sidebar and toolbar), the engine-owned detached window. Not
+// answering refuses the call, which then fails in the extension.
+void ExtensionPopupRequested(void*, int32_t browser_id, const char* extension_id, uint64_t request) {
+  const bool diagnostics = std::getenv("ORBIT_EXTENSION_DIAGNOSTICS") != nullptr;
+  auto refuse = [diagnostics](const char* stage) {
+    if (diagnostics) fprintf(stderr, "acr: api popup refused at %s\n", stage);
+  };
+  if (!NSThread.isMainThread || !g_state || g_state->quitting || !g_state->extension_open_popup ||
+      !ACRExtensionsAvailable() || !orbit_bridge::ValidExtensionID(extension_id)) return refuse("runtime");
+  uint64_t token = 0;
+  for (const auto& [candidate, live] : g_state->hosts) {
+    if (live.browser && live.browser->GetIdentifier() == browser_id) { token = candidate; break; }
+  }
+  Host* host = token ? g_state->Find(token) : nullptr;
+  if (!host || !host->window || !ExtensionProfilePath(host->profile) || host->closing_by_shell ||
+      host->close_requested) return refuse("host");
+  auto* const runtime = g_state;
+  const uint64_t lifetime = runtime->extension_lifetime;
+  const uint64_t window = host->window, profile = host->profile;
+  auto browser = host->browser;
+  auto current_epoch = [window, token, profile]() -> uint64_t {
+    const auto selection = g_state->extension_selections.find(window);
+    return selection != g_state->extension_selections.end() && selection->second.surface == token &&
+        selection->second.profile == profile ? selection->second.epoch : 0;
+  };
+  const uint64_t epoch = current_epoch();
+  if (!epoch) return refuse("selection");
+  ExtensionActionAnchor anchor((__bridge void*)host->extension_anchor);
+  host = nullptr;  // Cancellation and the answer can reenter the shell.
+  const std::string id(extension_id);
+  if (!anchor.IsValidFor(browser)) {
+    if (!ACRDetachedExtensionActionsAvailable()) return refuse("detached");
+    const uint64_t invocation = g_state->next_request++;
+    if (diagnostics) fprintf(stderr, "acr: api popup detached\n");
+    if (g_state->extension_open_popup(request, nullptr, invocation, token, profile, epoch) != 1) refuse("engine");
+    return;
+  }
+  if (auto* live = g_state->Find(token)) g_state->CancelExtensionAction(*live);
+  if (g_state != runtime || g_state->extension_lifetime != lifetime || !g_state->extension_open_popup) return refuse("runtime-after-cancel");
+  host = g_state->Find(token);
+  if (!host || host->browser != browser || host->window != window || host->profile != profile ||
+      host->closing_by_shell || host->close_requested || host->extension_invocation ||
+      !anchor.IsValidFor(browser) || current_epoch() != epoch) return refuse("host-after-cancel");
+  const uint64_t invocation = g_state->next_request++;
+  host->extension_invocation = invocation;
+  host = nullptr;
+  if (diagnostics) fprintf(stderr, "acr: api popup anchored\n");
+  const auto result = g_state->extension_open_popup(request, anchor.get(), invocation, token, profile, epoch);
+  if (result != 1 && g_state == runtime && g_state->extension_lifetime == lifetime) {
+    if (auto* live = g_state->Find(token); live && live->extension_invocation == invocation)
+      live->extension_invocation = 0;
+    if (g_state->HasExtensionLeases()) g_state->orbit->extension_cancel(invocation);
+    refuse("engine");
+  }
+}
 }
 
 extern "C" int32_t ACRPerformExtensionAction(uint64_t token, const char* id, void* anchor) {

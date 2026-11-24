@@ -10,11 +10,16 @@ int main(int argc, char** argv) {
   assert(handle);
   auto get = reinterpret_cast<orbit_cef_get_api_t>(dlsym(handle, "orbit_cef_get_api"));
   assert(get);
-  const auto* api = get(18);
-  assert(api && api->version == 18 && api->struct_size >= sizeof(orbit_cef_api_t));
+  // Side API v19 (engine r24 and later) is the full table; v18 keeps its prefix.
+  const auto* api = get(19);
+  assert(api && api->version == 19 && api->struct_size >= sizeof(orbit_cef_api_t));
+  assert(get(18) && get(18)->version == 18 &&
+         get(18)->struct_size == offsetof(orbit_cef_api_t, extension_action_detached));
   assert(api->window_created && api->move_tab && api->hold_window && api->extension_selection_changed);
   for (const char* name : {"orbit_cef_essentials_level", "orbit_cef_set_unowned_tab_handler",
-                           "orbit_cef_extension_set_pinned", "orbit_cef_extension_shortcut"})
+                           "orbit_cef_extension_set_pinned", "orbit_cef_extension_shortcut",
+                           // Engine r27: action.openPopup() of hosted tabs.
+                           "orbit_cef_extension_popup_observe", "orbit_cef_extension_open_popup"})
     assert(dlsym(handle, name));
   assert(api->extension_action_snapshot && api->browser_state && api->browser_state_observe);
   assert(api->discard_tab && api->restore_discarded_tab);
@@ -51,6 +56,8 @@ int main(int argc, char** argv) {
   assert(api->freeze_tab && api->purge_memory && api->preconnect);
   assert(api->devtools_set_host && api->devtools_show && api->devtools_close);
   assert(api->devtools_state && api->devtools_layout && api->devtools_focus);
-  assert(!get(0) && !get(19));
+  assert(api->extension_action_detached && api->tab_volume_set && api->tab_volume_get &&
+         api->content_blocking_configure);
+  assert(!get(0) && !get(20));
   dlclose(handle);
 }

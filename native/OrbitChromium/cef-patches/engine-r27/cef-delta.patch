@@ -1,0 +1,310 @@
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -665,3 +665,5 @@
+ }
+ 
+ #include "cef/libcef/browser/orbit/orbit_extension_toolbar.inc"
++// chrome.action.openPopup() in hosted logical Browsers.
++#include "cef/libcef/browser/orbit/orbit_action_popup.inc"
+diff --git a/libcef/browser/orbit/orbit_action_popup.h b/libcef/browser/orbit/orbit_action_popup.h
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_action_popup.h
+@@ -0,0 +1,34 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_ACTION_POPUP_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_ACTION_POPUP_H_
++#pragma once
++
++#include <optional>
++#include <string>
++
++#include "chrome/browser/ui/extensions/extension_popup_types.h"
++
++class BrowserWindowInterface;
++
++namespace extensions {
++class Extension;
++}
++
++namespace orbit {
++
++// action.openPopup() and browserAction.openPopup() for an Orbit hosted logical
++// Browser, which has no Views toolbar or ExtensionsContainer. Returns
++// std::nullopt when |browser| is not one (Chrome's toolbar path applies) and
++// then leaves |callback| untouched. Otherwise behaves as the toolbar container:
++// true when the popup is being shown, |callback| (when not null) having been
++// taken and running exactly once with the shown popup's host, or with null
++// when the popup closes before it shows; false, with |error| set and
++// |callback| neither taken nor run, when no popup can be shown. UI thread.
++std::optional<bool> OpenHostedActionPopup(BrowserWindowInterface& browser,
++                                          const extensions::Extension& extension,
++                                          ShowPopupCallback& callback,
++                                          std::string* error);
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_ACTION_POPUP_H_
+diff --git a/libcef/browser/orbit/orbit_action_popup.inc b/libcef/browser/orbit/orbit_action_popup.inc
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_action_popup.inc
+@@ -0,0 +1,258 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++// Included once, last, by orbit_cef_api.mm: it uses the anchored popup lease
++// (orbit_extensions.inc) and the detached popup window (orbit_detached_popup.inc).
++//
++// chrome.action.openPopup() in hosted logical Browsers. Chrome shows an
++// API-requested popup through its Views toolbar container, which a hosted
++// Browser does not have, so the call failed with "Browser window has no
++// toolbar.". Here the embedder answers each request with the action anchor it
++// registered for the selected tab, or with none for the engine-owned detached
++// window, and the popup is the same genuine ExtensionViewHost as for a native
++// action. As on Chrome's API path the action itself never runs: no
++// action.onClicked and no activeTab grant. The exported functions are resolved
++// by name, like the toolbar services; the side API table is unchanged.
++#include "base/memory/weak_ptr.h"
++#include "base/task/single_thread_task_runner.h"
++#include "cef/libcef/browser/orbit/orbit_action_popup.h"
++#include "extensions/browser/extension_host.h"
++
++namespace {
++// Chrome's generic openPopup failure (kFailedToOpenPopupGenericError).
++constexpr char kOpenPopupFailed[] = "Failed to open popup.";
++
++// UI thread. Called synchronously while openPopup() runs; the embedder answers
++// with orbit_cef_extension_open_popup(request, ...) before returning, or
++// returns without answering to refuse.
++using orbit_popup_request_t = void (*)(void* context, int32_t browser_id,
++                                       const char* extension_id, uint64_t request);
++struct PopupRequestHandler {
++  orbit_popup_request_t request = nullptr;
++  void* context = nullptr;
++};
++PopupRequestHandler& GetPopupRequestHandler() {
++  static PopupRequestHandler handler;
++  return handler;
++}
++
++// The request being answered. Its Browser and contents are borrowed for the
++// synchronous embedder call and are compared, never dereferenced, before the
++// live CEF host has been found again.
++struct PendingPopupRequest {
++  uint64_t id = 0;
++  int32_t browser_id = -1;
++  uint64_t window = 0;
++  raw_ptr<Browser> browser = nullptr;
++  raw_ptr<content::WebContents> contents = nullptr;
++  std::string extension_id;
++  ShowPopupCallback callback;
++  bool answered = false;
++};
++PendingPopupRequest*& CurrentPopupRequest() {
++  static PendingPopupRequest* current = nullptr;
++  return current;
++}
++
++// Completes an answered request once: with the popup's host when its document
++// has loaded and the popup is on screen, otherwise with null (the popup closed
++// or was revoked first). The popup shows from its own load notification; the
++// check runs after every observer of that notification. Owns itself.
++class OrbitApiPopupCompletion final : public content::WebContentsObserver {
++ public:
++  static void Start(extensions::ExtensionHost* host, ShowPopupCallback callback) {
++    // browserAction.openPopup() waits for the host's first load itself.
++    if (callback) new OrbitApiPopupCompletion(host, std::move(callback));
++  }
++
++  void DocumentOnLoadCompletedInPrimaryMainFrame() override {
++    if (checking_) return;
++    checking_ = true;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&OrbitApiPopupCompletion::Check, weak_factory_.GetWeakPtr()));
++  }
++  void WebContentsDestroyed() override { Finish(nullptr); }
++
++ private:
++  OrbitApiPopupCompletion(extensions::ExtensionHost* host, ShowPopupCallback callback)
++      : content::WebContentsObserver(host->host_contents()), host_(host), callback_(std::move(callback)) {}
++
++  void Check() {
++    // Observation ends with the contents, which the host owns.
++    if (!web_contents()) return;
++    // A revoked popup has already removed the contents from its window. (The
++    // contents' own NSView reports itself hidden inside a views host; only its
++    // window's visibility is meaningful.)
++    NSView* view = web_contents()->GetNativeView().GetNativeNSView();
++    const bool shown = view && view.window && view.window.isVisible;
++    Finish(shown ? host_.get() : nullptr);
++  }
++
++  void Finish(extensions::ExtensionHost* shown) {
++    Observe(nullptr);
++    auto callback = std::move(callback_);
++    host_ = nullptr;
++    delete this;
++    // The extension function responds; nothing here is touched afterwards.
++    if (callback) std::move(callback).Run(shown);
++  }
++
++  raw_ptr<extensions::ExtensionHost> host_;
++  ShowPopupCallback callback_;
++  bool checking_ = false;
++  base::WeakPtrFactory<OrbitApiPopupCompletion> weak_factory_{this};
++};
++
++// Chrome's toolbar shows one popup at a time and refuses an API request while
++// one is up; an Orbit window has its anchored and detached popups.
++bool WindowHasExtensionPopup(uint64_t window) {
++  for (const auto& [invocation, weak] : GetExtensionInvocations()) {
++    auto lease = weak.lock();
++    if (lease && lease->window() == window && lease->IsValid()) return true;
++  }
++  for (const auto& [invocation, popup] : GetDetachedPopups())
++    if (popup && popup->window() == window) return true;
++  return false;
++}
++
++int32_t OpenRequestedPopup(uint64_t request, void* anchor_nsview, uint64_t invocation,
++                           uint64_t surface, uint64_t profile, uint64_t epoch) {
++  PendingPopupRequest* pending = OnValidUIThread() ? CurrentPopupRequest() : nullptr;
++  if (!pending || pending->id != request || pending->answered || !invocation ||
++      GetExtensionInvocations().contains(invocation) || GetDetachedPopups().contains(invocation))
++    return 0;
++  // The embedder may have reentered the engine: find the source again.
++  auto host = GetChromeHost(pending->browser_id);
++  if (!host || host->browser() != pending->browser || host->GetWebContents() != pending->contents) return 0;
++  Browser* browser = host->browser();
++  content::WebContents* contents = host->GetWebContents();
++  const uint64_t window = pending->window;
++  if (browser->IsDeleteScheduled() || browser->GetProfile()->IsOffTheRecord() ||
++      browser->tab_strip_model()->GetActiveWebContents() != contents ||
++      !DetachedSelectionAuthorizes(window, pending->browser_id, surface, profile, epoch) ||
++      WindowHasExtensionPopup(window))
++    return 0;
++  auto* registry = extensions::ExtensionRegistry::Get(browser->GetProfile());
++  auto* manager = extensions::ExtensionActionManager::Get(browser->GetProfile());
++  scoped_refptr<const extensions::Extension> extension =
++      registry ? registry->enabled_extensions().GetByID(pending->extension_id) : nullptr;
++  auto* action = extension && manager ? manager->GetExtensionAction(*extension) : nullptr;
++  const int tab_id = extensions::ExtensionTabUtil::GetTabId(contents);
++  // The API's own condition (HasPopupOnActiveTab), rechecked after reentry.
++  if (!action || !action->HasPopup(tab_id) || !action->GetIsVisibleIgnoringDeclarative(tab_id)) return 0;
++
++  NSView* anchor = (__bridge NSView*)anchor_nsview;
++  std::shared_ptr<OrbitNativePopupLease> lease;
++  NSWindow* source_window = nil;
++  if (anchor) {
++    const auto generation = orbit::GetWindowGeneration(window);
++    if (![anchor isKindOfClass:[NSView class]] || !generation) return 0;
++    lease = std::make_shared<OrbitNativePopupLease>(
++        orbit_extensions::InvocationIdentity{window, *generation, surface, profile, epoch,
++                                             pending->browser_id, reinterpret_cast<uintptr_t>(contents)},
++        browser, contents, anchor, pending->extension_id.c_str());
++    lease->ObserveBrowserClose();
++    if (!lease->IsValid()) return 0;
++  } else {
++    source_window = orbit::GetNativeWindow(window).GetNativeNSWindow();
++    if (!source_window) return 0;
++  }
++  auto popup_host = extensions::ExtensionViewHostFactory::CreatePopupHost(
++      *extension, action->GetPopupUrl(tab_id), browser);
++  if (!popup_host) return 0;
++
++  // Answered: from here the API call completes through the popup, which shows
++  // or closes (including synchronously, when it cannot be created).
++  pending->answered = true;
++  OrbitApiPopupCompletion::Start(popup_host.get(), std::move(pending->callback));
++  if (lease) {
++    GetExtensionInvocations()[invocation] = lease;
++    const NSRect screen_rect = [anchor.window convertRectToScreen:[anchor convertRect:anchor.bounds toView:nil]];
++    ExtensionPopup::ShowPopupWithNativeParent(browser, std::move(popup_host),
++        gfx::NativeView(anchor.window.contentView), gfx::ScreenRectFromNSRect(screen_rect), lease);
++    return 1;
++  }
++  const gfx::Point top_left = gfx::ScreenRectFromNSRect(source_window.frame).origin() + kDetachedPopupOffset;
++  auto popup = std::make_unique<OrbitDetachedPopup>(invocation, window, browser, contents, std::move(popup_host),
++                                                    base::UTF8ToUTF16(extension->name()), top_left);
++  OrbitDetachedPopup* started = popup.get();
++  GetDetachedPopups()[invocation] = std::move(popup);
++  if (!started->Start()) started->Close();
++  return 1;
++}
++}  // namespace
++
++namespace orbit {
++
++std::optional<bool> OpenHostedActionPopup(BrowserWindowInterface& window_interface,
++                                          const extensions::Extension& extension,
++                                          ShowPopupCallback& callback,
++                                          std::string* error) {
++  if (!OnValidUIThread()) return std::nullopt;
++  // A logical Browser is identified through its active hosted tab.
++  TabStripModel* model = window_interface.GetTabStripModel();
++  content::WebContents* contents = model ? model->GetActiveWebContents() : nullptr;
++  auto base = contents ? CefBrowserHostBase::GetBrowserForContents(contents) : nullptr;
++  auto host = base ? GetChromeHost(base->GetIdentifier()) : nullptr;
++  Browser* browser = host ? host->browser() : nullptr;
++  if (!browser || static_cast<BrowserWindowInterface*>(browser) != &window_interface ||
++      !IsLogicalBrowser(browser) || host->GetWebContents() != contents)
++    return std::nullopt;
++
++  *error = kOpenPopupFailed;
++  const int32_t browser_id = base->GetIdentifier();
++  auto* delegate = CefBrowserPlatformDelegateChromeHosted::FromBrowserId(browser_id);
++  const PopupRequestHandler handler = GetPopupRequestHandler();
++  // Private windows keep the extension popup policy of native actions.
++  if (!delegate || !handler.request || CurrentPopupRequest() || browser->IsDeleteScheduled() ||
++      browser->GetProfile()->IsOffTheRecord())
++    return false;
++  const uint64_t window = delegate->window_token();
++  const auto selection = GetExtensionSelections().find(window);
++  // Only the tab the shell shows in that window, as published for its actions.
++  if (!GetWindowGeneration(window) || selection == GetExtensionSelections().end() ||
++      selection->second.browser != browser_id || WindowHasExtensionPopup(window))
++    return false;
++
++  static uint64_t next_request = 0;
++  PendingPopupRequest pending;
++  pending.id = ++next_request;
++  pending.browser_id = browser_id;
++  pending.window = window;
++  pending.browser = browser;
++  pending.contents = contents;
++  pending.extension_id = extension.id();
++  pending.callback = std::move(callback);
++  CurrentPopupRequest() = &pending;
++  handler.request(handler.context, browser_id, pending.extension_id.c_str(), pending.id);
++  CurrentPopupRequest() = nullptr;
++  pending.browser = nullptr;
++  pending.contents = nullptr;
++  if (!pending.answered) {
++    callback = std::move(pending.callback);
++    return false;
++  }
++  error->clear();
++  return true;
++}
++
++}  // namespace orbit
++
++// Registers the embedder's request handler; a null handler unregisters.
++// Returns 1 when accepted.
++extern "C" CEF_EXPORT int32_t orbit_cef_extension_popup_observe(orbit_popup_request_t request,
++                                                                void* context) {
++  if (!OnValidUIThread()) return 0;
++  GetPopupRequestHandler() = {request, context};
++  return 1;
++}
++
++// Answers the pending request, only from within the handler. A non-null
++// anchor must belong to the selected tab's shell window (as extension_action);
++// a null anchor opens the engine-owned window of extension_action_detached.
++// The selection tokens are those of the shell's published selection. Returns 1
++// when answered (the API call then completes when the popup shows, or fails
++// when it closes first), 0 when refused.
++extern "C" CEF_EXPORT int32_t orbit_cef_extension_open_popup(uint64_t request, void* anchor_nsview,
++    uint64_t invocation, uint64_t surface_token, uint64_t profile_token, uint64_t selection_epoch) {
++  return OpenRequestedPopup(request, anchor_nsview, invocation, surface_token, profile_token,
++                            selection_epoch);
++}
