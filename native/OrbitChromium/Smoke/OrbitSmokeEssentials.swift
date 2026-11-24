@@ -39,8 +39,10 @@ extension OrbitSmokeDriver {
         func dialog(_ surface: ChromiumSurface, _ kind: BrowserPageDialogSpec.Kind, _ seconds: Double = 10) async -> BrowserPageDialogSpec? {
             await until(seconds) { center.presentedDialog(for: ObjectIdentifier(surface)).flatMap { $0.kind == kind ? $0 : nil } }
         }
+        // Page dialogs sit over the surface's document view, a child of its host view since
+        // native developer tools are hosted beside the document.
         func overlayShown(on surface: ChromiumSurface) -> Bool {
-            surface.hostView.subviews.contains { $0 is BrowserPageDialogView }
+            surface.documentView.subviews.contains { $0 is BrowserPageDialogView }
         }
         var essentialTabs: [ChromiumSurface] = []
         defer {
