@@ -9,6 +9,50 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.5-nightly.1/</id>
+    <title>0.75.5-nightly.1 — Extensions can open their popup from a page.</title>
+    <link href="https://circabrowser.com/changelog/0.75.5-nightly.1/" />
+    <updated>2026-11-24T00:00:00Z</updated>
+    <published>2026-11-24T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Extensions can open their popup from a page.
+
+1 new
+
+## New
+
+- Extensions can now open their own popup from a page, including inline unlock prompts, using `chrome.action.openPopup()`.
+
+## Known limits
+
+- This nightly has been verified with synthetic extensions; individual password managers have not been tested.
+
+Engine / bundled components: Chromium 158.0.8127.65; maintained engine r27; side API v19
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.5-nightly.1" data-version="0.75.5-nightly.1" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.5-nightly.1" aria-label="Link to version 0.75.5-nightly.1"&gt;0.75.5-nightly.1&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-24"&gt;November 24, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Extensions can open their popup from a page.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 new&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Extensions can now open their own popup from a page, including inline unlock prompts, using &lt;code&gt;chrome.action.openPopup()&lt;/code&gt;.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Known limits&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;This nightly has been verified with synthetic extensions; individual password managers have not been tested.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;p class="release-engine"&gt;Engine / bundled components: Chromium 158.0.8127.65; maintained engine r27; side API v19&lt;/p&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.75.5-nightly.1/extension-api-popup.jpg" aria-label="A page button opens an extension&amp;#x27;s popup on synthetic data."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.75.5-nightly.1/extension-api-popup.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.75.5-nightly.1/extension-api-popup.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;A page button opens an extension&amp;#x27;s popup on synthetic data.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.5-nightly.1/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.4/</id>
     <title>0.75.4 — Removing an extension profile no longer stalls other pages.</title>
     <link href="https://circabrowser.com/changelog/0.75.4/" />

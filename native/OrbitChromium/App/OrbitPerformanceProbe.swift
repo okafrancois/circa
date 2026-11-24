@@ -2879,6 +2879,193 @@ private final class SplitParityMenuCapture: NSObject {
 }
 
 extension OrbitPerformanceProbe {
+    /// chrome.action.openPopup() requested by a content script from a trusted page click, on the
+    /// selected hosted tab: unpinned then pinned action with the sidebar shown, a second request
+    /// while the popup is up, Escape to dismiss, then the hidden-sidebar case. Each popup's own
+    /// window and its source window are captured, nothing else. `clip` records the unpinned
+    /// request only, as frames of the test window (its child popup included).
+    private static func apiPopup(_ owner: OrbitWindowController, host: any BrowserExtensionHost,
+                                 item: BrowserExtensionSummary, surface: ChromiumSurface, root: URL,
+                                 bundleID: String, clip: Bool) async -> [String: Any] {
+        guard let window = owner.window else { return ["refused": true] }
+        let recorder = clip ? OwnedWindowFrames(directory: root.appendingPathComponent("clip")) : nil
+        var result: [String: Any] = ["engineAnswers": ProcessInfo.processInfo.environment["ORBIT_EXTENSION_DIAGNOSTICS"] != nil]
+        func capture(_ target: NSWindow, name: String) {
+            guard let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(target.windowNumber)) as? [[String: Any]],
+                  rows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) else { return }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = ["-x", "-o", "-l", String(target.windowNumber), root.appendingPathComponent(name).path]
+            try? process.run(); process.waitUntilExit()
+        }
+        func page() async -> [String: Any] {
+            await evaluate(surface, "({...document.documentElement.dataset})") ?? [:]
+        }
+        func popupWindows(excluding before: Set<ObjectIdentifier>) -> [NSWindow] {
+            NSApp.windows.filter { !before.contains(ObjectIdentifier($0)) && $0.isVisible }
+        }
+        // A trusted click on the content script's inline button, through the window's event queue.
+        func clickUnlock() async -> Bool {
+            guard let rect = await evaluate(surface, """
+                (() => { const r = document.getElementById('api-popup-unlock')?.getBoundingClientRect();
+                         return r ? {x: r.x + r.width / 2, y: r.y + r.height / 2} : {}; })()
+                """), let x = rect["x"] as? Double, let y = rect["y"] as? Double else { return false }
+            let view = surface.documentView
+            let local = NSPoint(x: x, y: view.isFlipped ? y : view.bounds.height - y)
+            let point = view.convert(local, to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard ownsWindow(owner, bundleID: bundleID), window.isKeyWindow, view.window === window,
+                      NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid(),
+                      let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else { return false }
+                NSApp.postEvent(event, atStart: false)
+            }
+            return true
+        }
+        // The outcome of request `number` (replies may arrive out of order).
+        func waitForResult(_ number: Int) async -> [String: Any] {
+            var data: [String: Any] = [:]
+            for _ in 0..<80 {
+                data = await page()
+                if data["apiPopupResult\(number)"] != nil { break }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            return ["result": data["apiPopupResult\(number)"] ?? NSNull(), "trusted": data["apiPopupTrusted\(number)"] ?? NSNull(),
+                    "urlVisible": data["apiPopupUrlVisible\(number)"] ?? NSNull()]
+        }
+        func scenario(_ name: String, pinned: Bool, sidebar: Bool, clicks: inout Int) async -> [String: Any] {
+            var entry: [String: Any] = [:]
+            do { try host.setPinned(pinned, extensionID: item.id, in: surface.profileID) }
+            catch { return ["pinFailed": true] }
+            owner.extensionControls.render()
+            owner.setSidebarVisible(sidebar, animated: false)
+            window.contentView?.layoutSubtreeIfNeeded()
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .milliseconds(500))
+            entry["pinned"] = (try? host.installedExtensions(on: surface))?.first { $0.id == item.id }?.isPinned ?? false
+            entry["sidebarVisible"] = owner.isSidebarVisible
+            let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+            if let recorder {
+                guard ownsWindow(owner, bundleID: bundleID) else { entry["inputGuardRefused"] = true; return entry }
+                recorder.start(windowNumber: window.windowNumber)
+                try? await Task.sleep(for: .milliseconds(1200))
+            }
+            let start = ProcessInfo.processInfo.systemUptime
+            guard await clickUnlock() else { entry["inputGuardRefused"] = true; return entry }
+            clicks += 1
+            let data = await waitForResult(clicks)
+            entry["result"] = data["result"]
+            entry["trusted"] = data["trusted"]
+            entry["urlVisible"] = data["urlVisible"]
+            var popup: NSWindow?
+            for _ in 0..<40 {
+                popup = popupWindows(excluding: before).first
+                if popup != nil { break }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            entry["resolvedMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+            guard let popup else { entry["popupVisible"] = false; capture(window, name: name + "-source.png"); return entry }
+            recorder?.mark("shown")
+            try? await Task.sleep(for: .milliseconds(recorder == nil ? 250 : 1800))
+            entry["popupVisible"] = popup.isVisible
+            entry["popupKey"] = popup.isKeyWindow
+            entry["popupParentIsSource"] = popup.parent === window
+            entry["popupTitled"] = popup.styleMask.contains(.titled)
+            entry["popupFrame"] = NSStringFromRect(popup.frame)
+            entry["sourceFrame"] = NSStringFromRect(window.frame)
+            capture(window, name: name + "-source.png")
+            capture(popup, name: name + "-popup.png")
+            // A second request while this popup is up is refused, as by Chrome's toolbar.
+            _ = await evaluate(surface, "(document.getElementById('api-popup-unlock').click(), {})")
+            clicks += 1
+            let second = await waitForResult(clicks)
+            entry["secondResult"] = second["result"]
+            entry["popupSurvivedSecond"] = popup.isVisible
+            // Normal dismiss: Escape in the popup's own document.
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                guard ownsWindow(owner, bundleID: bundleID), popup.isKeyWindow,
+                      let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: popup.windowNumber, context: nil,
+                        characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) else {
+                    entry["escapeRefused"] = true
+                    break
+                }
+                NSApp.postEvent(event, atStart: false)
+            }
+            for _ in 0..<40 where popup.isVisible { try? await Task.sleep(for: .milliseconds(50)) }
+            entry["dismissedByEscape"] = !popup.isVisible
+            entry["sourceKeyAfterDismiss"] = window.isKeyWindow
+            if let recorder {
+                recorder.mark("dismissed")
+                try? await Task.sleep(for: .milliseconds(1000))
+                entry["clipFrames"] = recorder.stop()
+            }
+            return entry
+        }
+        for _ in 0..<60 where (await page())["apiPopupReady"] == nil { try? await Task.sleep(for: .milliseconds(50)) }
+        result["contentScriptReady"] = (await page())["apiPopupReady"] as? String == "true"
+        var clicks = 0
+        result["unpinned"] = await scenario("unpinned", pinned: false, sidebar: true, clicks: &clicks)
+        if !clip {
+            result["pinned"] = await scenario("pinned", pinned: true, sidebar: true, clicks: &clicks)
+            result["hiddenSidebar"] = await scenario("hidden-sidebar", pinned: true, sidebar: false, clicks: &clicks)
+        }
+        owner.setSidebarVisible(true, animated: false)
+        result["sourceStayedVisible"] = window.isVisible
+        result["sourceURL"] = surface.navigationState.committedURL?.absoluteString
+        return result
+    }
+
+    /// Frames of one window of this process, captured by its own window number only, on a
+    /// background thread; `frames.json` lists each file with its time and whether the popup was up.
+    private final class OwnedWindowFrames: @unchecked Sendable {
+        private let directory: URL
+        private let lock = NSLock()
+        private var running = false
+        private var frames: [[String: Any]] = []
+        private var marks: [String: Double] = [:]
+        private var begin = ProcessInfo.processInfo.systemUptime
+        init(directory: URL) { self.directory = directory }
+
+        func start(windowNumber: Int) {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            lock.withLock { running = true; begin = ProcessInfo.processInfo.systemUptime }
+            Thread.detachNewThread { [self] in
+                var index = 0
+                while index < 150, lock.withLock({ running }) {
+                    let name = String(format: "frame-%04d.png", index)
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                    process.arguments = ["-x", "-o", "-l", String(windowNumber), directory.appendingPathComponent(name).path]
+                    let taken = ProcessInfo.processInfo.systemUptime
+                    guard (try? process.run()) != nil else { break }
+                    process.waitUntilExit()
+                    lock.withLock { frames.append(["file": name, "t": taken - begin]) }
+                    index += 1
+                }
+            }
+        }
+        func mark(_ name: String) { lock.withLock { marks[name] = ProcessInfo.processInfo.systemUptime - begin } }
+        func stop() -> Int {
+            let (list, shown, dismissed) = lock.withLock { () -> ([[String: Any]], Double, Double) in
+                running = false
+                return (frames, marks["shown"] ?? .infinity, marks["dismissed"] ?? .infinity)
+            }
+            let annotated = list.map { frame -> [String: Any] in
+                var frame = frame
+                let time = frame["t"] as? Double ?? 0
+                frame["popup"] = time >= shown && time < dismissed
+                return frame
+            }
+            if let data = try? JSONSerialization.data(withJSONObject: annotated, options: [.prettyPrinted]) {
+                try? data.write(to: directory.appendingPathComponent("frames.json"))
+            }
+            return annotated.count
+        }
+    }
+
     /// A tab switched to WebKit ("Reload with WebKit") shows its WebKit address, follows a History
     /// API navigation, opens a pinned extension's popup, and shows its Chromium address again after
     /// "Reload with Chromium".
@@ -2961,7 +3148,7 @@ extension OrbitPerformanceProbe {
         let bundleID = "lab.orbit.orbit.p2-extensions"
         guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
               let host = owner.engine.extensions else { return ["refused": true] }
-        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration", "webkit-popup"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
+        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration", "webkit-popup", "api-popup"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
            base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil {
             guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
             owner.submitAddress(base.absoluteString)
@@ -2969,7 +3156,7 @@ extension OrbitPerformanceProbe {
         }
         guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
         for _ in 0..<60 where !surface.isReady { try? await Task.sleep(for: .milliseconds(50)) }
-        if ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration", "webkit-popup"].contains(command["action"] ?? "") {
+        if ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration", "webkit-popup", "api-popup"].contains(command["action"] ?? "") {
             for _ in 0..<100 where surface.navigationState.isLoading {
                 try? await Task.sleep(for: .milliseconds(25))
             }
@@ -3082,6 +3269,10 @@ extension OrbitPerformanceProbe {
                 capture(window, name: "pinned-popup-source.png")
                 if let popup, popup.isVisible { capture(popup, name: "pinned-popup-content.png"); popup.close() }
                 return result
+            } else if command["action"] == "api-popup" {
+                guard let item = items.first(where: { $0.name == "API Popup Fixture" }) else { return ["fixtureMissing": true] }
+                return await apiPopup(owner, host: host, item: item, surface: surface, root: root, bundleID: bundleID,
+                                      clip: command["clip"] == "true")
             } else if command["action"] == "webkit-popup" {
                 guard let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" }) else { return ["fixtureMissing": true] }
                 return await webKitPopup(owner, host: host, item: item, surface: surface, root: root, bundleID: bundleID)
