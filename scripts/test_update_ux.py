@@ -656,7 +656,13 @@ def auth_stage(work, stage, evidence, expect):
                     if time.monotonic() > deadline - 30:
                         raise RuntimeError('Deadline: previous engine extension download (%s)' % stage)
                     time.sleep(.2)
-                time.sleep(1.5)  # Let CrxInstaller verify and unpack before the normal quit.
+                # CrxInstaller verifies and unpacks off the main thread: on a slow runner a fixed
+                # pause raced it. Wait for the 2.0 files in both profiles before the normal quit.
+                while not extensions_fixture.unpacked(root, work, fixture['second']):
+                    if time.monotonic() > deadline - 30:
+                        raise RuntimeError('Deadline: previous engine extension unpack (%s)' % stage)
+                    time.sleep(.2)
+                time.sleep(.5)  # Let the install record reach the preferences writer.
                 mark('downloaded')
                 quit_app()
                 launch(handle, ())
