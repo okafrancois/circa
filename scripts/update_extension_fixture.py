@@ -183,6 +183,14 @@ def crx_downloads(work):
     return path.read_text().count('/ext/x-2.crx\n') if path.exists() else 0
 
 
+def unpacked(root, work, second, label='X', version='2.0'):
+    """Both synthetic profiles hold the unpacked files of this extension version."""
+    fixture = json.loads((work / 'ext-fixture.json').read_text())
+    identifier = fixture['extensions'][label]['id']
+    return all((profile / 'Extensions' / identifier / (version + '_0') / 'manifest.json').is_file()
+               for profile in profile_directories(root, second).values())
+
+
 def reports(work, phase=None):
     path = work / 'ext.log'
     entries = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
