@@ -19,22 +19,23 @@ def main():
                   'discard_tab', 'password_prompt_observe', 'boosts_replace', 'set_automatic_pip',
                   'popup_navigation_metadata', 'password_store_open', 'page_lifecycle', 'memory_dump',
                   'permission_accept_once', 'media_snapshot', 'diagnostic_capabilities', 'freeze_tab',
-                  'devtools_set_host']
+                  'devtools_set_host', 'extension_action_detached']
     header = REPO / 'native/OrbitChromium/Bridge/OrbitCefApi.h'
     with tempfile.TemporaryDirectory(prefix='orbit-security-abi-') as directory:
         root = Path(directory)
         source = root / 'layout.c'; executable = root / 'layout'
         expressions = ['offsetof(orbit_cef_api_t, ' + name + ')' for name in boundaries] + ['sizeof(orbit_cef_api_t)']
-        source.write_text('#include <stddef.h>\n#include <stdio.h>\n#include "' + str(header) + '"\nint main(void) {\n' +
+        source.write_text('#include <stddef.h>\n#include <stdio.h>\n#include "' + str(header) + '"\nint main(void) {\n'
+            'printf("%u\\n", ORBIT_CEF_API_VERSION);\n' +
             '\n'.join('printf("%zu\\n", ' + expression + ');' for expression in expressions) + '\nreturn 0; }\n')
         subprocess.run(['clang', str(source), '-o', str(executable)], check=True)
-        sizes = list(map(int, subprocess.check_output([str(executable)], text=True).splitlines()))
+        newest, *sizes = map(int, subprocess.check_output([str(executable)], text=True).splitlines())
+        assert len(sizes) == newest, 'Update the ABI boundaries for the declared side API version'
     class Prefix(ctypes.Structure):
         _fields_ = [('struct_size', ctypes.c_uint32), ('version', ctypes.c_uint32)]
     framework = ctypes.CDLL(str(args.framework.resolve()))
     get = framework.orbit_cef_get_api
     get.argtypes = [ctypes.c_uint32]; get.restype = ctypes.POINTER(Prefix)
-    newest = len(sizes)
     assert not get(0) and not get(newest + 1), 'Unsupported side API accepted'
     latest = get(newest)
     assert latest and latest.contents.struct_size == sizes[-1]
