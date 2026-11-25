@@ -33,6 +33,10 @@ jobs:
           command -v ninja || brew install ninja
       - name: Fetch the verified prebuilt engine
         run: python3 scripts/ci_engine.py
+      - name: Check the engine side API and preserved prefixes
+        run: |
+          FRAMEWORK=$(python3 -c 'import json; from pathlib import Path; e=json.load(open("release/engine.json")); m=json.load(open(Path(".tools/chromium-fork/distrib") / e["flavor"] / "manifest.json")); print(Path(m["root"]) / "Release/Chromium Embedded Framework.framework/Chromium Embedded Framework")')
+          python3 scripts/check_cef_security_api.py --framework "$FRAMEWORK" --output "$RUNNER_TEMP/engine-abi.json"
       - name: Prepare an ephemeral development signing identity
         run: |
           echo "ORBIT_SIGNING_DIRECTORY=$RUNNER_TEMP/circa-development-signing" >> "$GITHUB_ENV"
