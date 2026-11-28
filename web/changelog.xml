@@ -9,6 +9,34 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.75.7-nightly.3/</id>
+    <title>0.75.7-nightly.3 — Site controls stay transparent on hover in the sidebar.</title>
+    <link href="https://circabrowser.com/changelog/0.75.7-nightly.3/" />
+    <updated>2026-11-28T00:00:00Z</updated>
+    <published>2026-11-28T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Site controls stay transparent on hover in the sidebar.
+
+1 fixed
+
+## Fixed
+
+- Removed the gray hover background behind the Site Controls icon in the sidebar address bar.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.75.7-nightly.3" data-version="0.75.7-nightly.3" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.75.7-nightly.3" aria-label="Link to version 0.75.7-nightly.3"&gt;0.75.7-nightly.3&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-28"&gt;November 28, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Site controls stay transparent on hover in the sidebar.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;1 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Removed the gray hover background behind the Site Controls icon in the sidebar address bar.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.75.7-nightly.3/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.75.7-nightly.2/</id>
     <title>0.75.7-nightly.2 — Little Circa opens links in your existing browser window.</title>
     <link href="https://circabrowser.com/changelog/0.75.7-nightly.2/" />
