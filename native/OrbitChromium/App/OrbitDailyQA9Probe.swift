@@ -128,6 +128,32 @@ enum OrbitDailyQA9Probe {
                 checks["littlePromotedLive"] = little.isClosed && environment.liveControllers.contains { $0.session.selectedSurface === live }
             }
             checks["fifoDrained"] = !owner.session.hasPendingCommands
+        } else if command["step"] == "little-profile" {
+            guard let source = owner.session.snapshot?.activeSpaceID else { return ["missingSpace": true] }
+            let url = base.appendingPathComponent("little")
+            application.quickWindowPresenter = { _ in }
+            application.openQuickWindow(url: url, source: owner)
+            await application.waitForQuickWindowCommands()
+            guard let little = environment.quickWindows.values.first, let live = little.surface else {
+                return ["missingLittle": true]
+            }
+            checks["littleLoaded"] = await load(live)
+            let profile = await environment.store.createProfile(name: "Synthetic alternate profile")
+            guard let other = try? await environment.store.createSpace(name: "Synthetic alternate Space", profileID: profile) else {
+                return ["missingAlternateSpace": true]
+            }
+            owner.session.activateSpace(other)
+            await drain(owner)
+            checks["switchedProfile"] = owner.session.activeProfileID == profile
+            let before = application.windows.windows.count
+            guard owns(owner) else { return ["ownershipLost": true] }
+            application.promoteQuickWindow(little)
+            await application.waitForQuickWindowCommands()
+            await drain(owner)
+            checks["reusedWindow"] = application.activeBrowserWindow === owner && application.windows.windows.count == before
+            checks["preservedDocument"] = little.isClosed && owner.session.selectedSurface === live
+            checks["selectedSourceSpace"] = owner.session.snapshot?.activeSpaceID == source
+            checks["oneTab"] = owner.session.snapshot?.tabs.filter { $0.url == url }.count == 1
         } else if command["step"] == "spaces" {
             do {
                 owner.openTab(url: base.appendingPathComponent("space-source"))

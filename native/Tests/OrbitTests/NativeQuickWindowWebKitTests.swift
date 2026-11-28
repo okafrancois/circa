@@ -136,14 +136,40 @@ struct NativeQuickWindowWebKitTests {
         let little = try #require(environment.quickWindows.values.first)
         #expect(little.sourceSpaceID == first.session.snapshot?.activeSpaceID)
         #expect(little.profileID == first.session.activeProfileID && little.profileID != profile)
-        // The current main window has a foreign profile. Promotion must create a window in the
-        // original Space instead of reloading or moving into the foreign profile.
-        app.promoteQuickWindow(little)
+        let surface = try #require(little.surface)
+        little.openButton.performClick(nil)
         await app.waitForQuickWindowCommands()
         #expect(little.isClosed)
-        #expect(app.activeBrowserWindow?.session.activeProfileID == first.session.activeProfileID)
+        #expect(app.activeBrowserWindow === first && first.session.selectedSurface === surface)
         #expect(second.session.activeProfileID == profile)
-        #expect(app.windows.windows.count == 3)
+        #expect(app.windows.windows.count == 2)
+    }
+
+    @Test("Promotion switches the existing main window back to the captured profile without opening a second window")
+    func promotesAfterProfileSwitch() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = PreviewEnvironment()
+        let app = OrbitApplication(environment: environment, windowPresenter: { _, _ in })
+        app.quickWindowPresenter = { _ in }
+        defer { environment.retireQuickWindows(); app.windows.shutdown() }
+        app.windows.newWindow()
+        await app.windows.waitForPendingCommands()
+        let main = try #require(app.activeBrowserWindow)
+        let sourceSpace = try #require(main.session.snapshot?.activeSpaceID)
+        app.openQuickWindow()
+        await app.waitForQuickWindowCommands()
+        let little = try #require(environment.quickWindows.values.first)
+        let surface = try #require(little.surface)
+        let other = await environment.store.createProfile(name: "Synthetic alternate profile")
+        let otherSpace = try await environment.store.createSpace(name: "Synthetic alternate Space", profileID: other)
+        main.session.activateSpace(otherSpace)
+        await main.session.waitForPendingCommands()
+        #expect(main.session.activeProfileID == other)
+        little.openButton.performClick(nil)
+        await app.waitForQuickWindowCommands()
+        #expect(little.isClosed && app.windows.windows.count == 1)
+        #expect(app.activeBrowserWindow === main && main.session.selectedSurface === surface)
+        #expect(main.session.snapshot?.activeSpaceID == sourceSpace)
     }
 
     @Test("The Open in label follows the actual current Space while the captured source profile stays fixed")
