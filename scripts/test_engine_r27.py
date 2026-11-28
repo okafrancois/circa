@@ -104,13 +104,17 @@ class EngineR27Tests(unittest.TestCase):
                       '    uint64_t invocation, uint64_t surface_token, uint64_t profile_token, uint64_t selection_epoch)',
                       self.cef_source)
 
-    def test_release_points_at_r27(self):
+    def test_release_carries_the_r27_popup_deltas(self):
         config = json.loads((ROOT / 'release/config.json').read_text())
         engine = json.loads((ROOT / 'release/engine.json').read_text())
-        self.assertEqual(config['cef_flavor'], self.pins['flavor'])
-        self.assertEqual(engine['flavor'], self.pins['flavor'])
-        self.assertEqual(engine['url'], 'https://github.com/okafrancois/circa/releases/download/engine-r27/'
-                                        'orbit-engine-extensions-r27.tar.gz')
+        self.assertEqual(config['cef_flavor'], engine['flavor'])
+        number = int(engine['flavor'].rsplit('-r', 1)[1])
+        self.assertGreaterEqual(number, 27)
+        current = json.loads((PATCHES / ('engine-r%d/source.json' % number)).read_text())
+        for key in ('chromium_delta_patch_sha256', 'cef_delta_patch_sha256'):
+            self.assertEqual(current[key], self.pins[key])
+        self.assertEqual(engine['url'], 'https://github.com/okafrancois/circa/releases/download/engine-r%d/'
+                                        'orbit-engine-extensions-r%d.tar.gz' % (number, number))
         for key in ('archive_sha256', 'framework_sha256', 'wrapper_sha256'):
             self.assertRegex(engine[key], r'^[0-9a-f]{64}$')
 
