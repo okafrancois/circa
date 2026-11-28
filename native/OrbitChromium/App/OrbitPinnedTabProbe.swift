@@ -173,6 +173,33 @@ enum OrbitPinnedTabProbe {
             result["sampleTimes"] = times
             result["pillPresented"] = presented
             result["pillDismissed"] = !target.closeButton.isPillPresented
+        } else if command["action"] == "address", let surface = owner.session.selectedSurface {
+            window.appearance = NSAppearance(named: .darkAqua)
+            owner.session.addToFavorites([ids[0]])
+            await owner.session.waitForPendingCommands()
+            let pill = owner.sidebar.addressContainer
+            let event = NSEvent()
+            guard owns(owner) else { return ["refused": true] }
+            pill.mouseExited(with: event)
+            pill.holdsAccessoriesVisible = false
+            surface.performZoom(.decrease)
+            owner.refreshPageZoom()
+            try? await Task.sleep(for: .milliseconds(200))
+            let zoom = owner.zoomControl
+            result["zoomTitle"] = zoom.title
+            result["zoomInactive"] = !zoom.isHidden && zoom.alphaValue == 0
+            captureSidebar(owner, to: folder.appendingPathComponent("address-rest.png"))
+            guard owns(owner) else { return ["refused": true] }
+            pill.mouseEntered(with: event)
+            window.contentView?.layoutSubtreeIfNeeded()
+            result["zoomRevealed"] = !zoom.isHidden && zoom.alphaValue == 1
+            result["zoomBeforeExtensions"] = zoom.frame.maxX <= pill.extensions.frame.minX + 1
+            result["extensionIconPixels"] = pill.extensions.subviews.compactMap { ($0 as? NSButton)?.image }
+                .first?.representations.map(\.pixelsWide) ?? []
+            captureSidebar(owner, to: folder.appendingPathComponent("address-hover.png"))
+            guard owns(owner) else { return ["refused": true] }
+            pill.mouseExited(with: event)
+            result["zoomDismissed"] = zoom.alphaValue == 0
         } else if command["action"] == "navigation", let surface = owner.session.selectedSurface,
                   let home = owner.session.organization?.tab(ids[1])?.pinnedURL {
             surface.navigate(to: home.appendingPathComponent("child"))
@@ -180,20 +207,29 @@ enum OrbitPinnedTabProbe {
             await owner.session.waitForPendingCommands()
             try? await Task.sleep(for: .milliseconds(250))
             result["away"] = owner.session.organization?.tab(ids[1])?.isAwayFromPinnedURL == true
+            result["awayTitle"] = row(1)?.item.title
             captureSidebar(owner, to: folder.appendingPathComponent("away.png"))
             surface.navigate(to: home)
             await waitForLoad(surface)
             await owner.session.waitForPendingCommands()
             try? await Task.sleep(for: .milliseconds(250))
             result["returned"] = owner.session.organization?.tab(ids[1])?.isAwayFromPinnedURL == false
+            result["homeTitle"] = row(1)?.item.title
             captureSidebar(owner, to: folder.appendingPathComponent("home.png"))
-            surface.navigate(to: home.appendingPathComponent("child"))
+            if command["link"] == "true", owns(owner) {
+                _ = await OrbitPerformanceProbe.evaluate(surface, "document.querySelector('a').click(); ({clicked:true})")
+            } else {
+                surface.navigate(to: home.appendingPathComponent("child"))
+            }
             await waitForLoad(surface)
             await owner.session.waitForPendingCommands()
+            result["titleBeforeClose"] = row(1)?.item.title
             if let target = row(1), owns(owner) { owner.sidebar.page.list.rowClose(target) }
             await owner.session.waitForPendingCommands()
             result["closedKeptPin"] = owner.session.organization?.tab(ids[1])?.isLoadedInThisWindow == false
             result["closedClearedAway"] = owner.session.organization?.tab(ids[1])?.isAwayFromPinnedURL == false
+            result["closedTitle"] = row(1)?.item.title
+            captureSidebar(owner, to: folder.appendingPathComponent("closed.png"))
             if let target = row(2), owns(owner) { owner.sidebar.page.list.rowClose(target) }
             await owner.session.waitForPendingCommands()
             result["archived"] = owner.session.organization?.tab(ids[2]) == nil

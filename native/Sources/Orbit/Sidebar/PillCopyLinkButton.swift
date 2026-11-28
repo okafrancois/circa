@@ -20,7 +20,7 @@ final class PillCopyLinkButton: OrbitGlyphButton {
             button.advance(to: link.targetTimestamp)
         }
     }
-    private static let linkImage = OrbitGlyph.symbol("link", pointSize: 14, weight: .regular)
+    private static let linkImage = OrbitGlyph.lightSystemSymbol("link", pointSize: 14)
     private static let checkImage = OrbitGlyph.symbol("checkmark", pointSize: 14, weight: .regular)
     private static let linkOut: [Frame] = [
         .init(0, 1, 1), .init(0.016, 1, 1), .init(0.033, 0.90, 0.83),

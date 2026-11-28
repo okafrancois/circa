@@ -191,7 +191,11 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     public internal(set) var tidiedTitle: String? = nil
     public internal(set) var customIcon: BrowserSpaceIcon?
     /// Reference URL of a Favorite or Pinned tab. Always nil in Today.
-    public internal(set) var pinnedURL: URL?
+    public internal(set) var pinnedURL: URL? {
+        didSet { if pinnedURL != oldValue { pinnedHomeTitle = nil } }
+    }
+    /// Last known web title at the saved destination or its resolved landing page.
+    var pinnedHomeTitle: String?
     public internal(set) var pinnedLandingAlias: BrowserPinnedLandingAlias?
     public var pinnedLandingURL: URL? {
         pinnedLandingAlias.flatMap { $0.pinnedURL == pinnedURL ? $0.url : nil }
@@ -219,6 +223,18 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
         self.lastActiveAt = lastActiveAt
         self.liveFolderChild = liveFolderChild
         self.localDocument = localDocument
+    }
+
+    func isPinnedHome(_ target: URL) -> Bool {
+        guard let pinnedURL else { return false }
+        return BrowserPinnedPageIdentity.matches(pinnedURL, target)
+            || pinnedLandingURL.map { BrowserPinnedPageIdentity.matches($0, target) } == true
+    }
+
+    mutating func restorePinnedDestination() {
+        guard let pinnedURL else { return }
+        if pinnedHomeTitle != nil || !isPinnedHome(url) { pageTitle = pinnedHomeTitle }
+        url = pinnedURL
     }
 
     /// The custom title wins over the web title; callers localize their own fallback.

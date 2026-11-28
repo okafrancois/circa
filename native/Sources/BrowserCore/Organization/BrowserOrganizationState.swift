@@ -297,7 +297,9 @@ struct BrowserOrganizationState: Sendable {
         if tab.customTitle != before.customTitle || tab.tidiedTitle != before.tidiedTitle || tab.pinnedURL != before.pinnedURL || tab.customIcon != before.customIcon {
             changes.tabFields.insert(id)
         }
-        if tab.url != before.url || tab.pageTitle != before.pageTitle { changes.tabMetadata.insert(id) }
+        if tab.url != before.url || tab.pageTitle != before.pageTitle || tab.pinnedHomeTitle != before.pinnedHomeTitle {
+            changes.tabMetadata.insert(id)
+        }
         if tab.pinnedLandingAlias != before.pinnedLandingAlias || tab.localDocument != before.localDocument { changes.metadata = true }
     }
 

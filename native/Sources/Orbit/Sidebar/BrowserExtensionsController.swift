@@ -215,7 +215,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         let key = ((previewProfile ?? selectedSurface?.profileID)?.rawValue.uuidString ?? "")
             + item.id + Data(SHA256.hash(data: data)).base64EncodedString()
         if let image = iconImages.value(for: key) { return image }
-        guard let image = BrowserIconRaster.image(data: data, pixels: 32, size: 16) else { return nil }
+        guard let image = BrowserIconRaster.image(data: data, pixels: 32, size: 16, preserveOneX: true) else { return nil }
         iconImages.insert(image, for: key, cost: BrowserIconRaster.cost(image) + key.utf8.count)
         return image
     }

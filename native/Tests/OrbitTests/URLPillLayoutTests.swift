@@ -142,20 +142,30 @@ struct URLPillLayoutTests {
         let pill = sidebar.addressContainer, strip = sidebar.extensionsContainer
         strip.setPinnedButtons([SiteControlButton("", identifier: "pinned-extension", onPress: {})])
         strip.isAvailable = true
-        pill.installAccessory(strip, onHover: true)
+        pill.installAccessory(strip, onHover: true, order: 10)
+        let zoom = NSButton(title: "90%", target: nil, action: nil)
+        pill.installZoomIndicator(zoom)
+        #expect(zoom.isHidden)
+        pill.showsPageZoom = true
         sidebar.layoutSubtreeIfNeeded()
         let page = sidebar.geometry.pageFrame
         #expect(strip.alphaValue == 0 && !strip.isHidden)
+        #expect(zoom.alphaValue == 0 && !zoom.isHidden)
         pill.mouseEntered(with: NSEvent())
         #expect(!strip.isHidden && strip.alphaValue == 1)
+        #expect(!zoom.isHidden && zoom.alphaValue == 1)
+        #expect(pill.controls.arrangedSubviews.first === zoom)
         pill.holdsAccessoriesVisible = true
         pill.mouseExited(with: NSEvent())
         #expect(!strip.isHidden && strip.alphaValue == 1)
         pill.isEditing = true
-        #expect(strip.isHidden)
+        #expect(strip.isHidden && zoom.isHidden)
         pill.isEditing = false
         pill.holdsAccessoriesVisible = false
         #expect(strip.alphaValue == 0 && !strip.isHidden)
+        #expect(zoom.alphaValue == 0 && !zoom.isHidden)
+        pill.showsPageZoom = false
+        #expect(zoom.isHidden)
         sidebar.layoutSubtreeIfNeeded()
         #expect(sidebar.geometry.pageFrame == page)
         #expect(strip.isDescendant(of: pill))

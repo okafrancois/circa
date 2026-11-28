@@ -87,9 +87,8 @@ extension BrowserWindowController {
         zoomButton.action = #selector(resetPageZoom(_:))
         zoomButton.toolTip = OrbitShellText.resetZoom
         zoomButton.setAccessibilityIdentifier("page-zoom-reset")
-        zoomButton.isHidden = true
         sidebar.addressContainer.installField(addressField)
-        sidebar.addressContainer.installAccessory(zoomButton)
+        sidebar.addressContainer.installZoomIndicator(zoomButton)
         let copy = PillCopyLinkButton()
         copy.target = self
         copy.action = #selector(copyAddressFromPill(_:))

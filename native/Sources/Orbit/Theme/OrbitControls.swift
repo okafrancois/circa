@@ -71,8 +71,13 @@ enum OrbitGlyph {
     /// Placeholder until the engine publishes favicons ().
     static var faviconPlaceholder: NSImage? { symbol("globe", pointSize: 12, weight: .regular) }
 
+    static func lightSystemSymbol(_ name: String, pointSize: CGFloat) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: pointSize, weight: .light))
+    }
+
     static var siteControlCenter: NSImage {
-        symbol("slider.horizontal.3", pointSize: 18) ?? NSImage()
+        lightSystemSymbol("slider.horizontal.3", pointSize: 15) ?? NSImage()
     }
 
     /// Draws a template glyph centred in `rect`, tinted with a (dynamic) colour.

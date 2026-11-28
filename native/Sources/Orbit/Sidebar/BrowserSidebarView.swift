@@ -1656,6 +1656,8 @@ final class SidebarAddressField: SidebarFlippedView {
     private var accessories: [NSView] = []
     private var accessoryOrder: [ObjectIdentifier: Int] = [:]
     private var hoverAccessories: [NSView] = []
+    private weak var zoomIndicator: NSButton?
+    var showsPageZoom = false { didSet { if showsPageZoom != oldValue { refresh() } } }
     var holdsAccessoriesVisible = false { didSet { refresh() } }
     /// Set while a pinned extension popup anchored to this field owns key focus.
     var holdsExtensionPopupVisible = false { didSet { if holdsExtensionPopupVisible != oldValue { refresh() } } }
@@ -1673,6 +1675,7 @@ final class SidebarAddressField: SidebarFlippedView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        background.borderColor = FavoritesPresentationTokens.restingOutline
         addSubview(background, positioned: .below, relativeTo: nil)
         controls.orientation = .horizontal
         controls.distribution = .fill
@@ -1746,6 +1749,12 @@ final class SidebarAddressField: SidebarFlippedView {
         accessories.filter { !$0.isHidden }.reduce(0) { $0 + $1.fittingSize.width }
     }
 
+    func installZoomIndicator(_ button: NSButton) {
+        zoomIndicator = button
+        button.heightAnchor.constraint(equalToConstant: SidebarExtensionStrip.hitSize).isActive = true
+        installAccessory(button, onHover: true)
+    }
+
     /// Trailing icons consume the same theme foreground as the URL text.
     func installAccessory(_ view: NSView, onHover: Bool = false, order: Int = 0) {
         if let button = view as? NSButton, button.image != nil {
@@ -1804,9 +1813,16 @@ final class SidebarAddressField: SidebarFlippedView {
 
     override var mouseDownCanMoveWindow: Bool { false }
 
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        needsLayout = true
+    }
+
     override func layout() {
         super.layout()
         background.frame = bounds
+        let borderWidth = 1 / max(1, window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
+        if background.borderWidth != borderWidth { background.borderWidth = borderWidth }
         let others = accessories.filter { $0 !== extensions && !$0.isHidden }
         let occupied = others.reduce(CGFloat(0)) { $0 + $1.fittingSize.width }
         let gaps = CGFloat(others.count + 1) * controls.spacing
@@ -1837,13 +1853,13 @@ final class SidebarAddressField: SidebarFlippedView {
     }
 
     private func refresh() {
+        let revealed = (isHovering || holdsAccessoriesVisible || holdsExtensionPopupVisible) && !isEditing
         for view in hoverAccessories {
-            let revealed = (isHovering || holdsAccessoriesVisible || holdsExtensionPopupVisible) && !isEditing
-            // Keep native popup anchors in the visible hierarchy after the pointer enters
-            // a menu or an extension popup. Editing alone reclaims their layout width.
+            let available = view === extensions ? extensions.isAvailable : hasPage && (view !== zoomIndicator || showsPageZoom)
+            // Preserve trailing positions and native popup anchors between hover states.
+            view.isHidden = isEditing || !available
             view.alphaValue = revealed ? 1 : 0
-            view.setAccessibilityHidden(!revealed)
-            view.isHidden = isEditing || (view === extensions ? !extensions.isAvailable : !hasPage)
+            view.setAccessibilityHidden(!revealed || !available)
         }
         if isEditing {
             background.fillColor = OrbitTokens.Color.State.tabCurrent

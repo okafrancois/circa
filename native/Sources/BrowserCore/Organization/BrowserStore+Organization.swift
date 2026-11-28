@@ -519,7 +519,12 @@ extension BrowserStore {
 
     func organizationDidUpdateDestination(of tabID: TabID, to url: URL) {
         _ = try? commitOrganization(validating: false) { state in
-            state.updateTab(tabID) { $0.url = url }
+            state.updateTab(tabID) { tab in
+                if tab.pinnedHomeTitle == nil, tab.isPinnedHome(tab.url) {
+                    tab.pinnedHomeTitle = tab.pageTitle
+                }
+                tab.url = url
+            }
         }
     }
 
@@ -542,7 +547,7 @@ extension BrowserStore {
             }) != nil
         case .pinned?, .favorites?:
             published = (try? commitOrganization(validating: false) { state in
-                state.updateTab(tab.id) { if let pinnedURL = $0.pinnedURL { $0.url = pinnedURL } }
+                state.updateTab(tab.id) { $0.restorePinnedDestination() }
             }) != nil
         case nil:
             break
@@ -852,7 +857,13 @@ extension BrowserStore {
         }
         let pageTitle = BrowserOrganizationState.sanitizedPageTitle(title)
         return try commitOrganization(validating: false) { state in
-            state.updateTab(tab.id) { $0.pageTitle = pageTitle }
+            state.updateTab(tab.id) { item in
+                guard item.pageTitle != pageTitle else { return }
+                item.pageTitle = pageTitle
+                if let pageTitle, item.isPinnedHome(tab.url) {
+                    item.pinnedHomeTitle = pageTitle
+                }
+            }
         } != nil
     }
 
@@ -882,7 +893,7 @@ extension BrowserStore {
 
     private func resetToPinnedURL(_ id: TabID, in window: WindowRecord) -> BrowserOrganizationReset? {
         guard let pinnedURL = organization.tabs[id]?.pinnedURL else { return nil }
-        _ = try? commitOrganization(validating: false) { $0.updateTab(id) { $0.url = pinnedURL } }
+        _ = try? commitOrganization(validating: false) { $0.updateTab(id) { $0.restorePinnedDestination() } }
         let local = occurrences(in: window).first { $0.id == id }
         if let local, local.url != pinnedURL {
             tabs[local.occurrenceID] = BrowserTab(id: local.id, occurrenceID: local.occurrenceID,
@@ -930,7 +941,7 @@ extension BrowserStore {
                 dropOccurrence(local.occurrenceID, in: context.windowID)
             }
             _ = try? commitOrganization(validating: false) { state in
-                state.updateTab(id) { if let pinnedURL = $0.pinnedURL { $0.url = pinnedURL } }
+                state.updateTab(id) { $0.restorePinnedDestination() }
             }
         }
         if !otherTabs.isEmpty { publishOrganizationChange() }

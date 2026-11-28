@@ -122,3 +122,38 @@ extension BrowserPinnedPageIdentityTests {
         #expect(row.pinnedLandingURL == nil && row.isAwayFromPinnedURL)
     }
 }
+
+extension BrowserPinnedPageIdentityTests {
+    @Test("Closing a pin restores the home title even after session reload", arguments: [false, true])
+    func closeRestoresHomeTitle(closeOccurrence: Bool) async throws {
+        let fixture = try await OrganizationFixture.make()
+        let id = try await fixture.open("saved")
+        let occurrence = try #require(await fixture.occurrences(of: id).first)
+        let authority = try await fixture.store.captureOccurrenceAuthority(for: occurrence.occurrenceID, from: fixture.context())
+        _ = try await fixture.store.updatePageTitle("Saved page", from: authority)
+        _ = try await fixture.store.pinTabs([id], from: fixture.context())
+
+        let child = organizationURL("saved/child")
+        try await fixture.store.updateDestination(to: child, from: authority)
+        _ = try await fixture.store.updatePageTitle("Linked page", from: authority)
+        #expect(try await fixture.organization().tab(id)?.pageTitle == "Linked page")
+        if closeOccurrence {
+            _ = try await fixture.store.renameTab(id, to: "My pin", from: fixture.context())
+        }
+
+        let document = try await fixture.store.sessionDocument().encoded()
+        let store = try BrowserStore(restoring: BrowserSessionDocument.decode(document))
+        let context = try await store.captureContext(in: fixture.window)
+        if closeOccurrence {
+            try await store.closeOccurrence(occurrence.occurrenceID, from: context)
+        } else {
+            _ = try await store.closeTabs([id], from: context)
+        }
+
+        let current = try await store.captureContext(in: fixture.window)
+        let tab = try #require(try await store.organizationSnapshot(from: current).tab(id))
+        #expect(!tab.isLoadedInThisWindow && tab.url == organizationURL("saved"))
+        #expect(tab.pageTitle == "Saved page")
+        #expect(tab.title == (closeOccurrence ? "My pin" : "Saved page"))
+    }
+}

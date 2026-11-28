@@ -20,7 +20,7 @@ extension BrowserWindowController {
         zoomDocumentGeneration = zoomOwner?.findDocumentGeneration ?? 0
         let factor = zoomOwner?.pageZoom ?? 1
         zoomButton.title = uiFormat("%ld%%", Int((factor * 100).rounded()))
-        zoomButton.isHidden = abs(factor - 1) < 0.000_001
+        sidebar.addressContainer.showsPageZoom = abs(factor - 1) >= 0.000_001
     }
 
     func resetPageZoomFromControl() {

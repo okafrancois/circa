@@ -252,7 +252,7 @@ extension BrowserStore {
             } else {
                 next.detach(.tab(tabID))
                 next.insert(.tab(tabID), into: location.container, at: location.index + 1)
-                next.updateTab(tabID) { if let home = $0.pinnedURL { $0.url = home } }
+                next.updateTab(tabID) { $0.restorePinnedDestination() }
             }
         }
         if let closed = occurrences(in: windows[context.windowID]!).first(where: { $0.id == tabID }) {
