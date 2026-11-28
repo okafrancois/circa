@@ -99,6 +99,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
         panel.usesOrbitStyle = true
         panel.onWillClose = { [weak self] in self?.invalidateSitePresentation() }
         button.image = OrbitGlyph.siteControlCenter
+        button.showsURLPillHoverFill = false
         button.setAccessibilityLabel(siteText("controls", "Site Controls"))
         button.isBordered = false
         button.toolTip = siteText("controls", "Site Controls")

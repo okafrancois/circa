@@ -41,6 +41,21 @@ struct URLPillLayoutTests {
         }
     }
 
+    @Test("Sidebar site controls stay transparent on hover and show feedback while pressed")
+    func transparentSiteHover() {
+        let pill = SidebarAddressField()
+        let site = SiteControlButton("", identifier: "site-controls", onPress: {})
+        site.image = OrbitGlyph.siteControlCenter
+        site.showsURLPillHoverFill = false
+        pill.installAccessory(site, onHover: true)
+        site.mouseEntered(with: NSEvent())
+        #expect(site.layer?.backgroundColor?.alpha == 0)
+        site.isHighlighted = true
+        #expect((site.layer?.backgroundColor?.alpha ?? 0) > 0)
+        site.isHighlighted = false
+        #expect(site.layer?.backgroundColor?.alpha == 0)
+    }
+
     @Test("Trailing icons stay at the pill edge while the address fills and truncates before them")
     func trailingAlignment() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

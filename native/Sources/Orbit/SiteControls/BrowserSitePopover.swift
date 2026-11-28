@@ -14,6 +14,7 @@ final class SiteControlButton: NSButton {
     var usesURLPillStyle = false {
         didSet { wantsLayer = true; layer?.cornerRadius = 6; updatePillHover() }
     }
+    var showsURLPillHoverFill = true { didSet { updatePillHover() } }
     private var pillHoverArea: NSTrackingArea?
     private var isPillHovered = false
     override func updateTrackingAreas() {
@@ -76,7 +77,7 @@ final class SiteControlButton: NSButton {
         }
         toolbarFill.removeFromSuperlayer()
         guard usesURLPillStyle else { layer?.backgroundColor = nil; return }
-        let fill = isPillHovered || isHighlighted ? OrbitTokens.Color.State.sidebarItemHovered : .clear
+        let fill = isHighlighted || (isPillHovered && showsURLPillHoverFill) ? OrbitTokens.Color.State.sidebarItemHovered : .clear
         layer?.backgroundColor = fill.resolvedCGColor(for: effectiveAppearance)
     }
 

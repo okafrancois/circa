@@ -128,6 +128,25 @@ enum OrbitDailyQA9Probe {
                 checks["littlePromotedLive"] = little.isClosed && environment.liveControllers.contains { $0.session.selectedSurface === live }
             }
             checks["fifoDrained"] = !owner.session.hasPendingCommands
+        } else if command["step"] == "site-hover" {
+            owner.openTab(url: base.appendingPathComponent("site-hover"))
+            await drain(owner)
+            checks["pageLoaded"] = await load(owner.session.selectedSurface)
+            let pill = owner.sidebar.addressContainer
+            guard let button = owner.siteControls.actionAnchor as? SiteControlButton, owns(owner) else {
+                return ["missingButton": true]
+            }
+            pill.mouseEntered(with: NSEvent())
+            guard owns(owner) else { return ["ownershipLost": true] }
+            button.mouseEntered(with: NSEvent())
+            checks["visibleOnHover"] = button.alphaValue == 1 && !button.isHidden
+            checks["transparentOnHover"] = button.layer?.backgroundColor?.alpha == 0
+            button.isHighlighted = true
+            checks["pressFeedback"] = (button.layer?.backgroundColor?.alpha ?? 0) > 0
+            button.isHighlighted = false
+            checks["clearsAfterPress"] = button.layer?.backgroundColor?.alpha == 0
+            guard owns(owner) else { return ["ownershipLost": true] }
+            button.mouseExited(with: NSEvent())
         } else if command["step"] == "little-profile" {
             guard let source = owner.session.snapshot?.activeSpaceID else { return ["missingSpace": true] }
             let url = base.appendingPathComponent("little")
